@@ -10,7 +10,7 @@ export default function AdminLogin() {
     e.preventDefault();
 
     try {
-      const res = await fetch("http://127.0.0.1:5000/api/admin/login", {
+      const res = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -25,10 +25,13 @@ export default function AdminLogin() {
         return;
       }
 
-      // ✅ Save token
-      localStorage.setItem("adminToken", data.token);
+      // ✅ SAVE TOKEN UNDER CORRECT KEY
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("role", data.role);
 
-      // ✅ Redirect to admin panel
+      alert("Admin logged in successfully");
+
+      // ✅ Redirect to admin admissions
       navigate("/admin/admissions");
     } catch (err) {
       alert("Server not reachable");
