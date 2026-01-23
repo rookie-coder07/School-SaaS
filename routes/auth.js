@@ -1,6 +1,7 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { ObjectId } from "mongodb";
 
 export default function authRoutes(db) {
   const router = express.Router();
@@ -8,24 +9,44 @@ export default function authRoutes(db) {
   const users = db.collection("users");
   const students = db.collection("students");
 
-  // 🧑‍💼 ADMIN LOGIN (already working / keep)
+  // 🔐 ADMIN AUTH MIDDLEWARE
+  function adminAuth(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      if (decoded.role !== "SCHOOL_ADMIN") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      req.admin = decoded;
+      next();
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+  }
+
+  // 🧑‍💼 ADMIN LOGIN
   router.post("/login", async (req, res) => {
     try {
-      const { email, password, schoolCode } = req.body;
+      const { email, password } = req.body;
 
       const user = await users.findOne({
         email,
         role: "SCHOOL_ADMIN",
       });
 
-      if (!user) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
+      if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
       const match = await bcrypt.compare(password, user.passwordHash);
-      if (!match) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
+      if (!match) return res.status(401).json({ error: "Invalid credentials" });
 
       const token = jwt.sign(
         {
@@ -37,48 +58,27 @@ export default function authRoutes(db) {
         { expiresIn: "1d" }
       );
 
-      res.json({
-        message: "Login successful",
-        token,
-        role: user.role,
-      });
-    } catch (err) {
+      res.json({ message: "Login successful", token, role: user.role });
+    } catch {
       res.status(500).json({ error: "Login failed" });
     }
   });
 
-  // 🎓 STUDENT LOGIN (🔥 NEW)
+  // 🎓 STUDENT LOGIN
   router.post("/student/login", async (req, res) => {
     try {
       const { email, password } = req.body;
 
-      if (!email || !password) {
-        return res.status(400).json({ error: "Email and password required" });
-      }
+      const user = await users.findOne({ email, role: "STUDENT" });
+      if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
-      // 1️⃣ Find student user
-      const user = await users.findOne({
-        email,
-        role: "STUDENT",
-      });
-
-      if (!user) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-
-      // 2️⃣ Check password
       const match = await bcrypt.compare(password, user.passwordHash);
-      if (!match) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
+      if (!match) return res.status(401).json({ error: "Invalid credentials" });
 
-      // 3️⃣ Ensure student profile exists
       const student = await students.findOne({ userId: user._id });
-      if (!student) {
+      if (!student)
         return res.status(404).json({ error: "Student profile missing" });
-      }
 
-      // 4️⃣ Create token
       const token = jwt.sign(
         {
           userId: user._id.toString(),
@@ -89,13 +89,28 @@ export default function authRoutes(db) {
         { expiresIn: "1d" }
       );
 
-      res.json({
-        message: "Login successful",
-        token,
-      });
-    } catch (err) {
-      console.error("❌ STUDENT LOGIN ERROR:", err.message);
+      res.json({ message: "Login successful", token });
+    } catch {
       res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // 🗑️ ADMIN DELETE ADMISSION (🔥 FIXED)
+  router.delete("/admissions/:id", adminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const result = await db.collection("admissions").deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      if (!result.deletedCount) {
+        return res.status(404).json({ error: "Admission not found" });
+      }
+
+      res.json({ message: "Admission deleted successfully" });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to delete admission" });
     }
   });
 

@@ -6,6 +6,7 @@ import { MongoClient } from "mongodb";
 /* ROUTES */
 import authRoutes from "./routes/auth.js";
 import studentRoutes from "./routes/student.js";
+import teacherRoutes from "./routes/teacher.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 
 dotenv.config();
@@ -14,34 +15,25 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// PORT
 const PORT = process.env.PORT || 5000;
 
-/* =========================
-   ✅ DATABASE (FIXED)
-   ========================= */
-
-// ❌ no hardcoded URI
-// ✅ use only .env
 const client = new MongoClient(process.env.MONGO_URI);
 
 async function startServer() {
   try {
     await client.connect();
-    console.log("✅ MongoDB Atlas connected successfully");
+    console.log("✅ MongoDB connected");
 
-    // ✅ database name (FINAL)
-    const db = client.db("Local");
+    const db = client.db("school_saas");
 
-    /* ===== COLLECTIONS ===== */
     const admissions = db.collection("admissions");
 
-    /* ===== HEALTH CHECK ===== */
+    /* HEALTH */
     app.get("/", (req, res) => {
-      res.send("SaaS Backend Running and Connected to Atlas");
+      res.send("School SaaS Backend Running");
     });
 
-    /* ===== PUBLIC: SUBMIT ADMISSION ===== */
+    /* PUBLIC ADMISSION */
     app.post("/api/admissions", async (req, res) => {
       if (!req.body || Object.keys(req.body).length === 0) {
         return res.status(400).json({ error: "Empty request body" });
@@ -56,7 +48,7 @@ async function startServer() {
       res.json({ message: "Application submitted successfully" });
     });
 
-    /* ===== ADMIN: GET ALL ADMISSIONS ===== */
+    /* ADMIN VIEW */
     app.get("/api/admissions", async (req, res) => {
       const data = await admissions
         .find({})
@@ -66,9 +58,10 @@ async function startServer() {
       res.json(data);
     });
 
-    /* ===== ROUTES ===== */
+    /* ROUTES */
     app.use("/api/auth", authRoutes(db));
     app.use("/api/student", studentRoutes(db));
+    app.use("/api/teacher", teacherRoutes(db));
     app.use("/api/attendance", attendanceRoutes(db));
 
     app.listen(PORT, () => {
@@ -76,7 +69,7 @@ async function startServer() {
     });
 
   } catch (err) {
-    console.error("❌ MongoDB connection error:", err.message);
+    console.error("❌ MongoDB startup error:", err.message);
   }
 }
 

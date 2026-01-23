@@ -2,6 +2,8 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+console.log("🔥 authRoutes LOADED");
+
 export default function authRoutes(db) {
   const router = express.Router();
   const users = db.collection("users");

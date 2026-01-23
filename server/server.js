@@ -1,7 +1,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
+import jwt from "jsonwebtoken";
 
 /* ===== ROUTES ===== */
 import authRoutes from "./routes/auth.js";
@@ -18,6 +19,32 @@ app.use(express.json());
 const PORT = 5000;
 const client = new MongoClient(process.env.MONGO_URI);
 
+/* =====================================================
+   🔐 ADMIN AUTH MIDDLEWARE
+   ===================================================== */
+function adminAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "No token provided" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.role !== "SCHOOL_ADMIN") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    req.admin = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+}
+
 async function startServer() {
   try {
     // 🔗 CONNECT DATABASE
@@ -25,8 +52,6 @@ async function startServer() {
     console.log("✅ MongoDB connected");
 
     const db = client.db("school_saas");
-
-    /* ===== COLLECTIONS ===== */
     const admissions = db.collection("admissions");
 
     /* ===== HEALTH CHECK ===== */
@@ -35,7 +60,7 @@ async function startServer() {
     });
 
     /* =====================================================
-       📄 PUBLIC: SUBMIT ADMISSION FORM
+       📄 PUBLIC: SUBMIT ADMISSION
        ===================================================== */
     app.post("/api/admissions", async (req, res) => {
       try {
@@ -74,22 +99,44 @@ async function startServer() {
     });
 
     /* =====================================================
-       🔐 AUTH (ADMIN / STUDENT / TEACHER)
+       🗑️ ADMIN: DELETE ADMISSION  ✅ FIXED
+       ===================================================== */
+    app.delete("/api/admissions/:id", adminAuth, async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const result = await admissions.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!result.deletedCount) {
+          return res.status(404).json({ error: "Admission not found" });
+        }
+
+        res.json({ message: "Admission deleted successfully" });
+      } catch (err) {
+        console.error("❌ Delete admission error:", err.message);
+        res.status(500).json({ error: "Failed to delete admission" });
+      }
+    });
+
+    /* =====================================================
+       🔐 AUTH ROUTES
        ===================================================== */
     app.use("/api/auth", authRoutes(db));
 
     /* =====================================================
-       🎓 STUDENT APIs
+       🎓 STUDENT ROUTES
        ===================================================== */
     app.use("/api/student", studentRoutes(db));
 
     /* =====================================================
-       🧑‍🏫 TEACHER APIs
+       🧑‍🏫 TEACHER ROUTES
        ===================================================== */
     app.use("/api/teacher", teacherRoutes(db));
 
     /* =====================================================
-       🟢 ATTENDANCE APIs (Student view)
+       🟢 ATTENDANCE ROUTES
        ===================================================== */
     app.use("/api/attendance", attendanceRoutes(db));
 
