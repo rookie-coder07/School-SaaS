@@ -3,9 +3,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient } from "mongodb";
 
-/* ROUTES */
+/* ===== ROUTES ===== */
 import authRoutes from "./routes/auth.js";
 import studentRoutes from "./routes/student.js";
+import teacherRoutes from "./routes/teacher.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 
 dotenv.config();
@@ -15,25 +16,27 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = 5000;
-const client = new MongoClient("mongodb://127.0.0.1:27017");
+const client = new MongoClient(process.env.MONGO_URI);
 
 async function startServer() {
   try {
-    // 🔗 CONNECT DB
+    // 🔗 CONNECT DATABASE
     await client.connect();
     console.log("✅ MongoDB connected");
 
-    const db = client.db("ghalib_school");
+    const db = client.db("school_saas");
 
     /* ===== COLLECTIONS ===== */
     const admissions = db.collection("admissions");
 
     /* ===== HEALTH CHECK ===== */
     app.get("/", (req, res) => {
-      res.send("SaaS Backend Running");
+      res.send("School SaaS Backend Running");
     });
 
-    /* ===== PUBLIC: SUBMIT ADMISSION ===== */
+    /* =====================================================
+       📄 PUBLIC: SUBMIT ADMISSION FORM
+       ===================================================== */
     app.post("/api/admissions", async (req, res) => {
       try {
         if (!req.body || Object.keys(req.body).length === 0) {
@@ -53,12 +56,14 @@ async function startServer() {
       }
     });
 
-    /* ===== ADMIN: GET ALL ADMISSIONS (🔥 THIS FIXES EMPTY ADMIN PAGE) ===== */
+    /* =====================================================
+       🧑‍💼 ADMIN: VIEW ALL ADMISSIONS
+       ===================================================== */
     app.get("/api/admissions", async (req, res) => {
       try {
         const data = await admissions
           .find({})
-          .sort({ createdAt: -1 }) // latest first
+          .sort({ createdAt: -1 })
           .toArray();
 
         res.json(data);
@@ -68,22 +73,35 @@ async function startServer() {
       }
     });
 
-    /* ===== AUTH ===== */
+    /* =====================================================
+       🔐 AUTH (ADMIN / STUDENT / TEACHER)
+       ===================================================== */
     app.use("/api/auth", authRoutes(db));
 
-    /* ===== STUDENT ===== */
+    /* =====================================================
+       🎓 STUDENT APIs
+       ===================================================== */
     app.use("/api/student", studentRoutes(db));
 
-    /* ===== ATTENDANCE ===== */
+    /* =====================================================
+       🧑‍🏫 TEACHER APIs
+       ===================================================== */
+    app.use("/api/teacher", teacherRoutes(db));
+
+    /* =====================================================
+       🟢 ATTENDANCE APIs (Student view)
+       ===================================================== */
     app.use("/api/attendance", attendanceRoutes(db));
 
-    /* ===== START SERVER ===== */
+    /* =====================================================
+       🚀 START SERVER
+       ===================================================== */
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
 
   } catch (err) {
-    console.error("❌ MongoDB error:", err.message);
+    console.error("❌ MongoDB startup error:", err.message);
   }
 }
 
