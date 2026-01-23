@@ -14,25 +14,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// PORT: Render will provide a port, otherwise use 5000 for local testing
+// PORT
 const PORT = process.env.PORT || 5000;
 
-/** * DATABASE CONNECTION
- * Using your Atlas connection string. 
- * Note: Your password "Getin@123" contains an '@' character.
- * In a connection string, '@' is a reserved character and must be encoded as '%40'.
- */
-const atlasURI = "mongodb+srv://admin:Getin@123@cluster0.01x0nnd.mongodb.net/?appName=Cluster0";
-const uri = process.env.MONGODB_URI || atlasURI;
-const client = new MongoClient(uri);
+/* =========================
+   ✅ DATABASE (FIXED)
+   ========================= */
+
+// ❌ no hardcoded URI
+// ✅ use only .env
+const client = new MongoClient(process.env.MONGO_URI);
 
 async function startServer() {
   try {
-    // 🔗 CONNECT DBSgit 
     await client.connect();
-    console.log("✅ MongoDB connected successfully to Atlas!");
+    console.log("✅ MongoDB Atlas connected successfully");
 
-    const db = client.db("ghalib_school");
+    // ✅ database name (FINAL)
+    const db = client.db("Local");
 
     /* ===== COLLECTIONS ===== */
     const admissions = db.collection("admissions");
@@ -44,49 +43,34 @@ async function startServer() {
 
     /* ===== PUBLIC: SUBMIT ADMISSION ===== */
     app.post("/api/admissions", async (req, res) => {
-      try {
-        if (!req.body || Object.keys(req.body).length === 0) {
-          return res.status(400).json({ error: "Empty request body" });
-        }
-
-        await admissions.insertOne({
-          ...req.body,
-          status: "PENDING",
-          createdAt: new Date(),
-        });
-
-        res.json({ message: "Application submitted successfully" });
-      } catch (err) {
-        console.error("❌ Admission insert error:", err.message);
-        res.status(500).json({ error: "Submission failed" });
+      if (!req.body || Object.keys(req.body).length === 0) {
+        return res.status(400).json({ error: "Empty request body" });
       }
+
+      await admissions.insertOne({
+        ...req.body,
+        status: "PENDING",
+        createdAt: new Date(),
+      });
+
+      res.json({ message: "Application submitted successfully" });
     });
 
     /* ===== ADMIN: GET ALL ADMISSIONS ===== */
     app.get("/api/admissions", async (req, res) => {
-      try {
-        const data = await admissions
-          .find({})
-          .sort({ createdAt: -1 }) // latest first
-          .toArray();
+      const data = await admissions
+        .find({})
+        .sort({ createdAt: -1 })
+        .toArray();
 
-        res.json(data);
-      } catch (err) {
-        console.error("❌ Fetch admissions error:", err.message);
-        res.status(500).json({ error: "Failed to fetch admissions" });
-      }
+      res.json(data);
     });
 
-    /* ===== AUTH ===== */
+    /* ===== ROUTES ===== */
     app.use("/api/auth", authRoutes(db));
-
-    /* ===== STUDENT ===== */
     app.use("/api/student", studentRoutes(db));
-
-    /* ===== ATTENDANCE ===== */
     app.use("/api/attendance", attendanceRoutes(db));
 
-    /* ===== START SERVER ===== */
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
