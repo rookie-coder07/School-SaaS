@@ -3,37 +3,60 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { ObjectId } from "mongodb";
 
+console.log("🔥 authRoutes LOADED");
+
 export default function authRoutes(db) {
   const router = express.Router();
 
   const users = db.collection("users");
   const students = db.collection("students");
+  const schools = db.collection("schools");
 
-  // 🔐 ADMIN AUTH MIDDLEWARE
-  function adminAuth(req, res, next) {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "No token provided" });
-    }
-
-    const token = authHeader.split(" ")[1];
-
+  /* =====================================================
+     🏫 ADMIN REGISTER (CREATE SCHOOL + ADMIN) – ONE TIME
+     ===================================================== */
+  router.post("/admin/register", async (req, res) => {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const { schoolName, email, password } = req.body;
 
-      if (decoded.role !== "SCHOOL_ADMIN") {
-        return res.status(403).json({ error: "Admin access required" });
+      if (!schoolName || !email || !password) {
+        return res.status(400).json({ error: "All fields required" });
       }
 
-      req.admin = decoded;
-      next();
-    } catch {
-      return res.status(401).json({ error: "Invalid token" });
-    }
-  }
+      // prevent duplicate admin
+      const existing = await users.findOne({ email });
+      if (existing) {
+        return res.status(400).json({ error: "User already exists" });
+      }
 
-  // 🧑‍💼 ADMIN LOGIN
+      // 1️⃣ create school
+      const schoolResult = await schools.insertOne({
+        name: schoolName,
+        createdAt: new Date(),
+      });
+
+      // 2️⃣ hash password
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // 3️⃣ create admin user
+      await users.insertOne({
+        email,
+        passwordHash,
+        role: "SCHOOL_ADMIN",
+        schoolId: schoolResult.insertedId,
+        createdAt: new Date(),
+      });
+
+      res.json({ message: "School & admin created successfully" });
+    } catch (err) {
+      console.error("❌ ADMIN REGISTER ERROR:", err.message);
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  /* =====================================================
+     🧑‍💼 ADMIN LOGIN
+     ===================================================== */
   router.post("/login", async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -43,41 +66,60 @@ export default function authRoutes(db) {
         role: "SCHOOL_ADMIN",
       });
 
-      if (!user) return res.status(401).json({ error: "Invalid credentials" });
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
 
       const match = await bcrypt.compare(password, user.passwordHash);
-      if (!match) return res.status(401).json({ error: "Invalid credentials" });
+      if (!match) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
 
       const token = jwt.sign(
         {
           userId: user._id.toString(),
           schoolId: user.schoolId.toString(),
-          role: user.role,
+          role: "SCHOOL_ADMIN",
         },
         process.env.JWT_SECRET,
         { expiresIn: "1d" }
       );
 
-      res.json({ message: "Login successful", token, role: user.role });
-    } catch {
+      res.json({ token, role: "SCHOOL_ADMIN" });
+    } catch (err) {
+      console.error("❌ ADMIN LOGIN ERROR:", err.message);
       res.status(500).json({ error: "Login failed" });
     }
   });
 
-  // 🎓 STUDENT LOGIN
+  /* =====================================================
+     🎓 STUDENT LOGIN
+     ===================================================== */
   router.post("/student/login", async (req, res) => {
     try {
       const { email, password } = req.body;
 
-      const user = await users.findOne({ email, role: "STUDENT" });
-      if (!user) return res.status(401).json({ error: "Invalid credentials" });
+      const user = await users.findOne({
+        email,
+        role: "STUDENT",
+      });
+
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
 
       const match = await bcrypt.compare(password, user.passwordHash);
-      if (!match) return res.status(401).json({ error: "Invalid credentials" });
+      if (!match) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
 
-      const student = await students.findOne({ userId: user._id });
-      if (!student)
+      const student = await students.findOne({
+        userId: user._id,
+      });
+
+      if (!student) {
         return res.status(404).json({ error: "Student profile missing" });
+      }
 
       const token = jwt.sign(
         {
@@ -89,28 +131,51 @@ export default function authRoutes(db) {
         { expiresIn: "1d" }
       );
 
-      res.json({ message: "Login successful", token });
-    } catch {
+      res.json({ token });
+    } catch (err) {
+      console.error("❌ STUDENT LOGIN ERROR:", err.message);
       res.status(500).json({ error: "Login failed" });
     }
   });
 
-  // 🗑️ ADMIN DELETE ADMISSION (🔥 FIXED)
-  router.delete("/admissions/:id", adminAuth, async (req, res) => {
+  /* =====================================================
+     🧑‍🏫 TEACHER LOGIN
+     ===================================================== */
+  router.post("/teacher/login", async (req, res) => {
     try {
-      const { id } = req.params;
+      const { email, password } = req.body;
 
-      const result = await db.collection("admissions").deleteOne({
-        _id: new ObjectId(id),
+      const user = await users.findOne({
+        email,
+        role: "TEACHER",
       });
 
-      if (!result.deletedCount) {
-        return res.status(404).json({ error: "Admission not found" });
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      res.json({ message: "Admission deleted successfully" });
+      const match = await bcrypt.compare(password, user.passwordHash);
+      if (!match) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      const token = jwt.sign(
+        {
+          userId: user._id.toString(),
+          schoolId: user.schoolId.toString(),
+          role: "TEACHER",
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1d" }
+      );
+
+      res.json({
+        message: "Teacher login successful",
+        token,
+      });
     } catch (err) {
-      res.status(500).json({ error: "Failed to delete admission" });
+      console.error("❌ TEACHER LOGIN ERROR:", err.message);
+      res.status(500).json({ error: "Login failed" });
     }
   });
 

@@ -1,3 +1,5 @@
+console.log("MONGO_URI =", process.env.MONGO_URI);
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
