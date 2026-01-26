@@ -4,14 +4,15 @@ import { ObjectId } from "mongodb";
 
 export default function attendanceRoutes(db) {
   const router = express.Router();
-  const attendance = db.collection("attendance");
-  const students = db.collection("students");
-  const teachers = db.collection("teachers");
 
-  /* 🔐 AUTH */
+  const attendance = db.collection("attendance");
+
+  /* ================= AUTH ================= */
   function auth(req, res, next) {
     const header = req.headers.authorization;
-    if (!header) return res.status(401).json({ error: "No token" });
+    if (!header || !header.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No token" });
+    }
 
     try {
       const token = header.split(" ")[1];
@@ -22,52 +23,43 @@ export default function attendanceRoutes(db) {
     }
   }
 
-  /* 👨‍🏫 GET students for teacher’s class */
-  router.get("/class", auth, async (req, res) => {
-    const { className, section } = req.query;
-
-    const teacher = await teachers.findOne({
-      userId: new ObjectId(req.user.userId),
-      schoolId: new ObjectId(req.user.schoolId),
-    });
-
-    if (!teacher) {
-      return res.status(403).json({ error: "Not a teacher" });
+  /* ================= STUDENT: MY ATTENDANCE ================= */
+  router.get("/me", auth, async (req, res) => {
+    if (req.user.role !== "STUDENT") {
+      return res.status(403).json({ error: "Student access only" });
     }
 
-    const allowed = teacher.classes.some(
-      c => c.class === className && c.section === section
-    );
-
-    if (!allowed) {
-      return res.status(403).json({ error: "Class not assigned" });
-    }
-
-    const data = await students.find({
-      class: className,
-      section,
-      schoolId: new ObjectId(req.user.schoolId),
-    }).toArray();
+    const data = await attendance
+      .find({
+        studentUserId: new ObjectId(req.user.userId),
+        schoolId: new ObjectId(req.user.schoolId),
+      })
+      .sort({ date: -1 })
+      .toArray();
 
     res.json(data);
   });
 
-  /* 📝 MARK ATTENDANCE */
-  router.post("/mark", auth, async (req, res) => {
-    const { date, records, className, section } = req.body;
+  /* ================= TEACHER: CLASS ATTENDANCE ================= */
+  router.get("/class", auth, async (req, res) => {
+    if (req.user.role !== "TEACHER") {
+      return res.status(403).json({ error: "Teacher access only" });
+    }
 
-    const docs = records.map(r => ({
+    const { className, section, date } = req.query;
+
+    if (!className || !section || !date) {
+      return res.status(400).json({ error: "Missing query params" });
+    }
+
+    const data = await attendance.find({
       schoolId: new ObjectId(req.user.schoolId),
       class: className,
       section,
       date,
-      studentUserId: new ObjectId(r.studentUserId),
-      status: r.status,
-      markedBy: new ObjectId(req.user.userId),
-    }));
+    }).toArray();
 
-    await attendance.insertMany(docs);
-    res.json({ message: "Attendance saved" });
+    res.json(data);
   });
 
   return router;

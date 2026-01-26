@@ -24,7 +24,7 @@ export default function StudentDashboard() {
       try {
         // 👤 STUDENT PROFILE
         const profileRes = await fetch(
-          "http://localhost:5000/api/student/me",
+          "http://localhost:5000/api/attendance/me",
           { headers }
         );
         const profileData = await profileRes.json();
@@ -33,7 +33,7 @@ export default function StudentDashboard() {
 
         // 📊 MARKS
         const marksRes = await fetch(
-          "http://localhost:5000/api/student/marks",
+          "http://localhost:5000/api/attendance/marks",
           { headers }
         );
         const marksData = await marksRes.json();

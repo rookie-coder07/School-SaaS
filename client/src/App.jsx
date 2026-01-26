@@ -17,6 +17,9 @@ import AdminAdmissions from "./pages/AdminAdmissions";
 /* ===== STUDENT PAGES ===== */
 import StudentLogin from "./pages/StudentLogin";
 import StudentDashboard from "./pages/StudentDashboard";
+/* ===== TEACHER PAGES ===== */
+import TeacherLogin from "./pages/TeacherLogin";
+import TeacherDashboard from "./pages/TeacherDashboard";
 
 export default function App() {
   return (
@@ -38,7 +41,9 @@ export default function App() {
         {/* 👨‍🎓 Student Routes */}
         <Route path="/student/login" element={<StudentLogin />} />
         <Route path="/student/dashboard" element={<StudentDashboard />} />
-
+        {/* 🧑‍🏫 Teacher Routes */}
+        <Route path="/teacher/login" element={<TeacherLogin />} />
+        <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
         {/* ❌ 404 Fallback */}
         <Route
           path="*"

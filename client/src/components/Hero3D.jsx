@@ -1,75 +1,84 @@
-import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, MeshDistortMaterial, Float, PerspectiveCamera } from "@react-three/drei";
-import { useRef } from "react";
+import { Canvas } from "@react-three/fiber";
+import { MeshDistortMaterial, Float, PerspectiveCamera } from "@react-three/drei";
 
-function AnimatedSphere() {
-  return (
-    <Float speed={2} rotationIntensity={1.5} floatIntensity={2}>
-      <mesh>
-        <sphereGeometry args={[1.5, 64, 64]} />
-        <MeshDistortMaterial
-          color="#10b981" // Emerald Green for "Dream Valley"
-          speed={3}
-          distort={0.4}
-          radius={1}
-        />
-      </mesh>
-    </Float>
-  );
-}
+export default function Hero3D({ isSidebarCollapsed }) {
+  // This logic ensures the Hero "pushes" away from the sidebar
+  const sidebarWidth = isSidebarCollapsed ? "70px" : "240px";
 
-export default function Hero3D() {
   return (
-    <div className="relative h-screen w-full bg-slate-950 overflow-hidden">
-      {/* Background 3D Scene */}
-      <div className="absolute inset-0 z-0">
+    <div 
+      style={{ 
+        marginLeft: sidebarWidth,
+        width: `calc(100% - ${sidebarWidth})`,
+        transition: "all 0.5s cubic-bezier(0.2, 1, 0.2, 1)"
+      }}
+      className="relative h-screen bg-[#FAFAFA] overflow-hidden"
+    >
+      
+      {/* 3D Scene Layer */}
+      <div className="absolute inset-0 z-0 opacity-40">
         <Canvas>
           <PerspectiveCamera makeDefault position={[0, 0, 8]} />
-          <ambientLight intensity={0.5} />
-          <pointLight position={[10, 10, 10]} intensity={1.5} />
-          <spotLight position={[-10, 10, 10]} angle={0.15} penumbra={1} />
-          
-          <AnimatedSphere />
-          
-          <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.5} />
+          <ambientLight intensity={0.8} />
+          <pointLight position={[10, 10, 10]} intensity={1} color="#10b981" />
+          <AnimatedGlass />
         </Canvas>
       </div>
 
-      {/* Overlay Content */}
-      <div className="relative z-10 flex flex-col items-center justify-center h-full px-6">
-        {/* Fancy Glassmorphism Card */}
-        <div className="max-w-4xl w-full backdrop-blur-xl bg-white/5 border border-white/10 p-12 rounded-[3rem] text-center shadow-2xl">
-          <div className="inline-block px-4 py-1 mb-6 border border-emerald-500/30 rounded-full bg-emerald-500/10 text-emerald-400 text-sm font-medium tracking-widest uppercase">
-            Now Enrolling for 2026
-          </div>
-          
-          <h1 className="text-6xl md:text-8xl font-black text-white mb-6 tracking-tight">
-            Dream Valley <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-              Public School
-            </span>
-          </h1>
-          
-          <p className="text-xl md:text-2xl text-slate-300 font-light mb-10 max-w-2xl mx-auto leading-relaxed">
-            Where curiosity meets opportunity. We nurture the leaders of tomorrow in an environment of excellence.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-2xl transition-all transform hover:scale-105 shadow-lg shadow-emerald-500/20">
-              Explore Campus
-            </button>
-            <button className="px-8 py-4 bg-transparent border border-white/20 hover:bg-white/10 text-white font-bold rounded-2xl transition-all">
-              Admissions
-            </button>
-          </div>
+      {/* Hero Content Area */}
+      <div className="relative z-10 flex flex-col items-center justify-center h-full px-12 text-center">
+        
+        {/* Minimalist Subtitle */}
+        <div className="overflow-hidden mb-4">
+          <span className="inline-block text-[10px] font-black tracking-[0.6em] text-emerald-600 uppercase animate-in slide-in-from-bottom duration-1000">
+            ESTABLISHED 1998 • PREMIUM SELECTION
+          </span>
         </div>
 
-        {/* Scroll Indicator */}
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce flex flex-col items-center">
-          <span className="text-white/30 text-xs uppercase tracking-widest mb-2">Scroll Down</span>
-          <div className="w-[1px] h-12 bg-gradient-to-b from-emerald-500 to-transparent"></div>
-        </div>
+        {/* Oversized Swiss Typography - The "Appropriate" Size */}
+        <h1 className="text-[10vw] md:text-[120px] font-black text-[#020617] leading-[0.8] tracking-[-0.06em] uppercase">
+          DREAM <br />
+          <span className="text-emerald-500">VALLEY</span>
+        </h1>
+
+        {/* Minimalist Body Text */}
+        <p className="mt-8 text-lg md:text-xl text-slate-400 font-medium max-w-xl leading-relaxed tracking-tight">
+          Redefining the architecture of modern education. <br />
+          <span className="text-slate-900 font-bold">Simple. Bold. Effective.</span>
+        </p>
+
+        {/* Buttons Removed as requested for a cleaner look */}
+      </div>
+
+      {/* Decorative Minimalist Accents */}
+      <div className="absolute bottom-12 right-12 text-right">
+        <p className="text-[10px] font-black text-slate-900 tracking-widest uppercase">2026 Edition</p>
+        <p className="text-[10px] text-slate-400 uppercase">System Active</p>
+      </div>
+
+      <div className="absolute bottom-12 left-12 flex items-center gap-4">
+        <div className="w-12 h-[1px] bg-slate-200"></div>
+        <span className="text-[10px] font-bold text-slate-300 tracking-[0.3em] uppercase">Scroll to explore</span>
       </div>
     </div>
+  );
+}
+
+function AnimatedGlass() {
+  return (
+    <Float speed={1.5} rotationIntensity={0.5} floatIntensity={1}>
+      <mesh>
+        <sphereGeometry args={[1.8, 64, 64]} />
+        <MeshDistortMaterial
+          color="#10b981" 
+          speed={2}
+          distort={0.25}
+          radius={1}
+          opacity={0.12}
+          transparent
+          roughness={0}
+        />
+      </mesh>
+    </Float>
   );
 }

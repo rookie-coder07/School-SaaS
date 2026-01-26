@@ -15,28 +15,37 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = 5000;
-const client = new MongoClient(process.env.MONGO_URI);
+const PORT = process.env.PORT || 5000;
 
-async function startServer() {
+/* =====================================================
+   🔴 IMPORTANT: SERVER STARTS FIRST (NO DB BLOCKING)
+   ===================================================== */
+app.get("/", (req, res) => {
+  res.send("✅ School SaaS Backend is RUNNING");
+});
+
+app.get("/ping", (req, res) => {
+  res.json({ status: "ok", server: "alive" });
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server listening on http://localhost:${PORT}`);
+});
+
+/* =====================================================
+   🟢 DATABASE CONNECTS AFTER SERVER IS LIVE
+   ===================================================== */
+(async () => {
   try {
-    // 🔗 CONNECT DATABASE
+    console.log("⏳ Connecting to MongoDB...");
+    const client = new MongoClient(process.env.MONGO_URI);
     await client.connect();
     console.log("✅ MongoDB connected");
 
     const db = client.db("school_saas");
-
-    /* ===== COLLECTIONS ===== */
     const admissions = db.collection("admissions");
 
-    /* ===== HEALTH CHECK ===== */
-    app.get("/", (req, res) => {
-      res.send("School SaaS Backend Running");
-    });
-
-    /* =====================================================
-       📄 PUBLIC: SUBMIT ADMISSION FORM
-       =====================================================new */
+    /* ===== PUBLIC: SUBMIT ADMISSION ===== */
     app.post("/api/admissions", async (req, res) => {
       try {
         if (!req.body || Object.keys(req.body).length === 0) {
@@ -51,58 +60,31 @@ async function startServer() {
 
         res.json({ message: "Application submitted successfully" });
       } catch (err) {
-        console.error("❌ Admission insert error:", err.message);
+        console.error("❌ Admission error:", err.message);
         res.status(500).json({ error: "Submission failed" });
       }
     });
 
-    /* =====================================================
-       🧑‍💼 ADMIN: VIEW ALL ADMISSIONS
-       ===================================================== */
+    /* ===== ADMIN: VIEW ADMISSIONS ===== */
     app.get("/api/admissions", async (req, res) => {
-      try {
-        const data = await admissions
-          .find({})
-          .sort({ createdAt: -1 })
-          .toArray();
+      const data = await admissions
+        .find({})
+        .sort({ createdAt: -1 })
+        .toArray();
 
-        res.json(data);
-      } catch (err) {
-        console.error("❌ Fetch admissions error:", err.message);
-        res.status(500).json({ error: "Failed to fetch admissions" });
-      }
+      res.json(data);
     });
 
-    /* =====================================================
-       🔐 AUTH (ADMIN / STUDENT / TEACHER)
-       ===================================================== */
+    /* ===== AUTH / STUDENT / TEACHER / ATTENDANCE ===== */
     app.use("/api/auth", authRoutes(db));
-
-    /* =====================================================
-       🎓 STUDENT APIs
-       ===================================================== */
     app.use("/api/student", studentRoutes(db));
-
-    /* =====================================================
-       🧑‍🏫 TEACHER APIs
-       ===================================================== */
     app.use("/api/teacher", teacherRoutes(db));
-
-    /* =====================================================
-       🟢 ATTENDANCE APIs (Student view)
-       ===================================================== */
     app.use("/api/attendance", attendanceRoutes(db));
 
-    /* =====================================================
-       🚀 START SERVER
-       ===================================================== */
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
+    console.log("✅ All routes mounted successfully");
 
   } catch (err) {
-    console.error("❌ MongoDB startup error:", err.message);
+    console.error("❌ MongoDB connection FAILED:", err.message);
+    console.error("👉 Backend is running, but DB features are disabled");
   }
-}
-
-startServer();
+})();

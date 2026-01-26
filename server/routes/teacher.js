@@ -1,6 +1,5 @@
 import express from "express";
-import jwt from "jsonwebtoken";
-import { ObjectId } from "mongodb";
+import teacherAuth from "../middleware/teacherAuth.js";
 
 export default function teacherRoutes(db) {
   const router = express.Router();
@@ -9,79 +8,177 @@ export default function teacherRoutes(db) {
   const students = db.collection("students");
   const attendance = db.collection("attendance");
 
-  // 🔐 Auth middleware
-  function auth(req, res, next) {
-    const header = req.headers.authorization;
-    if (!header) {
-      return res.status(401).json({ error: "No token" });
-    }
-
+  /* ================= GET STUDENTS ================= */
+  router.get("/students", teacherAuth, async (req, res) => {
     try {
-      const token = header.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const { className, section } = req.query;
 
-      if (decoded.role !== "TEACHER") {
-        return res.status(403).json({ error: "Access denied" });
+      if (!className || !section) {
+        return res
+          .status(400)
+          .json({ error: "className and section are required" });
       }
 
-      req.user = decoded;
-      next();
-    } catch {
-      return res.status(401).json({ error: "Invalid token" });
+      const teacher = await teachers.findOne({
+        userId: req.user.userId,
+        schoolId: req.user.schoolId,
+      });
+
+      if (!teacher) {
+        return res.status(404).json({ error: "Teacher profile not found" });
+      }
+
+      const data = await students
+        .find({
+          class: className,
+          section,
+          schoolId: req.user.schoolId,
+        })
+        .toArray();
+
+      res.json(data);
+    } catch (err) {
+      console.error("STUDENT FETCH ERROR:", err);
+      res.status(500).json({ error: "Failed to fetch students" });
     }
-  }
-
-  // 👤 GET teacher profile
-  router.get("/me", auth, async (req, res) => {
-    const teacher = await teachers.findOne({
-      userId: new ObjectId(req.user.userId),
-      schoolId: new ObjectId(req.user.schoolId),
-    });
-
-    if (!teacher) {
-      return res.status(404).json({ error: "Teacher not found" });
-    }
-
-    res.json(teacher);
   });
 
-  // 👨‍🎓 GET students of teacher's class
-  router.get("/students", auth, async (req, res) => {
-    const teacher = await teachers.findOne({
-      userId: new ObjectId(req.user.userId),
-    });
+  /* ================= SAVE ATTENDANCE (DRAFT) ================= */
+  router.post("/attendance/save", teacherAuth, async (req, res) => {
+    try {
+      const { date, className, section, records } = req.body;
 
-    if (!teacher) {
-      return res.status(404).json({ error: "Teacher not found" });
+      if (!date || !className || !section || !Array.isArray(records)) {
+        return res.status(400).json({ error: "Invalid payload" });
+      }
+
+      for (const r of records) {
+        await attendance.updateOne(
+          {
+            studentUserId: r.studentUserId,
+            date,
+            class: className,
+            section,
+          },
+          {
+            $set: {
+              studentUserId: r.studentUserId,
+              teacherUserId: req.user.userId,
+              schoolId: req.user.schoolId,
+              class: className,
+              section,
+              date,
+              status: r.status,
+              submissionStatus: "DRAFT",
+              updatedAt: new Date(),
+            },
+          },
+          { upsert: true }
+        );
+      }
+
+      res.json({ message: "Attendance saved (draft)" });
+    } catch (err) {
+      console.error("SAVE ERROR:", err);
+      res.status(500).json({ error: "Attendance save failed" });
     }
-
-    const list = await students.find({
-      class: teacher.class,
-      section: teacher.section,
-      schoolId: new ObjectId(req.user.schoolId),
-    }).toArray();
-
-    res.json(list);
   });
 
-  // 📝 MARK attendance
-  router.post("/attendance", auth, async (req, res) => {
-    const { studentUserId, date, status } = req.body;
+  /* ================= SUBMIT ATTENDANCE (FINAL) ================= */
+  router.post("/attendance/submit", teacherAuth, async (req, res) => {
+    try {
+      const { date, className, section } = req.body;
 
-    if (!studentUserId || !date || !status) {
-      return res.status(400).json({ error: "Missing fields" });
+      const alreadySubmitted = await attendance.findOne({
+        date,
+        class: className,
+        section,
+        schoolId: req.user.schoolId,
+        submissionStatus: "SUBMITTED",
+      });
+
+      if (alreadySubmitted) {
+        return res
+          .status(409)
+          .json({ error: "Attendance already submitted" });
+      }
+
+      await attendance.updateMany(
+        {
+          date,
+          class: className,
+          section,
+          schoolId: req.user.schoolId,
+        },
+        {
+          $set: {
+            submissionStatus: "SUBMITTED",
+            submittedAt: new Date(),
+          },
+        }
+      );
+
+      res.json({ message: "Attendance submitted and locked" });
+    } catch (err) {
+      console.error("SUBMIT ERROR:", err);
+      res.status(500).json({ error: "Attendance submit failed" });
     }
+  });
 
-    await attendance.insertOne({
-      studentUserId: new ObjectId(studentUserId),
-      schoolId: new ObjectId(req.user.schoolId),
-      date,
-      status, // PRESENT / ABSENT
-      markedBy: new ObjectId(req.user.userId),
-      createdAt: new Date(),
-    });
+  /* ================= VIEW ATTENDANCE BY DATE ================= */
+  router.get("/attendance", teacherAuth, async (req, res) => {
+    try {
+      const { date, className, section } = req.query;
 
-    res.json({ message: "Attendance marked" });
+      const records = await attendance
+        .find({
+          date,
+          class: className,
+          section,
+          schoolId: req.user.schoolId,
+        })
+        .toArray();
+
+      res.json(records);
+    } catch (err) {
+      console.error("FETCH ATTENDANCE ERROR:", err);
+      res.status(500).json({ error: "Failed to fetch attendance" });
+    }
+  });
+
+  /* ================= ATTENDANCE PERCENTAGE ================= */
+  router.get("/attendance/summary", teacherAuth, async (req, res) => {
+    try {
+      const { className, section } = req.query;
+
+      const result = await attendance
+        .aggregate([
+          {
+            $match: {
+              class: className,
+              section,
+              schoolId: req.user.schoolId,
+            },
+          },
+          {
+            $group: {
+              _id: "$studentUserId",
+              total: { $sum: 1 },
+              present: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "PRESENT"] }, 1, 0],
+                },
+              },
+            },
+          },
+        ])
+        .toArray();
+
+      res.json(result);
+    } catch (err) {
+      console.error("SUMMARY ERROR:", err);
+      res.status(500).json({ error: "Failed to calculate summary" });
+    }
   });
 
   return router;

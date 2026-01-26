@@ -1,78 +1,54 @@
-console.log("MONGO_URI =", process.env.MONGO_URI);
-
 import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { MongoClient } from "mongodb";
-
-/* ROUTES */
-import authRoutes from "./routes/auth.js";
-import studentRoutes from "./routes/student.js";
-import teacherRoutes from "./routes/teacher.js";
-import attendanceRoutes from "./routes/attendanceRoutes.js";
-
-dotenv.config();
 
 const app = express();
-app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 
-const client = new MongoClient(process.env.MONGO_URI);
+/* ================== HEALTH ================== */
+app.get("/", (req, res) => {
+  res.send("SERVER IS ALIVE");
+});
 
-async function startServer() {
-  try {
-    await client.connect();
-    console.log("✅ MongoDB connected");
+app.get("/ping", (req, res) => {
+  res.json({ status: "OK" });
+});
 
-    const db = client.db("school_saas");
+/* ================== ATTENDANCE ROUTES ================== */
 
-    const admissions = db.collection("admissions");
+// teacher → fetch class students
+app.get("/api/attendance/class", (req, res) => {
+  res.json([
+    {
+      studentUserId: "111",
+      name: "Student One",
+      status: "PRESENT",
+    },
+    {
+      studentUserId: "222",
+      name: "Student Two",
+      status: "ABSENT",
+    },
+  ]);
+});
 
-    /* HEALTH */
-    app.get("/", (req, res) => {
-      res.send("School SaaS Backend Running");
-    });
+// student → fetch own attendance
+app.get("/api/attendance/me", (req, res) => {
+  res.json([
+    { date: "2026-01-20", status: "PRESENT" },
+    { date: "2026-01-21", status: "ABSENT" },
+  ]);
+});
 
-    /* PUBLIC ADMISSION */
-    app.post("/api/admissions", async (req, res) => {
-      if (!req.body || Object.keys(req.body).length === 0) {
-        return res.status(400).json({ error: "Empty request body" });
-      }
+// teacher → submit attendance
+app.post("/api/attendance/mark", (req, res) => {
+  res.json({
+    message: "Attendance saved (mock)",
+    bodyReceived: req.body,
+  });
+});
 
-      await admissions.insertOne({
-        ...req.body,
-        status: "PENDING",
-        createdAt: new Date(),
-      });
-
-      res.json({ message: "Application submitted successfully" });
-    });
-
-    /* ADMIN VIEW */
-    app.get("/api/admissions", async (req, res) => {
-      const data = await admissions
-        .find({})
-        .sort({ createdAt: -1 })
-        .toArray();
-
-      res.json(data);
-    });
-
-    /* ROUTES */
-    app.use("/api/auth", authRoutes(db));
-    app.use("/api/student", studentRoutes(db));
-    app.use("/api/teacher", teacherRoutes(db));
-    app.use("/api/attendance", attendanceRoutes(db));
-
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
-
-  } catch (err) {
-    console.error("❌ MongoDB startup error:", err.message);
-  }
-}
-
-startServer();
+/* ================== START ================== */
+app.listen(PORT, () => {
+  console.log("🚀 Server running on port", PORT);
+});
