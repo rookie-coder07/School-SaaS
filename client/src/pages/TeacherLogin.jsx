@@ -8,43 +8,42 @@ export default function TeacherLogin() {
   const navigate = useNavigate();
 
   async function handleLogin(e) {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      const res = await fetch("http://localhost:5000/api/auth/teacher/login", {
+  try {
+    const res = await fetch(
+      "http://localhost:5000/api/auth/teacher/login",
+      {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
-      });
-
-      // 🛡️ prevent HTML crash
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error("Backend returned HTML. Is server running?");
       }
+    );
 
-      if (!res.ok) {
-        alert(data.error || "Login failed");
-        return;
-      }
+    const data = await res.json();
 
-      // ✅ save token
-      localStorage.setItem("teacherToken", data.token);
-
-      // ✅ redirect
-      navigate("/teacher/dashboard");
-    } catch (err) {
-      alert(err.message || "Backend not running on port 5000");
-    } finally {
-      setLoading(false);
+    if (!res.ok) {
+      alert(data.error || "Login failed");
+      return;
     }
+
+    localStorage.setItem("teacherToken", data.token);
+    localStorage.setItem(
+      "teacherData",
+      JSON.stringify({
+        class: data.class,
+        section: data.section,
+      })
+    );
+
+    navigate("/teacher/dashboard");
+  } catch (err) {
+    alert("Backend not reachable");
+  } finally {
+    setLoading(false);
   }
+}
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -58,7 +57,7 @@ export default function TeacherLogin() {
           type="email"
           placeholder="Email"
           value={email}
-          onChange={e => setEmail(e.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           required
           className="w-full border p-2 rounded"
         />
@@ -67,7 +66,7 @@ export default function TeacherLogin() {
           type="password"
           placeholder="Password"
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
           required
           className="w-full border p-2 rounded"
         />

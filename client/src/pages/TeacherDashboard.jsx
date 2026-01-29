@@ -9,8 +9,11 @@ export default function TeacherDashboard() {
   const [locked, setLocked] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [className, setClassName] = useState("10");
-  const [section, setSection] = useState("A");
+ const teacherData = JSON.parse(localStorage.getItem("teacherData"));
+const teacher = JSON.parse(localStorage.getItem("teacherData"));
+
+const className = teacher?.class;
+const section = teacher?.section;
 
   // State to track sidebar width (matches your 260px / 80px sidebar)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -84,7 +87,9 @@ export default function TeacherDashboard() {
   const saveAttendance = async () => {
     setError(""); setMessage("");
     if (!date) return setError("Select a date first");
-    const records = students.map((s) => ({ studentUserId: s.userId, status: attendance[s._id] }));
+    const records = students.map((s) => ({ studentUserId: s._id
+
+, status: attendance[s._id] }));
     const res = await fetch("http://localhost:5000/api/teacher/attendance/save", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -229,8 +234,10 @@ export default function TeacherDashboard() {
                     </div>
                   </td>
                   <td style={{ padding: "16px 24px", textAlign: "right" }}>
-                    <span style={{ fontSize: "14px", fontWeight: "800", color: (percentages[s.userId] || 0) < 75 ? "#ef4444" : "#0f172a" }}>
-                      {percentages[s.userId] || 0}%
+                    <span style={{ fontSize: "14px", fontWeight: "800", color: (percentages[s._id]
+ || 0) < 75 ? "#ef4444" : "#0f172a" }}>
+                      {percentages[s._id]
+|| 0}%
                     </span>
                   </td>
                 </tr>

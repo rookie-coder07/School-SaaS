@@ -4,50 +4,96 @@ import { useNavigate } from "react-router-dom";
 export default function StudentLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const navigate = useNavigate();
 
-  async function handleLogin(e) {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
 
-    const res = await fetch("http://localhost:5000/api/auth/student/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
+    try {
+      const res = await fetch(
+        "http://localhost:5000/api/auth/student/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
-    const data = await res.json();
+      // ⚠️ Handle non-JSON responses safely
+      const text = await res.text();
+      let data;
 
-    if (!res.ok) {
-      alert(data.error || "Login failed");
-      return;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Server returned invalid response");
+      }
+
+      if (!res.ok) {
+        setError(data.error || "Login failed");
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Save token
+      localStorage.setItem("studentToken", data.token);
+
+      // ✅ Redirect
+      navigate("/student/dashboard");
+    } catch (err) {
+      console.error(err);
+      setError("Backend not responding or crashed");
+    } finally {
+      setLoading(false);
     }
-
-    localStorage.setItem("studentToken", data.token);
-    navigate("/student/dashboard");
-  }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <form onSubmit={handleLogin} className="bg-white p-8 rounded shadow w-96">
-        <h2 className="text-2xl font-bold mb-4">Student Login</h2>
+    <div style={{ maxWidth: "400px", margin: "50px auto" }}>
+      <h2>Student Login</h2>
 
+      {error && (
+        <p style={{ color: "red", marginBottom: "10px" }}>{error}</p>
+      )}
+
+      <form onSubmit={handleLogin}>
         <input
-          className="w-full border p-2 mb-3"
+          type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          required
+          style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
         />
 
         <input
-          className="w-full border p-2 mb-3"
           type="password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          required
+          style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
         />
 
-        <button className="w-full bg-blue-600 text-white py-2">
-          Login
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "10px",
+            background: "#2563eb",
+            color: "white",
+            border: "none",
+          }}
+        >
+          {loading ? "Logging in..." : "Login"}
         </button>
       </form>
     </div>

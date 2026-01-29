@@ -45,30 +45,53 @@ export default function authRoutes(db) {
   });
 
   /* ===================== STUDENT LOGIN ===================== */
-  router.post("/student/login", async (req, res) => {
+ router.post("/student/login", async (req, res) => {
+  try {
     const { email, password } = req.body;
 
-    const user = await users.findOne({ email, role: "STUDENT" });
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password required" });
+    }
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+    // 1️⃣ Find student user
+    const user = await users.findOne({
+      email,
+      role: "STUDENT",
+    });
 
-    const student = await students.findOne({ userId: user._id });
-    if (!student) return res.status(404).json({ error: "Student profile missing" });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
+    // 2️⃣ Compare password
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // 3️⃣ Create JWT
     const token = jwt.sign(
-  {
-    userId: user._id.toString(),
-    schoolId: String(user.schoolId),
-    role: "STUDENT",
-  },
-  process.env.JWT_SECRET,
-  { expiresIn: "1d" }
-);
+      {
+        userId: user._id.toString(),
+        role: "STUDENT",
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
 
-    res.json({ token });
-  });
+    // 4️⃣ Send response
+    res.json({
+      success: true,
+      message: "Login successful",
+      token,
+    });
+
+  } catch (err) {
+    console.error("STUDENT LOGIN ERROR:", err);
+    res.status(500).json({ error: "Login failed" });
+  }
+});
+
 
   /* ===================== TEACHER LOGIN (CRITICAL) ===================== */
   router.post("/teacher/login", async (req, res) => {

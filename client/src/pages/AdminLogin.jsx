@@ -19,22 +19,23 @@ export default function AdminLogin() {
       });
 
       const data = await res.json();
+      console.log("LOGIN RESPONSE:", data);
 
       if (!res.ok) {
         alert(data.error || "Login failed");
         return;
       }
 
-      // ✅ SAVE TOKEN UNDER CORRECT KEY
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("role", data.role);
+      // ✅ CORRECT TOKEN STORAGE
+localStorage.setItem("adminToken", data.token);
 
-      alert("Admin logged in successfully");
 
-      // ✅ Redirect to admin admissions
+      alert("Admin login successful");
       navigate("/admin/admissions");
+
     } catch (err) {
-      alert("Server not reachable");
+      console.error("FETCH ERROR:", err);
+      alert("Backend not reachable");
     }
   }
 

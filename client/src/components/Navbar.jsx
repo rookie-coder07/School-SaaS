@@ -3,7 +3,7 @@ import { useState } from "react";
 
 export default function Navbar() {
   const location = useLocation();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isOpen, setIsOpen] = useState(false); // Changed logic to a mobile toggle
 
   const menuItems = [
     { to: "/", label: "HOME" },
@@ -13,169 +13,117 @@ export default function Navbar() {
   ];
 
   const loginItems = [
-    { to: "/student/login", label: "STUDENT LOGIN", accent: "emerald" },
-    { to: "/teacher/login", label: "TEACHER LOGIN", accent: "blue" },
-    { to: "/admin/login", label: "ADMIN LOGIN", accent: "amber" },
+    { to: "/student/login", label: "STUDENT", accent: "emerald" },
+    { to: "/teacher/login", label: "TEACHER", accent: "blue" },
+    { to: "/admin/login", label: "ADMIN", accent: "amber" },
   ];
 
   const accentMap = {
-    emerald: "text-emerald-500 bg-emerald-600/10",
-    blue: "text-blue-500 bg-blue-600/10",
-    amber: "text-amber-500 bg-amber-600/10",
+    emerald: "text-emerald-500 bg-emerald-600/10 border-emerald-500/20",
+    blue: "text-blue-500 bg-blue-600/10 border-blue-500/20",
+    amber: "text-amber-500 bg-amber-600/10 border-amber-500/20",
   };
 
   return (
-    <aside
-      style={{
-        width: isCollapsed ? "80px" : "260px",
-        transition: "width 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
-      }}
-      className="fixed top-0 left-0 h-screen bg-[#0f172a] text-white flex flex-col z-50 border-r border-slate-800 shadow-2xl overflow-hidden"
-    >
-      {/* Header */}
-      <div className="p-6 flex items-center justify-between min-h-[100px]">
-        {!isCollapsed && (
-          <div className="flex flex-col animate-in fade-in duration-500">
-            <span className="text-xl font-black tracking-tighter text-white">
-              DREAM VALLEY
-            </span>
-            <span className="text-[10px] text-emerald-500 font-bold tracking-[0.3em] -mt-1">
-              EST. 1998
-            </span>
+    <nav className="fixed top-0 left-0 w-full bg-[#0f172a] text-white z-50 border-b border-slate-800 shadow-2xl">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-20">
+          
+          {/* Logo Section */}
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col">
+              <span className="text-xl font-black tracking-tighter text-white">
+                DREAM VALLEY
+              </span>
+              <span className="text-[10px] text-emerald-500 font-bold tracking-[0.3em] -mt-1">
+                EST. 1998
+              </span>
+            </div>
           </div>
-        )}
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 hover:bg-slate-800 rounded-lg transition-colors ml-auto"
-        >
-          <svg
-            className={`w-6 h-6 text-slate-400 transition-transform duration-500 ${
-              isCollapsed ? "rotate-180" : ""
-            }`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-            />
-          </svg>
-        </button>
-      </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 mt-4 space-y-2">
-        {menuItems.map((item) => {
-          const isActive = location.pathname === item.to;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`relative flex items-center h-12 rounded-lg transition-all duration-200 group overflow-hidden ${
-                isActive
-                  ? "bg-emerald-600/10"
-                  : "hover:bg-slate-800/50"
-              }`}
-            >
-              <div
-                className={`absolute left-0 w-1 h-6 bg-emerald-500 rounded-r-full transition-all duration-300 ${
-                  isActive
-                    ? "opacity-100"
-                    : "opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-50"
-                }`}
-              />
-
-              <div className="flex items-center w-full px-4">
-                <span
-                  className={`text-xs font-bold ${
-                    isActive ? "text-emerald-500" : "text-slate-500"
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-4">
+            {menuItems.map((item) => {
+              const isActive = location.pathname === item.to;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`px-3 py-2 text-[12px] font-bold tracking-widest transition-all duration-200 rounded-md ${
+                    isActive ? "text-emerald-500" : "text-slate-400 hover:text-white hover:bg-slate-800"
                   }`}
                 >
-                  {item.label.charAt(0)}
-                </span>
+                  {item.label}
+                </Link>
+              );
+            })}
 
-                {!isCollapsed && (
-                  <span
-                    className={`ml-6 text-[13px] font-bold tracking-widest ${
-                      isActive
-                        ? "text-white"
-                        : "text-slate-400 group-hover:text-slate-200"
-                    }`}
-                  >
-                    {item.label}
-                  </span>
-                )}
-              </div>
-            </Link>
-          );
-        })}
+            {/* Vertical Divider */}
+            <div className="h-6 w-[1px] bg-slate-700 mx-2" />
 
-        {/* Divider */}
-        <div className="my-6 border-t border-slate-800/60" />
-
-        {/* Login Section */}
-        {loginItems.map((item) => {
-          const isActive = location.pathname === item.to;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`relative flex items-center h-12 rounded-lg transition-all duration-200 overflow-hidden ${
-                isActive
-                  ? accentMap[item.accent]
-                  : "hover:bg-slate-800/50"
-              }`}
-            >
-              <div className="flex items-center w-full px-4">
-                <span
-                  className={`text-xs font-bold ${
-                    item.accent === "emerald"
-                      ? "text-emerald-500"
-                      : item.accent === "blue"
-                      ? "text-blue-500"
-                      : "text-amber-500"
+            {/* Login Section */}
+            <div className="flex items-center gap-2">
+              {loginItems.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`px-4 py-1.5 rounded-full border text-[11px] font-black transition-all duration-200 ${
+                    location.pathname === item.to 
+                      ? accentMap[item.accent] 
+                      : "border-slate-700 text-slate-400 hover:border-slate-500"
                   }`}
                 >
-                  {item.label.charAt(0)}
-                </span>
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
 
-                {!isCollapsed && (
-                  <span
-                    className={`ml-6 text-[13px] font-bold tracking-widest ${
-                      item.accent === "emerald"
-                        ? "text-emerald-400"
-                        : item.accent === "blue"
-                        ? "text-blue-400"
-                        : "text-amber-400"
-                    }`}
-                  >
-                    {item.label}
-                  </span>
+          {/* Mobile Menu Button */}
+          <div className="md:hidden flex items-center">
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="p-2 text-slate-400 hover:text-white"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {isOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
                 )}
-              </div>
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Footer */}
-      <div className="p-6 border-t border-slate-800/50">
-        <div
-          className={`flex items-center ${
-            isCollapsed ? "justify-center" : "gap-3"
-          }`}
-        >
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          {!isCollapsed && (
-            <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">
-              System Secure
-            </span>
-          )}
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
-    </aside>
+
+      {/* Mobile Menu Dropdown */}
+      <div className={`md:hidden transition-all duration-300 overflow-hidden ${isOpen ? "max-h-96 border-t border-slate-800" : "max-h-0"}`}>
+        <div className="px-4 pt-4 pb-6 space-y-2 bg-[#0f172a]">
+          {menuItems.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="block px-3 py-2 text-base font-medium text-slate-400 hover:text-white"
+              onClick={() => setIsOpen(false)}
+            >
+              {item.label}
+            </Link>
+          ))}
+          <div className="grid grid-cols-3 gap-2 pt-4">
+            {loginItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`text-center py-2 rounded-lg text-[10px] font-bold border ${accentMap[item.accent]}`}
+                onClick={() => setIsOpen(false)}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    </nav>
   );
 }

@@ -15,7 +15,7 @@ export default function teacherAuth(req, res, next) {
       return res.status(403).json({ error: "Teacher access required" });
     }
 
-    // ✅ decoded.schoolId MUST be a string ObjectId
+    // ✅ decoded.schoolId MUST be a string ObjectId112
     req.user = {
       userId: decoded.userId,
       schoolId: decoded.schoolId,
