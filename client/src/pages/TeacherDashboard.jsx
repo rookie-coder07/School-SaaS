@@ -9,7 +9,7 @@ export default function TeacherDashboard() {
   const [locked, setLocked] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
- const teacherData = JSON.parse(localStorage.getItem("teacherData"));
+ 
 const teacher = JSON.parse(localStorage.getItem("teacherData"));
 
 const className = teacher?.class;
@@ -33,6 +33,7 @@ const section = teacher?.section;
         setAttendance(init);
         setLocked(false);
       });
+      
   }, [className, section]);
 
   useEffect(() => {
@@ -46,32 +47,37 @@ const section = teacher?.section;
         setPercentages(map);
       });
   }, [className, section]);
+useEffect(() => {
+  if (!date) return;
 
-  useEffect(() => {
-    if (!date) return;
-    fetch(`http://localhost:5000/api/teacher/attendance?date=${date}&className=${className}&section=${section}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then((r) => r.json())
-      .then((records) => {
-        if (records.length === 0) {
-          const init = {};
-          students.forEach((s) => (init[s._id] = "PRESENT"));
-          setAttendance(init);
-          setLocked(false);
-          return;
+  fetch(`http://localhost:5000/api/teacher/attendance?date=${date}&className=${className}&section=${section}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.json())
+    .then((records) => {
+      if (!records || records.length === 0) {
+        const init = {};
+        students.forEach((s) => (init[s._id] = "PRESENT"));
+        setAttendance(init);
+        setLocked(false);
+        return;
+      }
+
+      const loaded = {};
+      records.forEach((r) => {
+        const student = students.find(
+          (s) => s.userId?.toString() === r.studentUserId?.toString()
+        );
+
+        if (student) {
+          loaded[student._id] = r.status;
         }
-        const loaded = {};
-        records.forEach((r) => {
-          const student = students.find((s) => s.userId === r.studentUserId);
-          if (student) loaded[student._id] = r.status;
-        });
-        setAttendance(loaded);
-        const submitted = records.some((r) => r.submissionStatus === "SUBMITTED");
-        setLocked(submitted);
       });
-  }, [date, students]);
 
+      setAttendance(loaded);
+      setLocked(true);
+    });
+}, [date, students]);
   const setStatus = (id, status) => {
     if (locked) return;
     setAttendance((p) => ({ ...p, [id]: status }));

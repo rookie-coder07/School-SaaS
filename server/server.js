@@ -6,81 +6,71 @@ import jwt from "jsonwebtoken";
 import multer from "multer";
 import XLSX from "xlsx";
 import fs from "fs";
-import teacherRoutes from "./routes/teacher.js";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 
 dotenv.config();
-const PORT = process.env.PORT || 5000;
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use("/api/teacher", teacherRoutes);
-process.on("uncaughtException", (err) => {
-  console.error("🔥 UNCAUGHT EXCEPTION:", err);
-});
 
-process.on("unhandledRejection", (reason) => {
-  console.error("🔥 UNHANDLED PROMISE:", reason);
-});
+const PORT = process.env.PORT || 5000;
 
-/* =======================
-   ADMIN AUTH (ONLY ONCE)
-======================= */
-function adminAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: "No token provided" });
-    }
-
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    if (decoded.role !== "ADMIN") {
-      return res.status(403).json({ error: "Access denied" });
-    }
-
-    // ✅ Attach to request
-    req.user = decoded;
-
-    next();
-  } catch (err) {
-    console.error("ADMIN AUTH ERROR:", err);
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
-}
-/* ============================
+/* ================================
    DATABASE CONNECTION
-============================ */
+================================ */
 const client = new MongoClient(process.env.MONGO_URI);
 let db;
 
-(async () => {
+async function startServer() {
   await client.connect();
   db = client.db("school_saas");
   console.log("✅ MongoDB Connected");
-})();
 
-
-/* ============================
-   FILE UPLOAD CONFIG
-============================ */
-if (!fs.existsSync("uploads")) {
-  fs.mkdirSync("uploads");
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+  });
 }
+startServer();
+
+/* ================================
+   MIDDLEWARES
+================================ */
 const upload = multer({ dest: "uploads/" });
 
-/* ============================
-   BASIC TEST
-============================ */
-app.get("/", (req, res) => {
-  res.json({ message: "Backend Running" });
-});
+function adminAuth(req, res, next) {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-/* ============================
+    if (decoded.role !== "ADMIN")
+      return res.status(403).json({ error: "Admin only" });
+
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+function teacherAuth(req, res, next) {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.role !== "TEACHER")
+      return res.status(403).json({ error: "Teacher only" });
+
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+/* ================================
    ADMIN LOGIN
-============================ */
+================================ */
 app.post("/api/auth/login", (req, res) => {
   const { email, password } = req.body;
 
@@ -92,248 +82,149 @@ app.post("/api/auth/login", (req, res) => {
   }
 
   const token = jwt.sign(
-  {
-    role: "ADMIN",
-    schoolId: "DEFAULT_SCHOOL"   // 👈 IMPORTANT
-  },
-  process.env.JWT_SECRET,
-  { expiresIn: "1d" }
-);
+    { role: "ADMIN", schoolId: process.env.SCHOOL_ID },
+    process.env.JWT_SECRET,
+    { expiresIn: "1d" }
+  );
 
   res.json({ token });
 });
 
-/* ============================
-   UPLOAD TEACHERS (ONLY ONCE)
-============================ */
+/* ================================
+   UPLOAD TEACHERS
+================================ */
 app.post(
   "/api/admin/upload-teachers",
-  adminAuth,
+  
   upload.single("file"),
   async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
+    const rows = XLSX.utils.sheet_to_json(
+      XLSX.readFile(req.file.path).Sheets[
+        XLSX.readFile(req.file.path).SheetNames[0]
+      ]
+    );
 
-      const workbook = XLSX.readFile(req.file.path);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet);
+    for (const row of rows) {
+      let user = await db.collection("users").findOne({ email: row.email });
 
-      const users = db.collection("users");
-      const teachers = db.collection("teachers");
-
-      for (const row of rows) {
-        if (!row.email || !row.name) continue;
-
-        const exists = await users.findOne({ email: row.email });
-        if (exists) continue;
-
+      if (!user) {
         const hash = await bcrypt.hash("teacher123", 10);
-
-        const user = await users.insertOne({
+        const u = await db.collection("users").insertOne({
           email: row.email,
           passwordHash: hash,
           role: "TEACHER",
-          createdAt: new Date(),
+          schoolId: process.env.SCHOOL_ID,
         });
-
-        await teachers.insertOne({
-          userId: user.insertedId,
-          name: row.name,
-          class: row.class,
-          section: row.section,
-          schoolId: req.user.schoolId, // ✅ now safe
-          createdAt: new Date(),
-        });
+        user = { _id: u.insertedId };
       }
 
-      res.json({ message: "Teachers uploaded successfully" });
-    } catch (err) {
-      console.error("UPLOAD ERROR:", err);
-      res.status(500).json({ error: "Upload failed" });
+      await db.collection("teachers").updateOne(
+        { userId: user._id },
+        {
+          $set: {
+            name: row.name,
+            class: row.class,
+            section: row.section,
+            subject: row.subject || "",
+            schoolId: process.env.SCHOOL_ID,
+          },
+        },
+        { upsert: true }
+      );
     }
+
+    res.json({ message: "Teachers uploaded successfully" });
   }
 );
- /* ============================
-   UPLOAD STUDENTS (ADMIN)
-============================ */
+
+/* ================================
+   UPLOAD STUDENTS
+================================ */
 app.post(
   "/api/admin/upload-students",
-  adminAuth,
+  
   upload.single("file"),
   async (req, res) => {
-    try {
-      console.log("📥 Student upload hit");
+    const rows = XLSX.utils.sheet_to_json(
+      XLSX.readFile(req.file.path).Sheets[
+        XLSX.readFile(req.file.path).SheetNames[0]
+      ]
+    );
 
-      if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
-
-      const workbook = XLSX.readFile(req.file.path);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet);
-
-      const students = db.collection("students");
-
-      for (const row of rows) {
-        if (!row.name || !row.class || !row.section) continue;
-
-        await students.insertOne({
-          name: row.name,
-          class: row.class,
-          section: row.section,
-          rollNo: row.rollNo || "",
-          createdAt: new Date(),
-        });
-      }
-
-      fs.unlinkSync(req.file.path);
-
-      res.json({ message: "Students uploaded successfully" });
-    } catch (err) {
-      console.error("STUDENT UPLOAD ERROR:", err);
-      res.status(500).json({ error: "Student upload failed" });
+    for (const row of rows) {
+      await db.collection("students").insertOne({
+        name: row.name,
+        class: row.class,
+        section: row.section,
+        rollNo: row.rollNo || "",
+        schoolId: process.env.SCHOOL_ID,
+        createdAt: new Date(),
+      });
     }
+
+    res.json({ message: "Students uploaded successfully" });
   }
 );
 
-
-
-/* ============================
+/* ================================
    TEACHER LOGIN
-============================ */
+================================ */
 app.post("/api/auth/teacher/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    const user = await db.collection("users").findOne({
-      email,
-      role: "TEACHER",
-    });
+  const user = await db.collection("users").findOne({ email });
+  if (!user) return res.status(401).json({ error: "User not found" });
 
-    if (!user) {
-      return res.status(401).json({ error: "Teacher not found" });
-    }
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) return res.status(401).json({ error: "Wrong password" });
 
-    const match = await bcrypt.compare(password, user.passwordHash);
-    if (!match) {
-      return res.status(401).json({ error: "Wrong password" });
-    }
-
-    // ✅ Fetch teacher profile
-    const teacher = await db.collection("teachers").findOne({
-      userId: user._id,
-    });
-
-    if (!teacher) {
-      return res.status(400).json({
-        error: "Teacher profile missing. Contact admin.",
-      });
-    }
-
-    const token = jwt.sign(
-      { userId: user._id, role: "TEACHER" },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
-    // ✅ SEND CLASS + SECTION
-    res.json({
-      token,
-      class: teacher.class,
-      section: teacher.section,
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Login failed" });
-  }
-});
-
-app.post("/api/auth/teacher/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const user = await db.collection("users").findOne({
-      email,
-      role: "TEACHER",
-    });
-
-    if (!user) {
-      return res.status(401).json({ error: "Teacher not found" });
-    }
-
-    const match = await bcrypt.compare(password, user.passwordHash);
-    if (!match) {
-      return res.status(401).json({ error: "Wrong password" });
-    }
-
-    // 🔥 Correct lookup
-    const teacher = await db.collection("teachers").findOne({
-      userId: user._id
-    });
-
-    if (!teacher) {
-      return res.status(404).json({
-        error: "Teacher profile missing. Contact admin."
-      });
-    }
-
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        role: "TEACHER",
-        class: teacher.class,
-        section: teacher.section
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
-    res.json({
-      token,
-      class: teacher.class,
-      section: teacher.section
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Login failed" });
-  }
-});
-
-
-/* ============================
-   GET STUDENTS
-============================ */
-app.get("/api/teacher/students", async (req, res) => {
   const teacher = await db.collection("teachers").findOne({
-    userId: new ObjectId(req.user.userId),
+    userId: user._id,
   });
 
-  if (!teacher) {
-    return res.status(404).json({ error: "Teacher not found" });
-  }
+  if (!teacher)
+    return res.status(400).json({ error: "Teacher profile missing" });
 
-  const students = await db.collection("students").find({
+  const token = jwt.sign(
+    {
+      userId: user._id,
+      role: "TEACHER",
+      class: teacher.class,
+      section: teacher.section,
+      schoolId: process.env.SCHOOL_ID,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "1d" }
+  );
+
+  res.json({
+    token,
     class: teacher.class,
     section: teacher.section,
+  });
+});
+
+/* ================================
+   GET STUDENTS (MAPPING)
+================================ */
+app.get("/api/teacher/students", teacherAuth, async (req, res) => {
+  const students = await db.collection("students").find({
+    class: req.user.class,
+    section: req.user.section,
+    schoolId: req.user.schoolId,
   }).toArray();
 
   res.json(students);
 });
 
-/* ============================
-   ATTENDANCE SAVE
-============================ */
+/* ================================
+   SAVE ATTENDANCE
+================================ */
 app.post("/api/teacher/attendance/save", async (req, res) => {
   const { date, className, section, records } = req.body;
 
-  const attendance = db.collection("attendance");
-
   for (const r of records) {
-    await attendance.updateOne(
+    await db.collection("attendance").updateOne(
       { studentUserId: r.studentUserId, date },
       {
         $set: {
@@ -342,7 +233,6 @@ app.post("/api/teacher/attendance/save", async (req, res) => {
           class: className,
           section,
           status: r.status,
-          submissionStatus: "DRAFT",
         },
       },
       { upsert: true }
@@ -352,9 +242,9 @@ app.post("/api/teacher/attendance/save", async (req, res) => {
   res.json({ message: "Attendance saved" });
 });
 
-/* ============================
-   ATTENDANCE SUBMIT
-============================ */
+/* ================================
+   SUBMIT ATTENDANCE
+================================ */
 app.post("/api/teacher/attendance/submit", async (req, res) => {
   const { date, className, section } = req.body;
 
@@ -364,51 +254,4 @@ app.post("/api/teacher/attendance/submit", async (req, res) => {
   );
 
   res.json({ message: "Attendance submitted" });
-});
-app.post("/api/admissions", async (req, res) => {
-  try {
-    const {
-      studentName,
-      dob,
-      classApplying,
-      parentName,
-      phone,
-      email,
-    } = req.body;
-
-    if (!studentName || !classApplying || !parentName) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
-
-    await db.collection("admissions").insertOne({
-      studentName,
-      dob,
-      classApplying,
-      parentName,
-      phone,
-      email,
-      status: "PENDING",
-      createdAt: new Date(),
-    });
-
-    res.json({ message: "Admission submitted successfully" });
-  } catch (err) {
-    console.error("ADMISSION ERROR:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-/* ============================
-   START SERVER
-============================ */
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("❌ UNCAUGHT EXCEPTION:", err);
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ UNHANDLED REJECTION:", reason);
 });

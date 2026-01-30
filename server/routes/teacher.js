@@ -1,6 +1,6 @@
 import express from "express";
-import teacherAuth from "../middleware/teacherAuth.js";
-
+import { authMiddleware } from "../middleware/authMiddleware.js";
+import { ObjectId } from "mongodb";
 
 
 export default function teacherRoutes(db) {
@@ -13,24 +13,30 @@ export default function teacherRoutes(db) {
   /* ================================
      GET STUDENTS (BY CLASS + SECTION)
   ================================= */
-  router.get("/students", authMiddleware, async (req, res) => {
+ 
+router.get("/students", teacherAuth, async (req, res) => {
   try {
-    const teacher = await Teacher.findOne({ userId: req.user.id });
-
-    if (!teacher) {
-      return res.status(404).json({ message: "Teacher not found" });
-    }
-
-    const students = await Student.find({
-      class: teacher.class,
-      section: teacher.section,
-      schoolId: teacher.schoolId
+    const teacher = await db.collection("teachers").findOne({
+      userId: new ObjectId(req.user.userId),
+      schoolId: new ObjectId(req.user.schoolId),
     });
 
-    res.json(students); // even if empty
+    if (!teacher) {
+      return res.status(404).json({
+        error: "Teacher profile not found or schoolId mismatch",
+      });
+    }
+
+    const students = await db.collection("students").find({
+      class: teacher.class,
+      section: teacher.section,
+      schoolId: new ObjectId(req.user.schoolId),
+    }).toArray();
+
+    res.json(students);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    console.error("STUDENT FETCH ERROR:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
   /* ================================
@@ -140,29 +146,39 @@ export default function teacherRoutes(db) {
       res.status(500).json({ error: "Failed to fetch attendance" });
     }
   });
+  /* ================================
+  Test Route
+ ================================= */
+router.get("/dashboard", authMiddleware, async (req, res) => {
+  res.json({
+    message: "Teacher dashboard working",
+    user: req.user   // 👈 this proves mapping works
+  });
+});
+
 /* ===============================
    GET STUDENTS FOR LOGGED TEACHER
 ================================ */
-router.get("/students", authMiddleware, async (req, res) => {
+router.get("/students", teacherAuth, async (req, res) => {
   try {
-  const teacher = await Teacher.findOne({
-  userId: req.user.userId
-});
+    const teacher = await db.collection("teachers").findOne({
+      userId: new ObjectId(req.user.id),
+      schoolId: new ObjectId(req.user.schoolId)
+    });
 
     if (!teacher) {
-      return res.status(404).json({
-        message: "Teacher profile missing. Contact admin.",
-      });
+      return res.status(404).json({ message: "Teacher profile not found" });
     }
 
-    const students = await Student.find({
-  class: teacher.class,
-  section: teacher.section
-});
+    const students = await db.collection("students").find({
+      schoolId: new ObjectId(req.user.schoolId),
+      class: teacher.class,
+      section: teacher.section
+    }).toArray();
 
     res.json(students);
   } catch (err) {
-    console.error("GET STUDENTS ERROR:", err);
+    console.log(err);
     res.status(500).json({ message: "Server error" });
   }
 });

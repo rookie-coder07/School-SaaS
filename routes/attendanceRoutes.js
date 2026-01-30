@@ -61,6 +61,15 @@ export default function attendanceRoutes(db) {
 
     res.json(data);
   });
+// when returning records:
 
+const records = awaitattendance.find(query).toArray();
+const normalized = records.map(r => ({
+  ...r,
+  _id: r._id.toString(),
+  studentUserId: r.studentUserId ? String(r.studentUserId) : undefined,
+  schoolId: r.schoolId ? String(r.schoolId) : undefined,
+}));
+res.json(normalized);
   return router;
 }
