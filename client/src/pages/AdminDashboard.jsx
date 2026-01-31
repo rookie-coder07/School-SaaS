@@ -1,37 +1,30 @@
-// ...existing code...
 import { useState, useEffect } from "react";
-import AdminSidebar from "../components/AdminSidebar";
 
 export default function AdminDashboard() {
   const [teacherFile, setTeacherFile] = useState(null);
   const [studentFile, setStudentFile] = useState(null);
   const [admissionCount, setAdmissionCount] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState("dashboard");
 
-  // ===============================
-  // FETCH ADMISSIONS COUNT
-  // ===============================
+  /* ================= FETCH ADMISSIONS ================= */
+
   useEffect(() => {
     const token = localStorage.getItem("adminToken");
     fetch("http://localhost:5000/api/admissions", {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Status ${res.status}`);
-        return res.json();
-      })
-      .then((data) => setAdmissionCount(Array.isArray(data) ? data.length : 0))
+      .then((res) => res.json())
+      .then((data) =>
+        setAdmissionCount(Array.isArray(data) ? data.length : 0)
+      )
       .catch(() => setAdmissionCount(0));
   }, []);
 
-  // ===============================
-  // UPLOAD TEACHERS
-  // ===============================
+  /* ================= UPLOAD TEACHERS ================= */
+
   const uploadTeachers = async () => {
-    if (!teacherFile) {
-      alert("Select teacher Excel file");
-      return;
-    }
+    if (!teacherFile) return alert("Select teacher Excel file");
 
     const token = localStorage.getItem("adminToken");
     if (!token) return alert("Admin not logged in");
@@ -41,37 +34,27 @@ export default function AdminDashboard() {
 
     setIsUploading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/admin/upload-teachers", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const text = await res.text();
-      if (!res.ok) {
-        console.error("Teacher upload failed:", text);
-        return alert("Teacher upload failed: " + (text || `status ${res.status}`));
-      }
-
+      const res = await fetch(
+        "http://localhost:5000/api/admin/upload-teachers",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
+      );
+      if (!res.ok) throw new Error();
       alert("✅ Teachers uploaded successfully");
-    } catch (err) {
-      console.error(err);
-      alert("Server error while uploading teachers: " + (err.message || err));
+    } catch {
+      alert("Teacher upload failed");
     } finally {
       setIsUploading(false);
     }
   };
 
-  // ===============================
-  // UPLOAD STUDENTS
-  // ===============================
+  /* ================= UPLOAD STUDENTS ================= */
+
   const uploadStudents = async () => {
-    if (!studentFile) {
-      alert("Select student Excel file");
-      return;
-    }
+    if (!studentFile) return alert("Select student Excel file");
 
     const token = localStorage.getItem("adminToken");
     if (!token) return alert("Admin not logged in");
@@ -81,82 +64,229 @@ export default function AdminDashboard() {
 
     setIsUploading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/admin/upload-students", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const text = await res.text();
-      if (!res.ok) {
-        console.error("Student upload failed:", text);
-        return alert("Student upload failed: " + (text || `status ${res.status}`));
-      }
-
+      const res = await fetch(
+        "http://localhost:5000/api/admin/upload-students",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
+      );
+      if (!res.ok) throw new Error();
       alert("✅ Students uploaded successfully");
-    } catch (err) {
-      console.error(err);
-      alert("Server error while uploading students: " + (err.message || err));
+    } catch {
+      alert("Student upload failed");
     } finally {
       setIsUploading(false);
     }
   };
 
   return (
-    <div className="flex">
-      <AdminSidebar />
+    <div style={styles.layout}>
+      {/* LEFT NAV */}
+      <div style={styles.sidebar}>
+        <h2 style={styles.logo}>Admin Panel</h2>
 
-      <div className="ml-64 p-8 w-full bg-gray-100 min-h-screen">
-        <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
-
-        {/* STATS */}
-        <div className="bg-white p-6 rounded shadow mb-6">
-          <h2 className="text-lg font-semibold">Total Admissions: {admissionCount}</h2>
-        </div>
-
-        {/* TEACHER UPLOAD */}
-        <div className="bg-white p-6 rounded shadow mb-6 w-[450px]">
-          <h2 className="text-xl font-bold mb-4">Upload Teachers</h2>
-
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={(e) => setTeacherFile(e.target.files[0])}
-            className="mb-4"
-          />
-
+        {[
+          { id: "dashboard", label: "Dashboard" },
+          { id: "applications", label: "Applications" }, // 🆕
+          { id: "teachers", label: "Upload Teachers" },
+          { id: "students", label: "Upload Students" },
+        ].map((item) => (
           <button
-            onClick={uploadTeachers}
-            className="bg-blue-600 text-white px-6 py-2 rounded"
-            disabled={isUploading}
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            style={styles.navBtn(activeTab === item.id)}
           >
-            {isUploading ? "Uploading..." : "Upload Teachers"}
+            {item.label}
           </button>
-        </div>
+        ))}
+      </div>
 
-        {/* STUDENT UPLOAD */}
-        <div className="bg-white p-6 rounded shadow w-[450px]">
-          <h2 className="text-xl font-bold mb-4">Upload Students</h2>
+      {/* MAIN CONTENT */}
+      <div style={styles.page}>
+        {/* DASHBOARD */}
+        {activeTab === "dashboard" && (
+          <>
+            <h1 style={styles.title}>Admin Dashboard</h1>
+            <p style={styles.subtitle}>School Overview</p>
 
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={(e) => setStudentFile(e.target.files[0])}
-            className="mb-4"
-          />
+            <div style={styles.statCard}>
+              <span style={styles.statLabel}>Total Admissions</span>
+              <b style={styles.statValue}>{admissionCount}</b>
+            </div>
+          </>
+        )}
 
-          <button
-            onClick={uploadStudents}
-            className="bg-green-600 text-white px-6 py-2 rounded"
-            disabled={isUploading}
-          >
-            {isUploading ? "Uploading..." : "Upload Students"}
-          </button>
-        </div>
+        {/* APPLICATIONS */}
+        {activeTab === "applications" && (
+          <>
+            <h1 style={styles.title}>Applications</h1>
+            <p style={styles.subtitle}>
+              Student admission applications overview
+            </p>
+
+            <div style={styles.statCard}>
+              <span style={styles.statLabel}>Total Applications</span>
+              <b style={styles.statValue}>{admissionCount}</b>
+            </div>
+
+            <p style={styles.helperText}>
+              (You can later add approve / reject / view details here)
+            </p>
+          </>
+        )}
+
+        {/* UPLOAD TEACHERS */}
+        {activeTab === "teachers" && (
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>Upload Teachers</h2>
+
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setTeacherFile(e.target.files[0])}
+              style={styles.file}
+            />
+
+            <button
+              onClick={uploadTeachers}
+              disabled={isUploading}
+              style={styles.primaryBtn}
+            >
+              {isUploading ? "Uploading..." : "Upload Teachers"}
+            </button>
+          </div>
+        )}
+
+        {/* UPLOAD STUDENTS */}
+        {activeTab === "students" && (
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>Upload Students</h2>
+
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setStudentFile(e.target.files[0])}
+              style={styles.file}
+            />
+
+            <button
+              onClick={uploadStudents}
+              disabled={isUploading}
+              style={styles.secondaryBtn}
+            >
+              {isUploading ? "Uploading..." : "Upload Students"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-// ...existing
+
+/* ================= STYLES ================= */
+
+const styles = {
+  layout: {
+    display: "flex",
+    minHeight: "100vh",
+    background: "#f8fafc",
+  },
+
+  sidebar: {
+    width: "220px",
+    background: "#ffffff",
+    borderRight: "1px solid #e5e7eb",
+    padding: "16px",
+  },
+
+  logo: {
+    fontSize: "17px",
+    fontWeight: "900",
+    marginBottom: "18px",
+    color: "#4f46e5",
+  },
+
+  navBtn: (active) => ({
+    width: "100%",
+    padding: "10px 12px",
+    marginBottom: "8px",
+    borderRadius: "10px",
+    fontSize: "13px",
+    fontWeight: "700",
+    border: "none",
+    cursor: "pointer",
+    background: active ? "#eef2ff" : "transparent",
+    color: active ? "#4338ca" : "#475569",
+    textAlign: "left",
+  }),
+
+  page: {
+    flex: 1,
+    padding: "18px",
+  },
+
+  title: { fontSize: "20px", fontWeight: "800" },
+  subtitle: {
+    fontSize: "12px",
+    color: "#64748b",
+    marginBottom: "14px",
+  },
+
+  statCard: {
+    background: "#ffffff",
+    padding: "14px",
+    borderRadius: "14px",
+    border: "1px solid #e5e7eb",
+    width: "220px",
+    marginBottom: "12px",
+  },
+
+  statLabel: { fontSize: "11px", color: "#64748b" },
+  statValue: { fontSize: "20px", fontWeight: "900" },
+
+  helperText: {
+    fontSize: "12px",
+    color: "#94a3b8",
+  },
+
+  card: {
+    background: "#ffffff",
+    padding: "16px",
+    borderRadius: "16px",
+    border: "1px solid #e5e7eb",
+    maxWidth: "360px",
+  },
+
+  cardTitle: {
+    fontSize: "15px",
+    fontWeight: "800",
+    marginBottom: "12px",
+  },
+
+  file: {
+    fontSize: "12px",
+    marginBottom: "14px",
+  },
+
+  primaryBtn: {
+    width: "100%",
+    padding: "10px",
+    borderRadius: "12px",
+    background: "#4f46e5",
+    color: "#ffffff",
+    border: "none",
+    fontWeight: "700",
+  },
+
+  secondaryBtn: {
+    width: "100%",
+    padding: "10px",
+    borderRadius: "12px",
+    background: "#ecfeff",
+    color: "#0e7490",
+    border: "none",
+    fontWeight: "700",
+  },
+};

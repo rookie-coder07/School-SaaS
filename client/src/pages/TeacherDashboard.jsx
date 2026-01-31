@@ -9,22 +9,19 @@ export default function TeacherDashboard() {
   const [locked, setLocked] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
- 
-const teacher = JSON.parse(localStorage.getItem("teacherData"));
 
-const className = teacher?.class;
-const section = teacher?.section;
-
-  // State to track sidebar width (matches your 260px / 80px sidebar)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
+  const teacher = JSON.parse(localStorage.getItem("teacherData") || "{}");
+  const className = teacher?.class;
+  const section = teacher?.section;
   const token = localStorage.getItem("teacherToken");
 
-  /* LOGIC (Unchanged) */
+  /* ================= LOGIC (UNCHANGED) ================= */
+
   useEffect(() => {
-    fetch(`http://localhost:5000/api/teacher/students?className=${className}&section=${section}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    fetch(
+      `http://localhost:5000/api/teacher/students?className=${className}&section=${section}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
       .then((r) => r.json())
       .then((data) => {
         setStudents(data);
@@ -33,232 +30,374 @@ const section = teacher?.section;
         setAttendance(init);
         setLocked(false);
       });
-      
   }, [className, section]);
 
   useEffect(() => {
-    fetch(`http://localhost:5000/api/teacher/attendance/summary?className=${className}&section=${section}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    fetch(
+      `http://localhost:5000/api/teacher/attendance/summary?className=${className}&section=${section}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
       .then((r) => r.json())
       .then((data) => {
         const map = {};
-        data.forEach((d) => (map[d._id] = Math.round((d.present / d.total) * 100)));
+        data.forEach(
+          (d) => (map[d._id] = Math.round((d.present / d.total) * 100))
+        );
         setPercentages(map);
       });
   }, [className, section]);
-useEffect(() => {
-  if (!date) return;
 
-  fetch(`http://localhost:5000/api/teacher/attendance?date=${date}&className=${className}&section=${section}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-    .then((r) => r.json())
-    .then((records) => {
-      if (!records || records.length === 0) {
-        const init = {};
-        students.forEach((s) => (init[s._id] = "PRESENT"));
-        setAttendance(init);
-        setLocked(false);
-        return;
-      }
+  useEffect(() => {
+    if (!date) return;
 
-      const loaded = {};
-      records.forEach((r) => {
-        const student = students.find(
-          (s) => s.userId?.toString() === r.studentUserId?.toString()
-        );
-
-        if (student) {
-          loaded[student._id] = r.status;
+    fetch(
+      `http://localhost:5000/api/teacher/attendance?date=${date}&className=${className}&section=${section}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+      .then((r) => r.json())
+      .then((records) => {
+        if (!records || records.length === 0) {
+          const init = {};
+          students.forEach((s) => (init[s._id] = "PRESENT"));
+          setAttendance(init);
+          setLocked(false);
+          return;
         }
-      });
 
-      setAttendance(loaded);
-      setLocked(true);
-    });
-}, [date, students]);
+        const loaded = {};
+        records.forEach((r) => {
+          const student = students.find(
+            (s) => s.userId?.toString() === r.studentUserId?.toString()
+          );
+          if (student) loaded[student._id] = r.status;
+        });
+
+        setAttendance(loaded);
+        setLocked(true);
+      });
+  }, [date, students]);
+
   const setStatus = (id, status) => {
     if (locked) return;
     setAttendance((p) => ({ ...p, [id]: status }));
   };
 
-  const bulkSet = (status) => {
-    if (locked) return;
-    const all = {};
-    students.forEach((s) => (all[s._id] = status));
-    setAttendance(all);
-  };
-
   const saveAttendance = async () => {
-    setError(""); setMessage("");
+    setError("");
+    setMessage("");
     if (!date) return setError("Select a date first");
-    const records = students.map((s) => ({ studentUserId: s._id
 
-, status: attendance[s._id] }));
-    const res = await fetch("http://localhost:5000/api/teacher/attendance/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ date, className, section, records }),
-    });
+    const records = students.map((s) => ({
+      studentUserId: s._id,
+      status: attendance[s._id],
+    }));
+
+    const res = await fetch(
+      "http://localhost:5000/api/teacher/attendance/save",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ date, className, section, records }),
+      }
+    );
+
     if (!res.ok) return setError("Save failed");
-    setMessage("Draft saved successfully ✨");
+    setMessage("Draft saved");
   };
 
   const submitAttendance = async () => {
-    setError(""); setMessage("");
-    const res = await fetch("http://localhost:5000/api/teacher/attendance/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ date, className, section }),
-    });
-    if (res.status === 409) { setLocked(true); return setError("Already submitted"); }
+    setError("");
+    setMessage("");
+
+    const res = await fetch(
+      "http://localhost:5000/api/teacher/attendance/submit",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ date, className, section }),
+      }
+    );
+
+    if (res.status === 409) {
+      setLocked(true);
+      return setError("Already submitted");
+    }
     if (!res.ok) return setError("Submit failed");
+
     setLocked(true);
-    setMessage("Attendance finalized and locked 🔒");
+    setMessage("Attendance finalized");
   };
 
   const filtered = students.filter(
-    (s) => s.name.toLowerCase().includes(search.toLowerCase()) || String(s.rollNo).includes(search)
+    (s) =>
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      String(s.rollNo).includes(search)
   );
 
-  const presentCount = Object.values(attendance).filter(v => v === "PRESENT").length;
+  const presentCount = Object.values(attendance).filter(
+    (v) => v === "PRESENT"
+  ).length;
+
+  /* ================= UI ================= */
 
   return (
-    /* This wrapper is the magic fix for the overlap */
-    <div style={{ 
-      marginLeft: sidebarCollapsed ? "80px" : "260px", 
-      transition: "margin-left 0.4s ease",
-      minHeight: "100vh",
-      backgroundColor: "#f8fafc"
-    }}>
-      
-      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px" }}>
-        
-        {/* Top Branding & Actions */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "40px" }}>
-          <div>
-            <h1 style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", margin: 0 }}>Class Management</h1>
-            <p style={{ color: "#64748b", fontWeight: "500" }}>Manage attendance for Grade {className}-{section}</p>
-          </div>
-          <div style={{ display: "flex", gap: "12px" }}>
-            <button 
-                onClick={saveAttendance} 
-                disabled={locked}
-                style={{ padding: "10px 20px", borderRadius: "10px", border: "1px solid #e2e8f0", fontWeight: "600", cursor: "pointer", backgroundColor: "#fff" }}
-            >
-              Save Draft
-            </button>
-            <button 
-                onClick={submitAttendance} 
-                disabled={locked}
-                style={{ padding: "10px 20px", borderRadius: "10px", border: "none", fontWeight: "600", cursor: "pointer", backgroundColor: "#0f172a", color: "#fff" }}
-            >
-              Finalize & Lock
-            </button>
-          </div>
+    <div style={styles.page}>
+      <div style={styles.header}>
+        <h1 style={styles.title}>
+          Grade {className}-{section}
+        </h1>
+        <p style={styles.subtitle}>Attendance Overview</p>
+      </div>
+
+      <div style={styles.statsRow}>
+        <div style={styles.stat}>
+          <span style={styles.statLabel}>Total</span>
+          <b style={styles.statValue}>{students.length}</b>
         </div>
-
-        {/* Status Analytics */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "20px", marginBottom: "30px" }}>
-          <div style={{ background: "#fff", padding: "20px", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
-            <span style={{ fontSize: "12px", fontWeight: "700", color: "#64748b" }}>TOTAL STUDENTS</span>
-            <div style={{ fontSize: "24px", fontWeight: "800", color: "#0f172a" }}>{students.length}</div>
-          </div>
-          <div style={{ background: "#fff", padding: "20px", borderRadius: "16px", border: "1px solid #e2e8f0", borderLeft: "4px solid #10b981" }}>
-            <span style={{ fontSize: "12px", fontWeight: "700", color: "#10b981" }}>PRESENT TODAY</span>
-            <div style={{ fontSize: "24px", fontWeight: "800", color: "#0f172a" }}>{presentCount}</div>
-          </div>
-          <div style={{ background: "#fff", padding: "20px", borderRadius: "16px", border: "1px solid #e2e8f0", borderLeft: "4px solid #ef4444" }}>
-            <span style={{ fontSize: "12px", fontWeight: "700", color: "#ef4444" }}>ABSENT/LEAVE</span>
-            <div style={{ fontSize: "24px", fontWeight: "800", color: "#0f172a" }}>{students.length - presentCount}</div>
-          </div>
+        <div style={styles.stat}>
+          <span style={styles.statLabel}>Present</span>
+          <b style={styles.statValue}>{presentCount}</b>
         </div>
-
-        {/* Controls Table Card */}
-        <div style={{ background: "#fff", borderRadius: "20px", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
-          <div style={{ padding: "20px", borderBottom: "1px solid #f1f5f9", display: "flex", gap: "12px", backgroundColor: "#fff" }}>
-            <input 
-              style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #e2e8f0", width: "300px" }}
-              placeholder="Search by name or roll..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <input 
-              type="date" 
-              style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-            <div style={{ flex: 1 }} />
-            <button 
-                onClick={() => bulkSet("PRESENT")} 
-                disabled={locked}
-                style={{ fontSize: "12px", fontWeight: "700", color: "#10b981", background: "none", border: "none", cursor: "pointer" }}
-            >
-              MARK ALL PRESENT
-            </button>
-          </div>
-
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead style={{ backgroundColor: "#f8fafc" }}>
-              <tr>
-                <th style={{ padding: "16px 24px", textAlign: "left", fontSize: "12px", color: "#64748b" }}>STUDENT</th>
-                <th style={{ padding: "16px 24px", textAlign: "center", fontSize: "12px", color: "#64748b" }}>ATTENDANCE STATUS</th>
-                <th style={{ padding: "16px 24px", textAlign: "right", fontSize: "12px", color: "#64748b" }}>PERFORMANCE</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((s) => (
-                <tr key={s._id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                  <td style={{ padding: "16px 24px" }}>
-                    <div style={{ fontWeight: "700", color: "#1e293b" }}>{s.name}</div>
-                    <div style={{ fontSize: "11px", color: "#64748b" }}>ROLL #{s.rollNo}</div>
-                  </td>
-                  <td style={{ padding: "16px 24px", textAlign: "center" }}>
-                    <div style={{ display: "inline-flex", background: "#f1f5f9", padding: "4px", borderRadius: "10px" }}>
-                      {["PRESENT", "ABSENT", "LEAVE"].map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => setStatus(s._id, status)}
-                          disabled={locked}
-                          style={{
-                            padding: "6px 12px",
-                            fontSize: "10px",
-                            fontWeight: "800",
-                            border: "none",
-                            borderRadius: "7px",
-                            cursor: locked ? "default" : "pointer",
-                            backgroundColor: attendance[s._id] === status ? (status === "PRESENT" ? "#10b981" : status === "ABSENT" ? "#ef4444" : "#3b82f6") : "transparent",
-                            color: attendance[s._id] === status ? "#fff" : "#64748b",
-                            transition: "all 0.2s"
-                          }}
-                        >
-                          {status}
-                        </button>
-                      ))}
-                    </div>
-                  </td>
-                  <td style={{ padding: "16px 24px", textAlign: "right" }}>
-                    <span style={{ fontSize: "14px", fontWeight: "800", color: (percentages[s._id]
- || 0) < 75 ? "#ef4444" : "#0f172a" }}>
-                      {percentages[s._id]
-|| 0}%
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={styles.stat}>
+          <span style={styles.statLabel}>Absent</span>
+          <b style={styles.statValue}>
+            {students.length - presentCount}
+          </b>
         </div>
       </div>
 
-      {/* Message Toasts */}
+      <div style={styles.controls}>
+        <input
+          placeholder="Search student"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={styles.input}
+        />
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          style={styles.input}
+        />
+      </div>
+
+      <div style={{ paddingBottom: "110px" }}>
+        {filtered.map((s) => (
+          <div key={s._id} style={styles.card}>
+            <div style={styles.studentRow}>
+              <div>
+                <div style={styles.name}>{s.name}</div>
+                <div style={styles.roll}>Roll #{s.rollNo}</div>
+              </div>
+              <div
+                style={{
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  color:
+                    (percentages[s._id] || 0) < 75 ? "#dc2626" : "#16a34a",
+                }}
+              >
+                {percentages[s._id] || 0}%
+              </div>
+            </div>
+
+            <div style={styles.statusGroup}>
+              {["PRESENT", "ABSENT", "LEAVE"].map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setStatus(s._id, st)}
+                  disabled={locked}
+                  style={styles.statusBtn(attendance[s._id], st)}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={styles.bottomBar}>
+        <button
+          onClick={saveAttendance}
+          disabled={locked}
+          style={styles.secondary}
+        >
+          Save
+        </button>
+        <button
+          onClick={submitAttendance}
+          disabled={locked}
+          style={styles.primary}
+        >
+          Finalize
+        </button>
+      </div>
+
       {(message || error) && (
-        <div style={{ position: "fixed", bottom: "30px", right: "30px", padding: "15px 25px", borderRadius: "12px", color: "#fff", backgroundColor: error ? "#ef4444" : "#10b981", boxShadow: "0 10px 20px rgba(0,0,0,0.1)", fontWeight: "600", zIndex: 1000 }}>
-          {message || error}
-        </div>
+        <div style={styles.toast(error)}>{message || error}</div>
       )}
     </div>
   );
 }
+
+/* ================= STYLES ================= */
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    padding: "14px",
+    background: "#f9fafb",
+    fontFamily: "system-ui",
+    color: "#0f172a",
+  },
+
+  header: { marginBottom: "14px" },
+  title: { fontSize: "19px", fontWeight: "800" },
+  subtitle: { fontSize: "12px", color: "#64748b" },
+
+  statsRow: {
+    display: "flex",
+    gap: "10px",
+    overflowX: "auto",
+    marginBottom: "14px",
+  },
+
+  stat: {
+    minWidth: "100px",
+    background: "#ffffff",
+    borderRadius: "12px",
+    padding: "10px",
+    border: "1px solid #e5e7eb",
+  },
+
+  statLabel: {
+    fontSize: "11px",
+    color: "#64748b",
+    display: "block",
+    marginBottom: "6px", // 👈 THIS IS THE SPACE YOU ASKED FOR
+  },
+
+  statValue: {
+    fontSize: "15px",
+    fontWeight: "800",
+  },
+
+  controls: {
+    display: "flex",
+    gap: "8px",
+    marginBottom: "14px",
+  },
+
+  input: {
+    flex: 1,
+    padding: "10px 12px",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
+    background: "#ffffff",
+    fontSize: "13px",
+  },
+
+  card: {
+    background: "#ffffff",
+    borderRadius: "14px",
+    padding: "12px",
+    marginBottom: "10px",
+    border: "1px solid #e5e7eb",
+  },
+
+  studentRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginBottom: "8px",
+  },
+
+  name: { fontSize: "14px", fontWeight: "700" },
+  roll: { fontSize: "11px", color: "#64748b" },
+
+  statusGroup: {
+    display: "flex",
+    background: "#f1f5f9",
+    padding: "3px",
+    borderRadius: "10px",
+  },
+
+  statusBtn: (active, s) => ({
+    flex: 1,
+    padding: "7px 0",
+    borderRadius: "8px",
+    border: "none",
+    fontSize: "10px",
+    fontWeight: "700",
+    background:
+      active === s
+        ? s === "PRESENT"
+          ? "#dcfce7"
+          : s === "ABSENT"
+          ? "#fee2e2"
+          : "#e0f2fe"
+        : "transparent",
+    color:
+      active === s
+        ? s === "PRESENT"
+          ? "#166534"
+          : s === "ABSENT"
+          ? "#991b1b"
+          : "#075985"
+        : "#64748b",
+  }),
+
+  bottomBar: {
+    position: "fixed",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    background: "#ffffff",
+    padding: "12px",
+    display: "flex",
+    gap: "10px",
+    borderTop: "1px solid #e5e7eb",
+  },
+
+  primary: {
+    flex: 1,
+    background: "#4f46e5",
+    color: "#ffffff",
+    borderRadius: "12px",
+    padding: "12px",
+    fontWeight: "700",
+    border: "none",
+    fontSize: "13px",
+  },
+
+  secondary: {
+    flex: 1,
+    background: "#eef2ff",
+    color: "#3730a3",
+    borderRadius: "12px",
+    padding: "12px",
+    fontWeight: "700",
+    border: "none",
+    fontSize: "13px",
+  },
+
+  toast: (err) => ({
+    position: "fixed",
+    bottom: "90px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: err ? "#fee2e2" : "#dcfce7",
+    color: err ? "#991b1b" : "#166534",
+    padding: "10px 18px",
+    borderRadius: "12px",
+    fontSize: "13px",
+    fontWeight: "700",
+    border: "1px solid #e5e7eb",
+  }),
+};

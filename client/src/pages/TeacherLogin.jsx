@@ -4,62 +4,112 @@ import { useNavigate } from "react-router-dom";
 export default function TeacherLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
   const navigate = useNavigate();
 
-  async function handleLogin(e) {
-  e.preventDefault();
-  setLoading(true);
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
-  try {
-    const res = await fetch(
-      "http://localhost:5000/api/auth/teacher/login",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+    try {
+      const res = await fetch(
+        "http://localhost:5000/api/auth/teacher/login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data?.error || "Login failed");
+        setLoading(false);
+        return;
       }
-    );
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.error || "Login failed");
-      return;
+      localStorage.setItem("teacherToken", data.token);
+      navigate("/teacher/dashboard");
+    } catch (err) {
+      console.error("LOGIN ERROR:", err);
+      setError("Server not responding. Try again.");
+    } finally {
+      setLoading(false);
     }
-
-    localStorage.setItem("teacherToken", data.token);
-    localStorage.setItem(
-      "teacherData",
-      JSON.stringify({
-        class: data.class,
-        section: data.section,
-      })
-    );
-
-    navigate("/teacher/dashboard");
-  } catch (err) {
-    alert("Backend not reachable");
-  } finally {
-    setLoading(false);
-  }
-}
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#f8fafc",
+      }}
+    >
       <form
         onSubmit={handleLogin}
-        className="bg-white p-6 rounded shadow w-96 space-y-4"
+        style={{
+          background: "#ffffff",
+          padding: "36px",
+          borderRadius: "20px",
+          width: "100%",
+          maxWidth: "420px",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 20px 40px rgba(15,23,42,0.08)",
+        }}
       >
-        <h1 className="text-2xl font-bold text-center">Teacher Login</h1>
+        <div style={{ marginBottom: "28px" }}>
+          <h2
+            style={{
+              fontSize: "26px",
+              fontWeight: "800",
+              color: "#0f172a",
+              margin: 0,
+            }}
+          >
+            Teacher Login
+          </h2>
+          <p
+            style={{
+              fontSize: "14px",
+              fontWeight: "500",
+              color: "#64748b",
+              marginTop: "6px",
+            }}
+          >
+            Sign in to manage your class attendance
+          </p>
+        </div>
+
+        {error && (
+          <div
+            style={{
+              background: "#fee2e2",
+              color: "#991b1b",
+              padding: "10px 14px",
+              borderRadius: "10px",
+              fontWeight: "600",
+              fontSize: "13px",
+              marginBottom: "16px",
+            }}
+          >
+            {error}
+          </div>
+        )}
 
         <input
           type="email"
-          placeholder="Email"
+          placeholder="Email address"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full border p-2 rounded"
+          style={inputStyle}
         />
 
         <input
@@ -68,13 +118,25 @@ export default function TeacherLogin() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="w-full border p-2 rounded"
+          style={inputStyle}
         />
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-blue-600 text-white py-2 rounded"
+          style={{
+            width: "100%",
+            padding: "14px",
+            marginTop: "10px",
+            backgroundColor: "#0f172a",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: "12px",
+            fontWeight: "700",
+            fontSize: "14px",
+            cursor: loading ? "not-allowed" : "pointer",
+            transition: "all 0.2s ease",
+          }}
         >
           {loading ? "Logging in..." : "Login"}
         </button>
@@ -82,3 +144,14 @@ export default function TeacherLogin() {
     </div>
   );
 }
+
+const inputStyle = {
+  width: "100%",
+  padding: "12px 14px",
+  marginBottom: "14px",
+  borderRadius: "10px",
+  border: "1px solid #e2e8f0",
+  outline: "none",
+  fontSize: "14px",
+  fontWeight: "500",
+};

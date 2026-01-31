@@ -1,129 +1,64 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useState } from "react";
 
 export default function Navbar() {
-  const location = useLocation();
-  const [isOpen, setIsOpen] = useState(false); // Changed logic to a mobile toggle
-
-  const menuItems = [
-    { to: "/", label: "HOME" },
-    { to: "/about", label: "ABOUT US" },
-    { to: "/admissions", label: "ADMISSIONS" },
-    { to: "/contact", label: "CONTACT" },
-  ];
-
-  const loginItems = [
-    { to: "/student/login", label: "STUDENT", accent: "emerald" },
-    { to: "/teacher/login", label: "TEACHER", accent: "blue" },
-    { to: "/admin/login", label: "ADMIN", accent: "amber" },
-  ];
-
-  const accentMap = {
-    emerald: "text-emerald-500 bg-emerald-600/10 border-emerald-500/20",
-    blue: "text-blue-500 bg-blue-600/10 border-blue-500/20",
-    amber: "text-amber-500 bg-amber-600/10 border-amber-500/20",
-  };
+  const [open, setOpen] = useState(false);
 
   return (
-    <nav className="fixed top-0 left-0 w-full bg-[#0f172a] text-white z-50 border-b border-slate-800 shadow-2xl">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
-          
-          {/* Logo Section */}
-          <div className="flex items-center gap-2">
-            <div className="flex flex-col">
-              <span className="text-xl font-black tracking-tighter text-white">
-                DREAM VALLEY
-              </span>
-              <span className="text-[10px] text-emerald-500 font-bold tracking-[0.3em] -mt-1">
-                EST. 1998
-              </span>
-            </div>
-          </div>
-
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-4">
-            {menuItems.map((item) => {
-              const isActive = location.pathname === item.to;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`px-3 py-2 text-[12px] font-bold tracking-widest transition-all duration-200 rounded-md ${
-                    isActive ? "text-emerald-500" : "text-slate-400 hover:text-white hover:bg-slate-800"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-
-            {/* Vertical Divider */}
-            <div className="h-6 w-[1px] bg-slate-700 mx-2" />
-
-            {/* Login Section */}
-            <div className="flex items-center gap-2">
-              {loginItems.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`px-4 py-1.5 rounded-full border text-[11px] font-black transition-all duration-200 ${
-                    location.pathname === item.to 
-                      ? accentMap[item.accent] 
-                      : "border-slate-700 text-slate-400 hover:border-slate-500"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="p-2 text-slate-400 hover:text-white"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {isOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
-                )}
-              </svg>
-            </button>
-          </div>
+    <nav style={styles.nav}>
+      <div style={styles.row}>
+        <div>
+          <h2 style={{ margin: 0 }}>Dream Valley</h2>
+          <small style={{ color: "#22c55e" }}>EST. 1998</small>
         </div>
+
+        <div style={styles.desktop}>
+          <Link to="/">Home</Link>
+          <Link to="/student/login">Student</Link>
+          <Link to="/teacher/login">Teacher</Link>
+          <Link to="/admin/login">Admin</Link>
+        </div>
+
+        <button onClick={() => setOpen(!open)} style={styles.menuBtn}>☰</button>
       </div>
 
-      {/* Mobile Menu Dropdown */}
-      <div className={`md:hidden transition-all duration-300 overflow-hidden ${isOpen ? "max-h-96 border-t border-slate-800" : "max-h-0"}`}>
-        <div className="px-4 pt-4 pb-6 space-y-2 bg-[#0f172a]">
-          {menuItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className="block px-3 py-2 text-base font-medium text-slate-400 hover:text-white"
-              onClick={() => setIsOpen(false)}
-            >
-              {item.label}
-            </Link>
-          ))}
-          <div className="grid grid-cols-3 gap-2 pt-4">
-            {loginItems.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={`text-center py-2 rounded-lg text-[10px] font-bold border ${accentMap[item.accent]}`}
-                onClick={() => setIsOpen(false)}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
+      {open && (
+        <div style={styles.mobile}>
+          <Link to="/" onClick={() => setOpen(false)}>Home</Link>
+          <Link to="/student/login">Student</Link>
+          <Link to="/teacher/login">Teacher</Link>
+          <Link to="/admin/login">Admin</Link>
         </div>
-      </div>
+      )}
     </nav>
   );
 }
+
+const styles = {
+  nav: {
+    background: "#020617",
+    color: "white",
+    padding: "12px 20px",
+  },
+  row: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  desktop: {
+    display: "flex",
+    gap: "20px",
+  },
+  menuBtn: {
+    background: "none",
+    color: "white",
+    border: "none",
+    fontSize: "22px",
+  },
+  mobile: {
+    marginTop: "10px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+};

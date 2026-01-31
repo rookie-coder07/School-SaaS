@@ -1,139 +1,169 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export default function StudentDashboard() {
-  const [student, setStudent] = useState(null);
-  const [marks, setMarks] = useState([]);
-  const [attendance, setAttendance] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem("studentToken");
-
-    if (!token) {
-      alert("Session expired. Please login again.");
-      window.location.href = "/student/login";
-      return;
-    }
-
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
-
-    async function fetchData() {
-      try {
-        // 👤 STUDENT PROFILE
-        const profileRes = await fetch(
-          "http://localhost:5000/api/attendance/me",
-          { headers }
-        );
-        const profileData = await profileRes.json();
-        if (!profileRes.ok) throw new Error(profileData.error);
-        setStudent(profileData);
-
-        // 📊 MARKS
-        const marksRes = await fetch(
-          "http://localhost:5000/api/attendance/marks",
-          { headers }
-        );
-        const marksData = await marksRes.json();
-        if (marksRes.ok) setMarks(marksData);
-
-        // 🟢 ATTENDANCE
-        const attendanceRes = await fetch(
-          "http://localhost:5000/api/attendance/me",
-          { headers }
-        );
-        const attendanceData = await attendanceRes.json();
-        if (attendanceRes.ok) setAttendance(attendanceData);
-
-      } catch (err) {
-        console.error("Dashboard error:", err.message);
-        alert("Failed to load dashboard. Please login again.");
-        localStorage.removeItem("studentToken");
-        window.location.href = "/student/login";
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, []);
-
-  if (loading) {
-    return <p className="p-6">Loading dashboard...</p>;
-  }
-
-  if (!student) {
-    return <p className="p-6 text-red-600">Student data not found</p>;
-  }
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   return (
-    <div className="p-6 space-y-8">
-      <h1 className="text-3xl font-bold">Student Dashboard</h1>
+    <div style={styles.layout}>
+      {/* LEFT NAV */}
+      <div style={styles.sidebar}>
+        <h2 style={styles.logo}>Student</h2>
 
-      {/* PROFILE */}
-      <div className="bg-gray-100 p-4 rounded">
-        <p><b>Roll No:</b> {student.rollNo}</p>
-        <p><b>Class:</b> {student.class}</p>
-        <p><b>Section:</b> {student.section}</p>
+        {[
+          { id: "dashboard", label: "Dashboard" },
+          { id: "attendance", label: "Attendance" },
+          { id: "profile", label: "Profile" },
+          { id: "logout", label: "Logout" },
+        ].map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            style={styles.navBtn(activeTab === item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
-      {/* ATTENDANCE */}
-      <div>
-        <h2 className="text-2xl font-semibold mb-3">Attendance</h2>
+      {/* MAIN CONTENT */}
+      <div style={styles.page}>
+        {/* DASHBOARD */}
+        {activeTab === "dashboard" && (
+          <>
+            <h1 style={styles.title}>Student Dashboard</h1>
+            <p style={styles.subtitle}>Welcome Student</p>
 
-        {attendance.length === 0 ? (
-          <p>No attendance records available</p>
-        ) : (
-          <table className="w-full border">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border p-2">Date</th>
-                <th className="border p-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {attendance.map((a, i) => (
-                <tr key={i}>
-                  <td className="border p-2">
-                    {new Date(a.date).toLocaleDateString()}
-                  </td>
-                  <td className="border p-2">{a.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            <div style={styles.card}>
+              <span style={styles.cardLabel}>Status</span>
+              <b style={styles.cardValue}>Active</b>
+            </div>
+          </>
         )}
-      </div>
 
-      {/* MARKS */}
-      <div>
-        <h2 className="text-2xl font-semibold mb-3">Marks</h2>
+        {/* ATTENDANCE */}
+        {activeTab === "attendance" && (
+          <>
+            <h1 style={styles.title}>Attendance</h1>
+            <p style={styles.subtitle}>Your attendance overview</p>
 
-        {marks.length === 0 ? (
-          <p>No marks available</p>
-        ) : (
-          <table className="w-full border">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border p-2">Subject</th>
-                <th className="border p-2">Exam</th>
-                <th className="border p-2">Marks</th>
-              </tr>
-            </thead>
-            <tbody>
-              {marks.map((m, i) => (
-                <tr key={i}>
-                  <td className="border p-2">{m.subject}</td>
-                  <td className="border p-2">{m.exam}</td>
-                  <td className="border p-2">{m.marks}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            <div style={styles.card}>
+              <span style={styles.cardLabel}>Overall Attendance</span>
+              <b style={styles.cardValue}>-- %</b>
+            </div>
+          </>
+        )}
+
+        {/* PROFILE */}
+        {activeTab === "profile" && (
+          <>
+            <h1 style={styles.title}>Profile</h1>
+            <p style={styles.subtitle}>Your student information</p>
+
+            <div style={styles.card}>
+              <span style={styles.cardLabel}>Name</span>
+              <b style={styles.cardValue}>Student Name</b>
+            </div>
+          </>
+        )}
+
+        {/* LOGOUT */}
+        {activeTab === "logout" && (
+          <>
+            <h1 style={styles.title}>Logout</h1>
+            <p style={styles.subtitle}>
+              You can wire logout logic later
+            </p>
+
+            <button style={styles.logoutBtn}>Logout</button>
+          </>
         )}
       </div>
     </div>
   );
 }
+
+/* ================= STYLES ================= */
+
+const styles = {
+  layout: {
+    display: "flex",
+    minHeight: "100vh",
+    background: "#f8fafc",
+  },
+
+  sidebar: {
+    width: "220px",
+    background: "#ffffff",
+    borderRight: "1px solid #e5e7eb",
+    padding: "16px",
+  },
+
+  logo: {
+    fontSize: "17px",
+    fontWeight: "900",
+    marginBottom: "18px",
+    color: "#16a34a",
+  },
+
+  navBtn: (active) => ({
+    width: "100%",
+    padding: "10px 12px",
+    marginBottom: "8px",
+    borderRadius: "10px",
+    fontSize: "13px",
+    fontWeight: "700",
+    border: "none",
+    cursor: "pointer",
+    background: active ? "#ecfdf5" : "transparent",
+    color: active ? "#15803d" : "#475569",
+    textAlign: "left",
+  }),
+
+  page: {
+    flex: 1,
+    padding: "18px",
+  },
+
+  title: {
+    fontSize: "20px",
+    fontWeight: "800",
+  },
+
+  subtitle: {
+    fontSize: "12px",
+    color: "#64748b",
+    marginBottom: "14px",
+  },
+
+  card: {
+    background: "#ffffff",
+    padding: "16px",
+    borderRadius: "16px",
+    border: "1px solid #e5e7eb",
+    width: "220px",
+    marginBottom: "14px",
+  },
+
+  cardLabel: {
+    fontSize: "11px",
+    color: "#64748b",
+    display: "block",
+    marginBottom: "6px",
+  },
+
+  cardValue: {
+    fontSize: "18px",
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  logoutBtn: {
+    padding: "10px 16px",
+    borderRadius: "12px",
+    border: "none",
+    background: "#fee2e2",
+    color: "#991b1b",
+    fontWeight: "800",
+    fontSize: "13px",
+  },
+};
