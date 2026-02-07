@@ -15,14 +15,11 @@ export default function TeacherLogin() {
     setLoading(true);
 
     try {
-      const res = await fetch(
-        "http://localhost:5000/api/auth/teacher/login",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        }
-      );
+      const res = await fetch("http://localhost:5000/api/auth/teacher/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
       const data = await res.json();
 
@@ -32,7 +29,10 @@ export default function TeacherLogin() {
         return;
       }
 
+      // store both token and teacher object (includes schoolId/class/section)
       localStorage.setItem("teacherToken", data.token);
+      localStorage.setItem("teacherData", JSON.stringify(data.teacher || {}));
+
       navigate("/teacher/dashboard");
     } catch (err) {
       console.error("LOGIN ERROR:", err);

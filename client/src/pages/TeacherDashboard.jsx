@@ -3,18 +3,62 @@ import { useEffect, useState } from "react";
 export default function TeacherDashboard() {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
-  const [percentages, setPercentages] = useState({});
+  
   const [date, setDate] = useState("");
   const [search, setSearch] = useState("");
   const [locked, setLocked] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-
+const [activeTab, setActiveTab] = useState("attendance");
   const teacher = JSON.parse(localStorage.getItem("teacherData") || "{}");
   const className = teacher?.class;
   const section = teacher?.section;
   const token = localStorage.getItem("teacherToken");
+const [subject, setSubject] = useState("");
+const [exam, setExam] = useState("");
+const [marks, setMarks] = useState({});
+const [percentages, setPercentages] = useState({});
 
+const saveMarks = async () => {
+  setError("");
+  setMessage("");
+console.log("SUBMIT PAYLOAD:", { date, className, section });
+console.log("SUBMIT PAYLOAD:", { date, className, section });
+  if (!subject || !exam) {
+    setError("Enter subject and exam");
+    return;
+  }
+
+  const payload = students.map((s) => ({
+    studentId: s._id,
+    marks: Number(marks[s._id] || 0),
+  }));
+
+  const res = await fetch(
+    "http://localhost:5000/api/teacher/marks/save",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        className,
+        section,
+        subject,
+        exam,
+        records: payload,
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    setError("Failed to save marks");
+    return;
+  }
+
+  setMessage("Marks saved successfully");
+};
   /* ================= LOGIC (UNCHANGED) ================= */
 
   useEffect(() => {
@@ -24,95 +68,191 @@ export default function TeacherDashboard() {
     )
       .then((r) => r.json())
       .then((data) => {
-        setStudents(data);
+        const normalized = (data || []).map((s) => ({ ...s, _id: String(s._id) }));
+        setStudents(normalized);
         const init = {};
-        data.forEach((s) => (init[s._id] = "PRESENT"));
+        normalized.forEach((s) => (init[s._id] = "PRESENT"));
         setAttendance(init);
         setLocked(false);
+      })
+      .catch((err) => {
+        console.error("STUDENTS FETCH ERROR:", err);
+        setStudents([]);
       });
-  }, [className, section]);
+  }, [className, section, token]);
 
   useEffect(() => {
-    fetch(
-      `http://localhost:5000/api/teacher/attendance/summary?className=${className}&section=${section}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-      .then((r) => r.json())
-      .then((data) => {
+    if (!token || !className) return;
+
+    // ensure summary runs after students are loaded
+    // include students.length so effect reruns when students populate
+    const fetchSummary = async () => {
+      try {
+        const url = `http://localhost:5000/api/teacher/attendance/summary?className=${encodeURIComponent(
+          className
+        )}&section=${encodeURIComponent(section || "")}`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        console.log("SUMMARY DATA (raw):", data);
+
         const map = {};
-        data.forEach(
-          (d) => (map[d._id] = Math.round((d.present / d.total) * 100))
-        );
-        setPercentages(map);
-      });
-  }, [className, section]);
-
-  useEffect(() => {
-    if (!date) return;
-
-    fetch(
-      `http://localhost:5000/api/teacher/attendance?date=${date}&className=${className}&section=${section}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-      .then((r) => r.json())
-      .then((records) => {
-        if (!records || records.length === 0) {
-          const init = {};
-          students.forEach((s) => (init[s._id] = "PRESENT"));
-          setAttendance(init);
-          setLocked(false);
-          return;
-        }
-
-        const loaded = {};
-        records.forEach((r) => {
-          const student = students.find(
-            (s) => s.userId?.toString() === r.studentUserId?.toString()
-          );
-          if (student) loaded[student._id] = r.status;
+        (data || []).forEach((d) => {
+          // server returns studentId, normalize keys to string
+          const id = String(d.studentId ?? d._id ?? d.studentUserId ?? "");
+          const total = Number(d.total) || 0;
+          const present = Number(d.present) || 0;
+          map[id] = total > 0 ? Math.round((present / total) * 100) : 0;
         });
 
-        setAttendance(loaded);
-        setLocked(true);
-      });
-  }, [date, students]);
+        console.log("PERCENTAGES MAP:", map);
+        setPercentages(map);
+      } catch (err) {
+        console.error("SUMMARY FETCH ERROR:", err);
+        setPercentages({});
+      }
+    };
 
+    fetchSummary();
+  }, [className, section, token, students.length]);
+
+ useEffect(() => {
+  if (!date) return;
+  // 🔑 RESET UI STATE WHEN DATE CHANGES
+  setMessage("");
+  setError("");
+  setLocked(false);
+
+  fetch("http://localhost:5000/api/teacher/students", {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((r) => r.json())
+    .then((records) => {
+      if (!records || records.length === 0) {
+        const init = {};
+        students.forEach((s) => (init[s._id] = "PRESENT"));
+        setAttendance(init);
+        setLocked(false);
+        return;
+      }
+
+      const isSubmitted =
+        records.every((r) => r.submissionStatus === "SUBMITTED");
+
+      setLocked(isSubmitted);
+    });
+}, [date, students]);
   const setStatus = (id, status) => {
     if (locked) return;
     setAttendance((p) => ({ ...p, [id]: status }));
   };
 
   const saveAttendance = async () => {
-    setError("");
-    setMessage("");
-    if (!date) return setError("Select a date first");
+  setError("");
+  setMessage("");
 
-    const records = students.map((s) => ({
-      studentUserId: s._id,
-      status: attendance[s._id],
-    }));
+  if (!date) {
+    setError("Select a date first");
+    return;
+  }
+app.get(
+  "/api/teacher/attendance/summary",
+  requireAuth,
+  requireRole("TEACHER"),
+  async (req, res) => {
+    try {
+      const { className, section } = req.query;
+      const schoolId = req.user?.schoolId ? safeObjectId(req.user.schoolId) : null;
+      if (!className) return res.status(400).json({ error: "Missing className" });
 
-    const res = await fetch(
-      "http://localhost:5000/api/teacher/attendance/save",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const match = {
+        class: String(className),
+        ...(section ? { section: String(section) } : {}),
+        submissionStatus: "SUBMITTED",
+        ...(schoolId ? { schoolId } : {}),
+      };
+
+      // normalize status (trim + toUpper) then group by student key
+      const pipeline = [
+        { $match: match },
+        {
+          $project: {
+            studentKey: { $ifNull: ["$studentUserId", "$studentId"] },
+            statusNorm: {
+              $toUpper: { $trim: { input: { $ifNull: ["$status", ""] } } },
+            },
+          },
         },
-        body: JSON.stringify({ date, className, section, records }),
-      }
-    );
+        {
+          $group: {
+            _id: "$studentKey",
+            total: { $sum: 1 },
+            present: {
+              $sum: {
+                $cond: [{ $eq: ["$statusNorm", "PRESENT"] }, 1, 0],
+              },
+            },
+          },
+        },
+      ];
 
-    if (!res.ok) return setError("Save failed");
-    setMessage("Draft saved");
-  };
+      const agg = await db.collection("attendance").aggregate(pipeline).toArray();
 
+      const out = (agg || []).map((r) => ({
+        studentId: r._id ? String(r._id) : null,
+        total: r.total || 0,
+        present: r.present || 0,
+      }));
+
+      return res.json(out);
+    } catch (err) {
+      console.error("ATTENDANCE SUMMARY ERROR:", err);
+      return res.status(500).json({ error: "Failed to compute summary" });
+    }
+  }
+);
+  const records = students.map((s) => ({
+    studentUserId: s._id,
+    status: attendance[s._id],
+  }));
+
+  const res = await fetch(
+    "http://localhost:5000/api/teacher/attendance/save",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        date,
+        className,
+        section,
+        records,
+      }),
+    }
+  );
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    setError(data.error || "Save failed");
+    return;
+  }
+
+  setMessage("Draft saved");
+};
   const submitAttendance = async () => {
-    setError("");
-    setMessage("");
+  setError("");
+  setMessage("");
 
-    const res = await fetch(
+  if (!date) {
+    setError("Please select a date");
+    return;
+  }
+
+  let res;
+  try {
+    res = await fetch(
       "http://localhost:5000/api/teacher/attendance/submit",
       {
         method: "POST",
@@ -123,88 +263,99 @@ export default function TeacherDashboard() {
         body: JSON.stringify({ date, className, section }),
       }
     );
+  } catch (e) {
+    setError("Server not reachable");
+    return;
+  }
 
-    if (res.status === 409) {
-      setLocked(true);
-      return setError("Already submitted");
-    }
-    if (!res.ok) return setError("Submit failed");
+  let data = {};
+  try {
+    data = await res.json();
+  } catch (e) {
+    // If response is not JSON, ignore
+    data = {};
+  }
 
-    setLocked(true);
-    setMessage("Attendance finalized");
-  };
+  if (!res.ok) {
+    setError(data.error || "Submit failed");
+    return; // ❗ DO NOT LOCK UI
+  }
 
-  const filtered = students.filter(
-    (s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      String(s.rollNo).includes(search)
-  );
-
-  const presentCount = Object.values(attendance).filter(
-    (v) => v === "PRESENT"
-  ).length;
-
+  setLocked(true);
+  setMessage("Attendance finalized");
+};
   /* ================= UI ================= */
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>
-          Grade {className}-{section}
-        </h1>
-        <p style={styles.subtitle}>Attendance Overview</p>
-      </div>
+ 
+const totalStudents = students.length;
 
-      <div style={styles.statsRow}>
-        <div style={styles.stat}>
-          <span style={styles.statLabel}>Total</span>
-          <b style={styles.statValue}>{students.length}</b>
-        </div>
-        <div style={styles.stat}>
-          <span style={styles.statLabel}>Present</span>
-          <b style={styles.statValue}>{presentCount}</b>
-        </div>
-        <div style={styles.stat}>
-          <span style={styles.statLabel}>Absent</span>
-          <b style={styles.statValue}>
-            {students.length - presentCount}
-          </b>
-        </div>
-      </div>
+const presentCount = Object.values(attendance || {}).filter(
+  v => v === "PRESENT"
+).length;
 
-      <div style={styles.controls}>
-        <input
-          placeholder="Search student"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={styles.input}
-        />
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          style={styles.input}
-        />
-      </div>
+const absentCount = Object.values(attendance || {}).filter(
+  v => v === "ABSENT"
+).length;
 
+
+   return (
+  <div style={styles.page}>
+    <div style={styles.header}>
+      <h1 style={styles.title}>
+        Grade {className}-{section}
+      </h1>
+      <p style={styles.subtitle}>Attendance Overview</p>
+    </div>
+<div style={styles.statsRow}>
+  <div style={styles.stat}>
+    <span style={styles.statLabel}>Total</span>
+    <b style={styles.statValue}>{totalStudents}</b>
+  </div>
+
+  <div style={styles.stat}>
+    <span style={styles.statLabel}>Present</span>
+    <b style={styles.statValue}>{presentCount}</b>
+  </div>
+
+  <div style={styles.stat}>
+    <span style={styles.statLabel}>Absent</span>
+    <b style={styles.statValue}>{absentCount}</b>
+  </div>
+</div>
+
+    {/* SAME BUTTON – NOW WORKING */}
+    <button onClick={() => setActiveTab("marks")}>Marks</button>
+    <button onClick={() => setActiveTab("attendance")}>Attendance</button>
+
+    <div style={styles.controls}>
+      <input
+        placeholder="Search student"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={styles.input}
+      />
+      <input
+        type="date"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+        style={styles.input}
+      />
+    </div>
+
+    {/* ================= ATTENDANCE ================= */}
+    {activeTab === "attendance" && (
       <div style={{ paddingBottom: "110px" }}>
-        {filtered.map((s) => (
+        {students.map((s) => (
           <div key={s._id} style={styles.card}>
             <div style={styles.studentRow}>
               <div>
                 <div style={styles.name}>{s.name}</div>
                 <div style={styles.roll}>Roll #{s.rollNo}</div>
               </div>
-              <div
-                style={{
-                  fontSize: "13px",
-                  fontWeight: "700",
-                  color:
-                    (percentages[s._id] || 0) < 75 ? "#dc2626" : "#16a34a",
-                }}
-              >
-                {percentages[s._id] || 0}%
-              </div>
+
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#6b7280" }}>
+  {(percentages[String(s._id)] ?? 0) + "%"}
+</div>
             </div>
 
             <div style={styles.statusGroup}>
@@ -222,31 +373,71 @@ export default function TeacherDashboard() {
           </div>
         ))}
       </div>
+    )}
 
-      <div style={styles.bottomBar}>
-        <button
-          onClick={saveAttendance}
-          disabled={locked}
-          style={styles.secondary}
-        >
-          Save
-        </button>
-        <button
-          onClick={submitAttendance}
-          disabled={locked}
-          style={styles.primary}
-        >
-          Finalize
+    {/* ================= MARKS (SAME UI CARDS) ================= */}
+    {activeTab === "marks" && (
+      <div style={{ paddingBottom: "110px" }}>
+        <input
+          placeholder="Subject"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          style={styles.input}
+        />
+        <input
+          placeholder="Exam"
+          value={exam}
+          onChange={(e) => setExam(e.target.value)}
+          style={styles.input}
+        />
+
+        {students.map((s) => (
+          <div key={s._id} style={styles.card}>
+            <div style={styles.studentRow}>
+              <div style={styles.name}>{s.name}</div>
+              <input
+  type="text"
+  placeholder="Marks / AB"
+  onChange={(e) => {
+    const value = e.target.value.toUpperCase();
+    setMarks(prev => ({ ...prev, [s._id]: value }));
+  }}
+/>  
+
+   
+            </div>
+          </div>
+        ))}
+
+        <button style={styles.primary} onClick={saveMarks}>
+          Save Marks
         </button>
       </div>
+    )}
 
-      {(message || error) && (
-        <div style={styles.toast(error)}>{message || error}</div>
-      )}
+    <div style={styles.bottomBar}>
+      <button
+        onClick={saveAttendance}
+        disabled={locked}
+        style={styles.secondary}
+      >
+        Save
+      </button>
+      <button
+        onClick={submitAttendance}
+        disabled={locked}
+        style={styles.primary}
+      >
+        Finalize
+      </button>
     </div>
-  );
-}
 
+    {(message || error) && (
+      <div style={styles.toast(error)}>{message || error}</div>
+    )}
+  </div>
+);
+}
 /* ================= STYLES ================= */
 
 const styles = {

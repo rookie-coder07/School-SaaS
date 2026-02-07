@@ -12,6 +12,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
+    "exprss": "^0.0.1-security",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.0.0",
     "multer": "^2.0.2",
