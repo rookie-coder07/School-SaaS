@@ -11,16 +11,32 @@ dotenv.config();
 
 const app = express();
 
-// Enable CORS with explicit options
+// Enable CORS with explicit options (Development + Production)
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+  "http://127.0.0.1:5175",
+];
+
+// Add production Netlify domain if set in env
+if (process.env.NETLIFY_DOMAIN) {
+  allowedOrigins.push(`https://${process.env.NETLIFY_DOMAIN}`);
+}
+
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    "http://127.0.0.1:5175",
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin) || origin.endsWith('.netlify.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -39,19 +55,35 @@ const safeObjectId = (id) => {
 /* ================================
    DB CONNECTION
    ================================= */
+if (!process.env.MONGO_URI) {
+  console.error("❌ FATAL ERROR: MONGO_URI is not set in environment variables");
+  console.error("Please set MONGO_URI in your .env file before starting the server");
+  process.exit(1);
+}
+
 const client = new MongoClient(process.env.MONGO_URI);
 let db;
 
 async function startServer() {
-  await client.connect();
-  db = client.db("school_saas");
-  console.log("✅ MongoDB connected");
+  try {
+    await client.connect();
+    db = client.db("school_saas");
+    console.log("✅ MongoDB connected successfully");
 
-  const port = process.env.PORT || 5000;
-  app.listen(port, () => {
-    console.log(`🚀 Server running on http://localhost:${port}`);
-  });
+    const PORT = process.env.PORT || 5000;
+    
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📍 API URL: http://localhost:${PORT}`);
+      console.log(`✅ Health Check: GET http://localhost:${PORT}/`);
+    });
+  } catch (err) {
+    console.error("❌ FATAL ERROR: Failed to connect to MongoDB");
+    console.error("Error:", err.message);
+    process.exit(1);
+  }
 }
+
 startServer();
 
 /* ================================
@@ -108,6 +140,18 @@ function requireTenantId(req, res, next) {
   next();
 }
 const upload = multer({ dest: "uploads/" });
+
+/* ================================
+   HEALTH CHECK
+   ================================= */
+app.get("/", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "School SaaS Backend is running 🚀",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
 
 /* ================================
    ADMIN LOGIN
