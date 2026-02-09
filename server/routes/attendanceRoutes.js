@@ -1,44 +1,33 @@
 import express from "express";
-import jwt from "jsonwebtoken";
-import { ObjectId } from "mongodb";
+import { requireAuth, requireRole, requireTenantId } from "../middleware/authMiddleware.js";
+import { safeObjectId } from "../utils/safeObjectId.js";
 
 export default function attendanceRoutes(db) {
   const router = express.Router();
   const attendance = db.collection("attendance");
 
-  /* 🔐 STUDENT AUTH */
-  function studentAuth(req, res, next) {
-    const header = req.headers.authorization;
-    if (!header) return res.status(401).json({ error: "No token" });
-
-    try {
-      const token = header.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      if (decoded.role !== "STUDENT") {
-        return res.status(403).json({ error: "Student access only" });
-      }
-
-      req.user = decoded;
-      next();
-    } catch {
-      return res.status(401).json({ error: "Invalid token" });
-    }
-  }
-
   /* =====================================================
      🎓 STUDENT VIEW ATTENDANCE
      ===================================================== */
-  router.get("/me", studentAuth, async (req, res) => {
-    const data = await attendance
-      .find({
-        studentUserId: new ObjectId(req.user.userId),
-        schoolId: new ObjectId(req.user.schoolId),
-      })
-      .sort({ date: -1 })
-      .toArray();
+  router.get("/me", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
+    try {
+      const studentUserId = safeObjectId(req.user.userId);
+      const schoolId = req.user.schoolIdObj;
+      if (!studentUserId || !schoolId) return res.status(400).json({ error: "Invalid userId or schoolId" });
 
-    res.json(data);
+      const data = await attendance
+        .find({
+          studentUserId,
+          schoolId,
+        })
+        .sort({ date: -1 })
+        .toArray();
+
+      res.json(data);
+    } catch (err) {
+      console.error("FETCH ATTENDANCE ERROR:", err);
+      res.status(500).json({ error: "Failed to fetch attendance" });
+    }
   });
 
   return router;

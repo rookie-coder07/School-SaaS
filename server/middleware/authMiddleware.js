@@ -1,4 +1,15 @@
 import jwt from "jsonwebtoken";
+import { ObjectId } from "mongodb";
+
+// Safe ObjectId conversion helper
+export function safeObjectId(id) {
+  try {
+    if (!id) return null;
+    return new ObjectId(String(id));
+  } catch (e) {
+    return null;
+  }
+}
 
 export function requireAuth(req, res, next) {
   try {
@@ -30,4 +41,41 @@ export function requireRole(role) {
     }
     next();
   };
+}
+
+// Require any of the specified roles (useful for routes available to multiple roles)
+export function requireAnyRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    next();
+  };
+}
+
+// Developer-only middleware (no schoolId required or allowed)
+export function requireDeveloper(req, res, next) {
+  if (!req.user || req.user.role !== "DEVELOPER") {
+    return res.status(403).json({ error: "Developer access required" });
+  }
+  if (req.user.schoolId) {
+    return res.status(400).json({ error: "Developer cannot have schoolId" });
+  }
+  next();
+}
+
+// Tenant validation: requires schoolId and converts to ObjectId
+export function requireTenantId(req, res, next) {
+  const schoolId = req.user?.schoolId;
+  if (!schoolId) {
+    console.error("❌ TENANT CHECK FAILED: Missing schoolId in token");
+    return res.status(400).json({ error: "Missing schoolId in authentication token" });
+  }
+  try {
+    req.user.schoolIdObj = new ObjectId(String(schoolId));
+    next();
+  } catch (e) {
+    console.error("❌ TENANT CHECK FAILED: Invalid schoolId format:", schoolId);
+    return res.status(400).json({ error: "Invalid schoolId format" });
+  }
 }

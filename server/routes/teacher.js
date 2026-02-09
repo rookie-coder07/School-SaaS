@@ -1,7 +1,7 @@
 // ...existing code...
 import express from "express";
 import { ObjectId } from "mongodb";
-import { requireAuth, requireRole } from "../middleware/authMiddleware.js";
+import { requireAuth, requireRole, requireTenantId } from "../middleware/authMiddleware.js";
 
 export default function teacherRoutes(db) {
   const router = express.Router();
@@ -28,12 +28,12 @@ export default function teacherRoutes(db) {
   /* ================================
      GET STUDENTS (BY CLASS + SECTION)
      ================================= */
-  router.get("/students", requireAuth, requireRole("TEACHER"), async (req, res) => {
+  router.get("/students", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
     try {
       const teacherUserId = safeObjectId(req.user?.userId);
       if (!teacherUserId) return res.status(400).json({ error: "Invalid teacher id" });
 
-      const schoolId = safeObjectId(req.user?.schoolId);
+      const schoolId = req.user.schoolIdObj;
 
       const teacher = await teachers.findOne({
         userId: teacherUserId,
@@ -48,7 +48,7 @@ export default function teacherRoutes(db) {
         .find({
           class: teacher.class,
           section: teacher.section,
-          ...(teacher.schoolId ? { schoolId: safeObjectId(teacher.schoolId) } : {}),
+          ...(teacher.schoolId ? { schoolId: req.user.schoolIdObj } : {}),
         })
         .toArray();
 
@@ -65,7 +65,7 @@ export default function teacherRoutes(db) {
   /* ================================
      SAVE ATTENDANCE (DRAFT)
      ================================= */
-  router.post("/attendance/save", teacherAuth, async (req, res) => {
+  router.post("/attendance/save", teacherAuth, requireTenantId, async (req, res) => {
   try {
     const { date, className, section, records } = req.body;
 
@@ -80,13 +80,13 @@ export default function teacherRoutes(db) {
           date: String(date),
           class: String(className),
           section: String(section),
-          schoolId: new ObjectId(req.user.schoolId),
+          schoolId: req.user.schoolIdObj,
         },
         {
           $set: {
             studentUserId: new ObjectId(record.studentUserId),
             teacherUserId: new ObjectId(req.user.userId),
-            schoolId: new ObjectId(req.user.schoolId),
+            schoolId: req.user.schoolIdObj,
             class: String(className),
             section: String(section),
             date: String(date),
@@ -108,7 +108,7 @@ export default function teacherRoutes(db) {
   /* ================================
      SUBMIT ATTENDANCE (FINALIZE)
      ================================= */
-  router.post("/attendance/submit", teacherAuth, async (req, res) => {
+  router.post("/attendance/submit", teacherAuth, requireTenantId, async (req, res) => {
   try {
     const { date, className, section } = req.body;
 
@@ -121,7 +121,7 @@ export default function teacherRoutes(db) {
       date: String(date),
       class: String(className),
       section: String(section),
-      schoolId: new ObjectId(req.user.schoolId),
+      schoolId: req.user.schoolIdObj,
       submissionStatus: "DRAFT",
     };
 
@@ -154,12 +154,11 @@ export default function teacherRoutes(db) {
   /* ================================
      GET ATTENDANCE (VIEW) - TEACHER
      ================================= */
-  router.get("/attendance", requireAuth, requireRole("TEACHER"), async (req, res) => {
+  router.get("/attendance", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
     try {
       const { date, className, section } = req.query;
       if (!date) return res.json([]);
-
-      const schoolId = safeObjectId(req.user?.schoolId);
+      const schoolId = req.user.schoolIdObj;
 
       const query = {
         date: String(date),
@@ -179,14 +178,14 @@ export default function teacherRoutes(db) {
   /* ================================
      SAVE MARKS (TEACHER)
      ================================= */
-  router.post("/marks/save", requireAuth, requireRole("TEACHER"), async (req, res) => {
+  router.post("/marks/save", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
     try {
       const { subject, exam, className, section, records } = req.body;
       if (!subject || !exam || !className || !section || !Array.isArray(records)) {
         return res.status(400).json({ error: "Missing data" });
       }
 
-      const schoolId = safeObjectId(req.user?.schoolId);
+      const schoolId = req.user.schoolIdObj;
 
       const docs = records
         .map((r) => {
@@ -228,12 +227,11 @@ export default function teacherRoutes(db) {
   /* ================================
      STUDENT VIEW OF THEIR ATTENDANCE
      ================================= */
-  router.get("/student/attendance", requireAuth, requireRole("STUDENT"), async (req, res) => {
+  router.get("/student/attendance", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
     try {
       const studentUserId = safeObjectId(req.user?.userId);
       if (!studentUserId) return res.status(400).json({ error: "Invalid student id" });
-
-      const schoolId = safeObjectId(req.user?.schoolId);
+      const schoolId = req.user.schoolIdObj;
 
       const records = await attendance
         .find({
@@ -250,4 +248,188 @@ export default function teacherRoutes(db) {
       res.status(500).json({ error: "Server error" });
     }
   });
+
+  /* ================================
+     HOMEWORK / ASSIGNMENTS
+     ================================= */
+  router.post("/homework/add", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+    try {
+      const { title, description, subject, dueDate } = req.body;
+      if (!title || !subject || !dueDate) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const schoolId = req.user.schoolIdObj;
+      const teacher = await teachers.findOne({
+        userId: safeObjectId(req.user.userId),
+        ...(schoolId ? { schoolId } : {}),
+      });
+
+      if (!teacher) {
+        return res.status(404).json({ error: "Teacher not found" });
+      }
+
+      const homework = {
+        _id: new ObjectId(),
+        schoolId,
+        teacherId: safeObjectId(req.user.userId),
+        class: teacher.class,
+        section: teacher.section,
+        title,
+        description: description || "",
+        subject,
+        dueDate: String(dueDate),
+        createdAt: new Date(),
+      };
+
+      const homeworkCollection = db.collection("homework");
+      await homeworkCollection.insertOne(homework);
+
+      res.json({ success: true, homeworkId: homework._id });
+    } catch (err) {
+      console.error("ADD HOMEWORK ERROR:", err);
+      res.status(500).json({ error: "Failed to add homework" });
+    }
+  });
+
+  router.get("/homework", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const teacher = await teachers.findOne({
+        userId: safeObjectId(req.user.userId),
+        ...(schoolId ? { schoolId } : {}),
+      });
+
+      if (!teacher) {
+        return res.status(404).json({ error: "Teacher not found" });
+      }
+
+      const homeworkCollection = db.collection("homework");
+      const homework = await homeworkCollection
+        .find({
+          class: teacher.class,
+          section: teacher.section,
+          ...(schoolId ? { schoolId } : {}),
+        })
+        .sort({ dueDate: -1 })
+        .toArray();
+
+      res.json(homework);
+    } catch (err) {
+      console.error("GET HOMEWORK ERROR:", err);
+      res.status(500).json({ error: "Failed to fetch homework" });
+    }
+  });
+
+  /* ================================
+     EVENTS & CALENDAR
+     ================================= */
+  router.get("/events", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+
+      const eventsCollection = db.collection("events");
+      const events = await eventsCollection
+        .find({
+          ...(schoolId ? { schoolId } : {}),
+        })
+        .sort({ eventDate: 1 })
+        .toArray();
+
+      res.json(events);
+    } catch (err) {
+      console.error("GET EVENTS ERROR:", err);
+      res.status(500).json({ error: "Failed to fetch events" });
+    }
+  });
+
+  /* ================================
+     CLASS SUMMARY (FOR TEACHER)
+     ================================= */
+  router.get("/class-summary", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const teacher = await teachers.findOne({
+        userId: safeObjectId(req.user.userId),
+        ...(schoolId ? { schoolId } : {}),
+      });
+
+      if (!teacher) {
+        return res.status(404).json({ error: "Teacher not found" });
+      }
+
+      const studentCount = await students.countDocuments({
+        class: teacher.class,
+        section: teacher.section,
+        ...(schoolId ? { schoolId } : {}),
+      });
+
+      res.json({
+        className: teacher.class,
+        section: teacher.section,
+        totalStudents: studentCount,
+      });
+    } catch (err) {
+      console.error("CLASS SUMMARY ERROR:", err);
+      res.status(500).json({ error: "Failed to fetch class summary" });
+    }
+  });
+
+  /* ================================
+     STUDENT VIEW OF HOMEWORK
+     ================================= */
+  router.get("/student/homework", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
+    try {
+      const studentUserId = safeObjectId(req.user?.userId);
+      if (!studentUserId) return res.status(400).json({ error: "Invalid student id" });
+      const schoolId = req.user.schoolIdObj;
+      const student = await students.findOne({
+        userId: studentUserId,
+        ...(schoolId ? { schoolId } : {}),
+      });
+
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      const homeworkCollection = db.collection("homework");
+      const homework = await homeworkCollection
+        .find({
+          class: student.class,
+          section: student.section,
+          ...(schoolId ? { schoolId } : {}),
+        })
+        .sort({ dueDate: -1 })
+        .toArray();
+
+      res.json(homework);
+    } catch (err) {
+      console.error("STUDENT HOMEWORK ERROR:", err);
+      res.status(500).json({ error: "Server error" });
+    }
+  });
+
+  /* ================================
+     STUDENT VIEW OF EVENTS
+     ================================= */
+  router.get("/student/events", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+
+      const eventsCollection = db.collection("events");
+      const events = await eventsCollection
+        .find({
+          ...(schoolId ? { schoolId } : {}),
+        })
+        .sort({ eventDate: 1 })
+        .toArray();
+
+      res.json(events);
+    } catch (err) {
+      console.error("STUDENT EVENTS ERROR:", err);
+      res.status(500).json({ error: "Server error" });
+    }
+  });
+
+  return router;
 }
