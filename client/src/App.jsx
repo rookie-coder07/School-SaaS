@@ -17,6 +17,9 @@ import StudentDashboard from "./pages/StudentDashboard";
 import TeacherLogin from "./pages/TeacherLogin";
 import TeacherDashboard from "./pages/TeacherDashboard";
 
+import DeveloperLogin from "./pages/DeveloperLogin";
+import DeveloperDashboard from "./pages/DeveloperDashboard";
+
 export default function App() {
   return (
     <>
@@ -58,6 +61,17 @@ export default function App() {
           element={
             <ProtectedRoute role="teacher">
               <TeacherDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* DEVELOPER */}
+        <Route path="/dev/login" element={<DeveloperLogin />} />
+        <Route
+          path="/dev"
+          element={
+            <ProtectedRoute role="developer">
+              <DeveloperDashboard />
             </ProtectedRoute>
           }
         />

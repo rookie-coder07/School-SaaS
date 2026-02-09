@@ -26,6 +26,13 @@ export default function Home() {
           </button>
 
           <button
+            style={styles.teacherBtn}
+            onClick={() => navigate("/teacher/login")}
+          >
+            Teacher Login
+          </button>
+
+          <button
             style={styles.adminBtn}
             onClick={() => navigate("/admin/login")}
           >
@@ -101,6 +108,16 @@ const styles = {
     borderRadius: "10px",
     border: "none",
     background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+    color: "#fff",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
+
+  teacherBtn: {
+    padding: "12px",
+    borderRadius: "10px",
+    border: "none",
+    background: "linear-gradient(135deg, #f59e0b, #d97706)",
     color: "#fff",
     fontWeight: "600",
     cursor: "pointer",

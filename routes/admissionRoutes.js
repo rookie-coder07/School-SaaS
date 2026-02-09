@@ -1,33 +1,23 @@
 import express from "express";
-import jwt from "jsonwebtoken";
-import { ObjectId } from "mongodb";
+import { requireAuth, requireRole, requireTenantId } from "./../server/middleware/authMiddleware.js";
+import { safeObjectId } from "./../server/utils/safeObjectId.js";
 
-export default function attendanceRoutes(db) {
+export default function admissionRoutes(db) {
   const router = express.Router();
-  const attendance = db.collection("attendance");
+  const admissions = db.collection("admissions");
 
-  // 🔐 Auth middleware
-  function auth(req, res, next) {
-    const header = req.headers.authorization;
-    if (!header) return res.status(401).json({ error: "No token" });
-
+  router.get("/me", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
     try {
-      const token = header.split(" ")[1];
-      req.user = jwt.verify(token, process.env.JWT_SECRET);
-      next();
-    } catch {
-      return res.status(401).json({ error: "Invalid token" });
+      const studentUserId = safeObjectId(req.user.userId);
+      const schoolId = req.user.schoolIdObj;
+      if (!studentUserId || !schoolId) return res.status(400).json({ error: "Invalid userId or schoolId" });
+
+      const data = await admissions.find({ studentUserId, schoolId }).toArray();
+      res.json(data);
+    } catch (err) {
+      console.error("ADMISSIONS FETCH ERROR:", err);
+      res.status(500).json({ error: "Failed to fetch admissions" });
     }
-  }
-
-  // 👨‍🎓 Student view attendance
-  router.get("/me", auth, async (req, res) => {
-    const data = await attendance.find({
-      studentUserId: new ObjectId(req.user.userId),
-      schoolId: new ObjectId(req.user.schoolId),
-    }).toArray();
-
-    res.json(data);
   });
 
   return router;

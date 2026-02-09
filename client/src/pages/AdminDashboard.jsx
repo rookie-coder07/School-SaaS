@@ -1,4 +1,144 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+
+function UsersList() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [students, setStudents] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+
+  // Search & pagination
+  const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(10);
+  const [teacherPage, setTeacherPage] = useState(1);
+  const [studentPage, setStudentPage] = useState(1);
+
+  useEffect(() => {
+    const token = localStorage.getItem("adminToken");
+    if (!token) {
+      setError("Admin not logged in");
+      setLoading(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await fetch("http://localhost:5000/api/admin/users", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("Failed to fetch users");
+        const data = await res.json();
+        setStudents(Array.isArray(data.students) ? data.students : []);
+        setTeachers(Array.isArray(data.teachers) ? data.teachers : []);
+      } catch (err) {
+        console.error("USERS FETCH ERROR:", err);
+        setError("Failed to load users");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // reset pages when search or pageSize changes
+  useEffect(() => {
+    setTeacherPage(1);
+    setStudentPage(1);
+  }, [search, pageSize]);
+
+  if (loading) return <div style={{ marginTop: 8 }}>Loading users...</div>;
+  if (error) return <div style={styles.error}>{error}</div>;
+
+  const normalize = (v) => (v || "").toString().toLowerCase();
+  const q = search.trim().toLowerCase();
+
+  const filteredTeachers = teachers.filter((t) => {
+    if (!q) return true;
+    return (
+      normalize(t.name).includes(q) ||
+      normalize(t.subject).includes(q) ||
+      normalize(t.class).includes(q) ||
+      normalize(t.section).includes(q)
+    );
+  });
+
+  const filteredStudents = students.filter((s) => {
+    if (!q) return true;
+    return (
+      normalize(s.name).includes(q) ||
+      normalize(s.class).includes(q) ||
+      normalize(s.section).includes(q) ||
+      normalize(s.rollNo).includes(q)
+    );
+  });
+
+  const tPages = Math.max(1, Math.ceil(filteredTeachers.length / pageSize));
+  const sPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
+
+  const teachersPageSlice = filteredTeachers.slice((teacherPage - 1) * pageSize, teacherPage * pageSize);
+  const studentsPageSlice = filteredStudents.slice((studentPage - 1) * pageSize, studentPage * pageSize);
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input placeholder="Search by name, class, section, subject..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...styles.input, flex: 1, minWidth: 160 }} />
+        <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} style={{ padding: 10, borderRadius: 8, border: "1px solid #e6edf3" }}>
+          <option value={5}>5 / page</option>
+          <option value={10}>10 / page</option>
+          <option value={20}>20 / page</option>
+        </select>
+      </div>
+
+      <div>
+        <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Teachers</h3>
+        {filteredTeachers.length === 0 ? (
+          <div style={{ color: "#94a3b8", fontSize: 13 }}>No teachers found</div>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {teachersPageSlice.map((t) => (
+              <div key={t._id} style={{ background: "#fff", padding: 12, borderRadius: 10, border: "1px solid #e6edf3", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontWeight: 800 }}>{t.name}</div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>{t.subject || ""} • Class {t.class || "-"} • Section {t.section || "-"}</div>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+              <button disabled={teacherPage <= 1} onClick={() => setTeacherPage((p) => Math.max(1, p - 1))} style={styles.secondaryBtn}>Prev</button>
+              <div style={{ fontSize: 13, color: "#64748b" }}>{teacherPage} / {tPages}</div>
+              <button disabled={teacherPage >= tPages} onClick={() => setTeacherPage((p) => Math.min(tPages, p + 1))} style={styles.secondaryBtn}>Next</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Students</h3>
+        {filteredStudents.length === 0 ? (
+          <div style={{ color: "#94a3b8", fontSize: 13 }}>No students found</div>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {studentsPageSlice.map((s) => (
+              <div key={s._id} style={{ background: "#fff", padding: 12, borderRadius: 10, border: "1px solid #e6edf3", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontWeight: 800 }}>{s.name}</div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>Class {s.class || "-"} • Section {s.section || "-"} {s.rollNo ? `• Roll ${s.rollNo}` : ""}</div>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+              <button disabled={studentPage <= 1} onClick={() => setStudentPage((p) => Math.max(1, p - 1))} style={styles.secondaryBtn}>Prev</button>
+              <div style={{ fontSize: 13, color: "#64748b" }}>{studentPage} / {sPages}</div>
+              <button disabled={studentPage >= sPages} onClick={() => setStudentPage((p) => Math.min(sPages, p + 1))} style={styles.secondaryBtn}>Next</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function AdminDashboard() {
   const [teacherFile, setTeacherFile] = useState(null);
@@ -6,7 +146,30 @@ export default function AdminDashboard() {
   const [admissionCount, setAdmissionCount] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
+  const navigate = useNavigate();
 
+  // Subject management state
+  const [subjectName, setSubjectName] = useState("");
+  const [subjectClass, setSubjectClass] = useState("");
+  const [subjectSection, setSubjectSection] = useState("");
+  const [subjects, setSubjects] = useState([]);
+  const [subjectLoading, setSubjectLoading] = useState(false);
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("adminToken");
+      if (token) {
+        await fetch("http://localhost:5000/api/auth/logout", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+    } catch (err) {
+      console.error("Logout API error:", err);
+    } finally {
+      localStorage.removeItem("adminToken");
+      navigate("/");
+    }
+  };
   // Manual add UI state
   const [modeAdd, setModeAdd] = useState("student"); // 'student' or 'teacher'
   const [adding, setAdding] = useState(false);
@@ -179,24 +342,45 @@ export default function AdminDashboard() {
       <div style={styles.sidebar}>
         <h2 style={styles.logo}>Admin Panel</h2>
 
-        {[
-          { id: "dashboard", label: "Dashboard" },
-          { id: "applications", label: "Applications" },
-          { id: "teachers", label: "Upload Teachers" },
-          { id: "students", label: "Upload Students" },
-          { id: "manual", label: "Manual Add" }, // new
-        ].map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            style={styles.navBtn(activeTab === item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+        <div style={styles.navItems}>
+          {[
+            { id: "dashboard", label: "Dashboard" },
+            { id: "applications", label: "Applications" },
+            { id: "users", label: "Users" },
+            { id: "teachers", label: "Upload Teachers" },
+            { id: "students", label: "Upload Students" },
+            { id: "subjects", label: "Subjects" },
+            { id: "manual", label: "Manual Add" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              style={styles.navBtn(activeTab === item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={handleLogout}
+          style={styles.logoutBtn}
+        >
+          Logout
+        </button>
       </div>
 
       {/* MAIN CONTENT */}
+        {/* USERS LIST */}
+        {activeTab === "users" && (
+          <div>
+            <h1 style={styles.title}>People</h1>
+            <p style={styles.subtitle}>Teachers and students — quick reference</p>
+
+            <UsersList />
+          </div>
+        )}
+
       <div style={styles.page}>
         {/* DASHBOARD */}
         {activeTab === "dashboard" && (
@@ -249,6 +433,166 @@ export default function AdminDashboard() {
             <button onClick={uploadStudents} disabled={isUploading} style={styles.secondaryBtn}>
               {isUploading ? "Uploading..." : "Upload Students"}
             </button>
+          </div>
+        )}
+
+        {/* MANAGE SUBJECTS */}
+        {activeTab === "subjects" && (
+          <div style={{ maxWidth: 700 }}>
+            <h1 style={styles.title}>Manage Subjects</h1>
+            <p style={styles.subtitle}>Add subjects for different classes and sections</p>
+
+            {error && <div style={styles.error}>{error}</div>}
+            {message && <div style={styles.success}>{message}</div>}
+
+            <div style={{ background: "#fff", padding: 16, borderRadius: 8, marginBottom: 16, border: "1px solid #e5e7eb" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <input
+                  placeholder="Subject name"
+                  value={subjectName}
+                  onChange={(e) => setSubjectName(e.target.value)}
+                  style={styles.input}
+                />
+                <input
+                  placeholder="Class (e.g., 10A)"
+                  value={subjectClass}
+                  onChange={(e) => setSubjectClass(e.target.value)}
+                  style={styles.input}
+                />
+                <input
+                  placeholder="Section (e.g., A)"
+                  value={subjectSection}
+                  onChange={(e) => setSubjectSection(e.target.value)}
+                  style={styles.input}
+                />
+              </div>
+              <button
+                onClick={async () => {
+                  if (!subjectName || !subjectClass || !subjectSection) {
+                    setError("All fields are required");
+                    return;
+                  }
+                  setError("");
+                  setMessage("");
+                  setSubjectLoading(true);
+                  try {
+                    const token = localStorage.getItem("adminToken");
+                    const res = await fetch("http://localhost:5000/api/admin/subjects", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({
+                        subjectName,
+                        class: subjectClass,
+                        section: subjectSection,
+                      }),
+                    });
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({}));
+                      setError(err.error || "Failed to add subject");
+                      setSubjectLoading(false);
+                      return;
+                    }
+                    setMessage("Subject added successfully");
+                    setSubjectName("");
+                    setSubjectClass("");
+                    setSubjectSection("");
+                    // Refetch subjects
+                    const listRes = await fetch(
+                      `http://localhost:5000/api/admin/subjects?class=${encodeURIComponent(subjectClass)}&section=${encodeURIComponent(subjectSection)}`,
+                      { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    if (listRes.ok) {
+                      const data = await listRes.json();
+                      setSubjects(Array.isArray(data) ? data : []);
+                    }
+                  } catch (err) {
+                    console.error("ADD SUBJECT ERROR:", err);
+                    setError("Failed to add subject");
+                  } finally {
+                    setSubjectLoading(false);
+                  }
+                }}
+                disabled={subjectLoading}
+                style={styles.primaryBtn}
+              >
+                {subjectLoading ? "Adding..." : "Add Subject"}
+              </button>
+            </div>
+
+            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Search Subjects</h3>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input
+                placeholder="Filter class"
+                value={subjectClass}
+                onChange={(e) => setSubjectClass(e.target.value)}
+                style={styles.input}
+              />
+              <input
+                placeholder="Filter section"
+                value={subjectSection}
+                onChange={(e) => setSubjectSection(e.target.value)}
+                style={styles.input}
+              />
+              <button
+                onClick={async () => {
+                  if (!subjectClass || !subjectSection) {
+                    setError("Enter class and section to search");
+                    return;
+                  }
+                  setError("");
+                  try {
+                    const token = localStorage.getItem("adminToken");
+                    const res = await fetch(
+                      `http://localhost:5000/api/admin/subjects?class=${encodeURIComponent(subjectClass)}&section=${encodeURIComponent(subjectSection)}`,
+                      { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    if (res.ok) {
+                      const data = await res.json();
+                      setSubjects(Array.isArray(data) ? data : []);
+                    }
+                  } catch (err) {
+                    setError("Failed to fetch subjects");
+                  }
+                }}
+                style={styles.secondaryBtn}
+              >
+                Search
+              </button>
+            </div>
+
+            {subjects.length === 0 ? (
+              <div style={{ color: "#94a3b8", fontSize: 13 }}>No subjects found</div>
+            ) : (
+              <div>
+                {subjects.map((subj) => (
+                  <div key={subj._id} style={{ padding: 8, background: "#f1f5f9", marginBottom: 6, borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <b>{subj.subjectName}</b>
+                      <span style={{ fontSize: 12, color: "#64748b", marginLeft: 8 }}>Class {subj.class} • Section {subj.section}</span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const token = localStorage.getItem("adminToken");
+                        const res = await fetch(`http://localhost:5000/api/admin/subjects/${subj._id}`, {
+                          method: "DELETE",
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        if (res.ok) {
+                          setSubjects((prev) => prev.filter((s) => s._id !== subj._id));
+                          setMessage("Subject deleted");
+                        }
+                      }}
+                      style={{ ...styles.secondaryBtn, padding: 4, fontSize: 12 }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -323,6 +667,12 @@ const styles = {
     background: "#ffffff",
     borderRight: "1px solid #e5e7eb",
     padding: "16px",
+    display: "flex",
+    flexDirection: "column",
+    height: "100vh",
+  },
+  navItems: {
+    flex: 1,
   },
 
   logo: {
@@ -412,6 +762,19 @@ const styles = {
     color: "#0e7490",
     border: "none",
     fontWeight: "700",
+  },
+
+  logoutBtn: {
+    width: "100%",
+    padding: "10px 16px",
+    borderRadius: "12px",
+    border: "none",
+    background: "#fee2e2",
+    color: "#991b1b",
+    fontWeight: "800",
+    fontSize: "13px",
+    cursor: "pointer",
+    marginTop: "auto",
   },
 
   input: { padding: 12, borderRadius: 8, border: "1px solid #e6edf3", outline: "none", width: "100%" },
