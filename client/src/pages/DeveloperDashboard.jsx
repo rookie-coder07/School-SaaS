@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export default function DeveloperDashboard() {
   const navigate = useNavigate();
   const [token, setToken] = useState(null);
@@ -62,7 +64,7 @@ export default function DeveloperDashboard() {
   const fetchAnalytics = async () => {
     try {
       setAnalyticsLoading(true);
-      const res = await fetch("http://localhost:5000/api/dev/analytics", {
+      const res = await fetch(`${API_URL}/api/dev/analytics`, {
         method: "GET",
         headers: { 
           "Authorization": `Bearer ${token}`,
@@ -87,7 +89,7 @@ export default function DeveloperDashboard() {
   const fetchSchools = async () => {
     try {
       setSchoolsLoading(true);
-      const res = await fetch("http://localhost:5000/api/dev/schools", {
+      const res = await fetch(`${API_URL}/api/dev/schools`, {
         method: "GET",
         headers: { 
           "Authorization": `Bearer ${token}`,
@@ -127,7 +129,7 @@ export default function DeveloperDashboard() {
       setCreatingSchool(true);
       setSchoolMessage("");
       
-      const res = await fetch("http://localhost:5000/api/dev/schools", {
+      const res = await fetch(`${API_URL}/api/dev/schools`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -203,7 +205,7 @@ export default function DeveloperDashboard() {
         if (userSection) payload.section = userSection;
       }
 
-      const res = await fetch("http://localhost:5000/api/dev/users", {
+      const res = await fetch(`${API_URL}/api/dev/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -240,7 +242,7 @@ export default function DeveloperDashboard() {
   const handleLogout = async () => {
     try {
       if (token) {
-        const res = await fetch("http://localhost:5000/api/auth/logout", {
+        const res = await fetch(`${API_URL}/api/auth/logout`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

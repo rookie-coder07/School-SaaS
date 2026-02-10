@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export default function TeacherLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,7 +17,7 @@ export default function TeacherLogin() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/teacher/login", {
+      const res = await fetch(`${API_URL}/api/auth/teacher/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

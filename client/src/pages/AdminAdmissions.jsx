@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../components/AdminSidebar";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export default function AdminAdmissions() {
   const [admissions, setAdmissions] = useState([]);
   const [search, setSearch] = useState("");
@@ -17,7 +19,7 @@ export default function AdminAdmissions() {
   }, []);
 
   function fetchAdmissions() {
-    fetch("http://localhost:5000/api/admissions", {
+    fetch(`${API_URL}/api/admissions`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -34,7 +36,7 @@ export default function AdminAdmissions() {
     if (!window.confirm("Delete this admission?")) return;
 
     const res = await fetch(
-      `http://localhost:5000/api/admissions/${id}`,
+      `${API_URL}/api/admissions/${id}`,
       {
         method: "DELETE",
         headers: {

@@ -12,6 +12,7 @@ dotenv.config();
 const app = express();
 
 // Enable CORS with explicit options (Development + Production)
+// 🔒 Development Origins:
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -21,9 +22,11 @@ const allowedOrigins = [
   "http://127.0.0.1:5175",
 ];
 
-// Add production Netlify domain if set in env
+// 🚀 Production Netlify Domain Support
+// Add explicit Netlify domain if set in env
 if (process.env.NETLIFY_DOMAIN) {
   allowedOrigins.push(`https://${process.env.NETLIFY_DOMAIN}`);
+  console.log(`✅ CORS enabled for: https://${process.env.NETLIFY_DOMAIN}`);
 }
 
 app.use(cors({
@@ -31,9 +34,11 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
+    // ✅ Allow if origin is in list OR ends with .netlify.app (catches all Netlify domains)
     if (allowedOrigins.includes(origin) || origin.endsWith('.netlify.app')) {
       callback(null, true);
     } else {
+      console.warn(`❌ CORS REJECTED: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },

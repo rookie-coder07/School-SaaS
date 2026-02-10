@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 function UsersList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -24,7 +26,7 @@ function UsersList() {
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch("http://localhost:5000/api/admin/users", {
+        const res = await fetch(`${API_URL}/api/admin/users`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Failed to fetch users");
@@ -158,7 +160,7 @@ export default function AdminDashboard() {
     try {
       const token = localStorage.getItem("adminToken");
       if (token) {
-        await fetch("http://localhost:5000/api/auth/logout", {
+        await fetch(`${API_URL}/api/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -189,7 +191,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const token = localStorage.getItem("adminToken");
-    fetch("http://localhost:5000/api/admissions", {
+    fetch(`${API_URL}/api/admissions`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then((res) => res.json())
@@ -213,7 +215,7 @@ export default function AdminDashboard() {
     setIsUploading(true);
     try {
       const res = await fetch(
-        "http://localhost:5000/api/admin/upload-teachers",
+        `${API_URL}/api/admin/upload-teachers`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -243,7 +245,7 @@ export default function AdminDashboard() {
     setIsUploading(true);
     try {
       const res = await fetch(
-        "http://localhost:5000/api/admin/upload-students",
+        `${API_URL}/api/admin/upload-students`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -297,7 +299,7 @@ export default function AdminDashboard() {
               password: form.password,
             };
 
-      const res = await fetch(`http://localhost:5000${endpoint}`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -477,7 +479,7 @@ export default function AdminDashboard() {
                   setSubjectLoading(true);
                   try {
                     const token = localStorage.getItem("adminToken");
-                    const res = await fetch("http://localhost:5000/api/admin/subjects", {
+                    const res = await fetch(`${API_URL}/api/admin/subjects`, {
                       method: "POST",
                       headers: {
                         "Content-Type": "application/json",
@@ -501,7 +503,7 @@ export default function AdminDashboard() {
                     setSubjectSection("");
                     // Refetch subjects
                     const listRes = await fetch(
-                      `http://localhost:5000/api/admin/subjects?class=${encodeURIComponent(subjectClass)}&section=${encodeURIComponent(subjectSection)}`,
+                      `${API_URL}/api/admin/subjects?class=${encodeURIComponent(subjectClass)}&section=${encodeURIComponent(subjectSection)}`,
                       { headers: { Authorization: `Bearer ${token}` } }
                     );
                     if (listRes.ok) {
@@ -546,7 +548,7 @@ export default function AdminDashboard() {
                   try {
                     const token = localStorage.getItem("adminToken");
                     const res = await fetch(
-                      `http://localhost:5000/api/admin/subjects?class=${encodeURIComponent(subjectClass)}&section=${encodeURIComponent(subjectSection)}`,
+                      `${API_URL}/api/admin/subjects?class=${encodeURIComponent(subjectClass)}&section=${encodeURIComponent(subjectSection)}`,
                       { headers: { Authorization: `Bearer ${token}` } }
                     );
                     if (res.ok) {
@@ -576,7 +578,7 @@ export default function AdminDashboard() {
                     <button
                       onClick={async () => {
                         const token = localStorage.getItem("adminToken");
-                        const res = await fetch(`http://localhost:5000/api/admin/subjects/${subj._id}`, {
+                        const res = await fetch(`${API_URL}/api/admin/subjects/${subj._id}`, {
                           method: "DELETE",
                           headers: { Authorization: `Bearer ${token}` },
                         });

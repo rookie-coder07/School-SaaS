@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export default function DeveloperLogin() {
   const [email, setEmail] = useState("developer@example.com");
   const [password, setPassword] = useState("developer123");
@@ -14,7 +16,7 @@ export default function DeveloperLogin() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/developer/login", {
+      const res = await fetch(`${API_URL}/api/auth/developer/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

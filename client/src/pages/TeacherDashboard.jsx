@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export default function TeacherDashboard() {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
@@ -48,7 +50,7 @@ export default function TeacherDashboard() {
     try {
       const token = localStorage.getItem("teacherToken");
       if (token) {
-        await fetch("http://localhost:5000/api/auth/logout", {
+        await fetch(`${API_URL}/api/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -65,7 +67,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     const fetchClassSummary = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/teacher/class-summary", {
+        const res = await fetch(`${API_URL}/api/teacher/class-summary`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -89,7 +91,7 @@ export default function TeacherDashboard() {
 
     const fetchHomework = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/teacher/homework", {
+        const res = await fetch(`${API_URL}/api/teacher/homework`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -113,7 +115,7 @@ export default function TeacherDashboard() {
 
     const fetchEvents = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/teacher/events", {
+        const res = await fetch(`${API_URL}/api/teacher/events`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -137,7 +139,7 @@ export default function TeacherDashboard() {
 
     const fetchAllMarks = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/teacher/marks", {
+        const res = await fetch(`${API_URL}/api/teacher/marks`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -164,7 +166,7 @@ export default function TeacherDashboard() {
 
     const fetchSubjects = async () => {
       try {
-        const url = `http://localhost:5000/api/teacher/subjects?class=${encodeURIComponent(className)}&section=${encodeURIComponent(section)}`;
+        const url = `${API_URL}/api/teacher/subjects?class=${encodeURIComponent(className)}&section=${encodeURIComponent(section)}`;
         console.log("Fetching subjects from:", url);
         console.log("Teacher data:", teacher);
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -193,7 +195,7 @@ export default function TeacherDashboard() {
   /* ===== FETCH STUDENTS ===== */
   useEffect(() => {
     fetch(
-      `http://localhost:5000/api/teacher/students?className=${className}&section=${section}`,
+      `${API_URL}/api/teacher/students?className=${className}&section=${section}`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
       .then((r) => r.json())
@@ -217,7 +219,7 @@ export default function TeacherDashboard() {
 
     const fetchSummary = async () => {
       try {
-        const url = `http://localhost:5000/api/teacher/attendance/summary?className=${encodeURIComponent(
+        const url = `${API_URL}/api/teacher/attendance/summary?className=${encodeURIComponent(
           className
         )}&section=${encodeURIComponent(section || "")}`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -262,7 +264,7 @@ export default function TeacherDashboard() {
       status: attendance[s._id],
     }));
 
-    const res = await fetch("http://localhost:5000/api/teacher/attendance/save", {
+    const res = await fetch(`${API_URL}/api/teacher/attendance/save`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -297,7 +299,7 @@ export default function TeacherDashboard() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/teacher/attendance/submit", {
+      const res = await fetch(`${API_URL}/api/teacher/attendance/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -332,7 +334,7 @@ export default function TeacherDashboard() {
 
     setHwLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/teacher/homework/add", {
+      const res = await fetch(`${API_URL}/api/teacher/homework/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -355,7 +357,7 @@ export default function TeacherDashboard() {
       setHwDueDate("");
 
       // Refresh homework list
-      const res2 = await fetch("http://localhost:5000/api/teacher/homework", {
+      const res2 = await fetch(`${API_URL}/api/teacher/homework`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res2.json();
@@ -382,7 +384,7 @@ export default function TeacherDashboard() {
       marks: Number(marksData[s._id] || 0),
     }));
 
-    const res = await fetch("http://localhost:5000/api/teacher/marks/save", {
+    const res = await fetch(`${API_URL}/api/teacher/marks/save`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -704,7 +706,7 @@ export default function TeacherDashboard() {
                         setMessage("");
                         setEventLoading(true);
                         try {
-                          const res = await fetch("http://localhost:5000/api/teacher/events", {
+                          const res = await fetch(`${API_URL}/api/teacher/events`, {
                             method: "POST",
                             headers: {
                               "Content-Type": "application/json",

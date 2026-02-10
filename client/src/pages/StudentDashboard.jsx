@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [student, setStudent] = useState(null);
@@ -19,7 +21,7 @@ export default function StudentDashboard() {
       try {
         setLoading(true);
         const token = localStorage.getItem("studentToken");
-        const res = await fetch("http://localhost:5000/api/student/dashboard", {
+        const res = await fetch(`${API_URL}/api/student/dashboard`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -49,7 +51,7 @@ export default function StudentDashboard() {
       try {
         setLoading(true);
         const token = localStorage.getItem("studentToken");
-        const res = await fetch("http://localhost:5000/api/student/marks", {
+        const res = await fetch(`${API_URL}/api/student/marks`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -78,7 +80,7 @@ export default function StudentDashboard() {
       try {
         setLoading(true);
         const token = localStorage.getItem("studentToken");
-        const res = await fetch("http://localhost:5000/api/student/attendance", {
+        const res = await fetch(`${API_URL}/api/student/attendance`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -107,7 +109,7 @@ export default function StudentDashboard() {
       try {
         setLoading(true);
         const token = localStorage.getItem("studentToken");
-        const res = await fetch("http://localhost:5000/api/teacher/student/homework", {
+        const res = await fetch(`${API_URL}/api/teacher/student/homework`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -136,7 +138,7 @@ export default function StudentDashboard() {
       try {
         setLoading(true);
         const token = localStorage.getItem("studentToken");
-        const res = await fetch("http://localhost:5000/api/teacher/student/events", {
+        const res = await fetch(`${API_URL}/api/teacher/student/events`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -167,7 +169,7 @@ export default function StudentDashboard() {
     try {
       const token = localStorage.getItem("studentToken");
       if (token) {
-        await fetch("http://localhost:5000/api/auth/logout", {
+        await fetch(`${API_URL}/api/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });

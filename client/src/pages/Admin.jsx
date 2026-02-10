@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export default function Admin() {
   const [mode, setMode] = useState("student"); // 'student' or 'teacher'
   const [loading, setLoading] = useState(false);
@@ -34,7 +36,7 @@ export default function Admin() {
           ? { name: form.name, email: form.email, rollNo: form.rollNo, className: form.className, section: form.section, password: form.password }
           : { name: form.name, email: form.email, className: form.className, section: form.section, subject: form.subject, password: form.password };
 
-      const res = await fetch(`http://localhost:5000${endpoint}`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
