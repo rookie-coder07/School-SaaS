@@ -203,17 +203,10 @@ app.post("/api/auth/login", async (req, res) => {
    ================================= */
 app.post("/api/auth/student/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-<<<<<<< HEAD
     const normalizedEmail = String(email || "").toLowerCase();
 
     const user = await db.collection("users").findOne({
       email: normalizedEmail,
-=======
-
-    const user = await db.collection("users").findOne({
-      email,
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       role: "STUDENT",
     });
 
@@ -322,13 +315,22 @@ app.post("/api/auth/developer/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password required" });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error("❌ JWT_SECRET not set in environment");
+      return res.status(500).json({ error: "Server configuration error" });
+    }
+
     const user = await db.collection("users").findOne({
-      email,
+      email: String(email).toLowerCase(),
       role: "DEVELOPER",
     });
 
     if (!user) {
-      console.warn("⚠️ DEVELOPER LOGIN FAILED: User not found");
+      console.warn("⚠️ DEVELOPER LOGIN FAILED: User not found for", email);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -348,8 +350,8 @@ app.post("/api/auth/developer/login", async (req, res) => {
     console.log("✅ DEVELOPER LOGIN - user:", email);
     return res.json({ token });
   } catch (err) {
-    console.error("❌ DEVELOPER LOGIN ERROR:", err);
-    return res.status(500).json({ error: "Login failed" });
+    console.error("❌ DEVELOPER LOGIN ERROR:", err.message || err);
+    return res.status(500).json({ error: "Login failed - server error" });
   }
 });
 
@@ -420,8 +422,6 @@ app.get("/api/student/dashboard", requireAuth, requireRole("STUDENT"), requireTe
     } catch (e) {
       console.warn("TEACHER LOOKUP FAILED:", e.message);
     }
-
-<<<<<<< HEAD
     // include email from users collection
     try {
       const user = await db.collection("users").findOne({ _id: student.userId });
@@ -429,9 +429,6 @@ app.get("/api/student/dashboard", requireAuth, requireRole("STUDENT"), requireTe
     } catch (e) {
       console.warn("STUDENT DASHBOARD: failed to fetch user email", e.message);
     }
-
-=======
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
     res.json({ student, attendance, marks, teacher });
   } catch (err) {
     console.error("❌ STUDENT DASHBOARD ERROR:", err);
@@ -583,7 +580,6 @@ app.get(
     }
   }
 );
-<<<<<<< HEAD
 
 /* ================================
    DEBUG: Recent students (local only)
@@ -630,8 +626,6 @@ app.post('/debug/backfill-student-emails', async (req, res) => {
     res.status(500).json({ error: 'Backfill failed' });
   }
 });
-=======
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
 /* ================================
    TEACHER → GET STUDENTS
    ================================= */
@@ -733,11 +727,8 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
             class: String(row.class),
             section: String(row.section),
             rollNo: row.rollNo || "",
-<<<<<<< HEAD
             parentName: row.parentName || "",
             phone: row.phone || "",
-=======
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
             schoolId: schoolId,
             createdAt: new Date(),
           },
@@ -948,7 +939,6 @@ app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTen
 
     console.log("✅ STUDENT QUERY - schoolId:", schoolId, "class:", className, "section:", section);
 
-<<<<<<< HEAD
     const students = await db
       .collection("students")
       .find(query)
@@ -981,12 +971,6 @@ app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTen
     console.log("✅ FOUND STUDENTS:", studentsWithEmails.length);
     console.log("📋 SAMPLE STUDENT:", studentsWithEmails[0]);
     res.json(studentsWithEmails);
-=======
-    const students = await db.collection("students").find(query).toArray();
-
-    console.log("✅ FOUND STUDENTS:", students.length);
-    res.json(students);
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   } catch (err) {
     console.error("❌ TEACHER STUDENTS ERROR:", err);
     res.status(500).json({ error: "Failed to load students" });
@@ -1107,11 +1091,7 @@ app.get(
    ================================= */
 app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
   try {
-<<<<<<< HEAD
     const { name, email, rollNo, className, section, password, parentName, phone } = req.body;
-=======
-    const { name, email, rollNo, className, section, password } = req.body;
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
     if (!name || !email) return res.status(400).json({ error: "Missing name or email" });
     const schoolId = req.user.schoolIdObj;
     if (!schoolId) return res.status(400).json({ error: "Missing schoolId" });
@@ -1135,19 +1115,13 @@ app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTen
     const userId = r.insertedId;
     const studentDoc = {
       userId,
-<<<<<<< HEAD
       email: String(email).toLowerCase(),
-=======
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       name,
       class: String(className ?? ""),
       section: String(section ?? ""),
       rollNo: rollNo || "",
-<<<<<<< HEAD
       parentName: parentName || "",
       phone: phone || "",
-=======
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       schoolId,
       createdAt: new Date(),
     };
@@ -1337,7 +1311,6 @@ app.get(
       const studentsQuery = { schoolId };
       const teachersQuery = { schoolId };
 
-<<<<<<< HEAD
       const students = await db
         .collection("students")
         .find(studentsQuery)
@@ -1350,10 +1323,6 @@ app.get(
         .project({ name: 1, _id: 1, class: 1, section: 1, subject: 1, email: 1 })
         .sort({ name: 1 })
         .toArray();
-=======
-      const students = await db.collection("students").find(studentsQuery).project({ name: 1, class: 1, section: 1, rollNo: 1 }).sort({ name: 1 }).toArray();
-      const teachers = await db.collection("teachers").find(teachersQuery).project({ name: 1, class: 1, section: 1, subject: 1 }).sort({ name: 1 }).toArray();
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
 
       res.json({ students, teachers });
     } catch (err) {
@@ -1364,7 +1333,6 @@ app.get(
 );
 
 /* ================================
-<<<<<<< HEAD
    ADMIN: DELETE TEACHER
    ================================= */
 app.delete(
@@ -1664,8 +1632,6 @@ app.put(
 );
 
 /* ================================
-=======
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
    DEV: Seed Demo Public School 2 + users (dev-only)
 
    Usage (dev only):
