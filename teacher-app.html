@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>School Teacher App</title>
+
+  <!-- Inter font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind Play CDN -->
+  <script>
+    tailwind = {
+      config: {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#f0f9ff',
+                100: '#e0f2fe',
+                200: '#bae6fd',
+                300: '#7dd3fc',
+                500: '#0ea5e9',
+                600: '#0284c7',
+                700: '#0369a1',
+              },
+              slate: {
+                50: '#f8fafc',
+                100: '#f1f5f9',
+                200: '#e2e8f0',
+                300: '#cbd5e1',
+                400: '#94a3b8',
+                500: '#64748b',
+                600: '#475569',
+                700: '#334155',
+                800: '#1e293b',
+                900: '#0f172a',
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto']
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    html, body { height: 100%; overflow-x: hidden; }
+    body { background: #f8fafc; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+    .page-hidden { display: none !important; }
+    .fade-in { animation: fadeIn 0.3s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  </style>
+</head>
+<body class="font-sans text-slate-800">
+
+  <!-- ============ LOGIN PAGE ============ -->
+  <div id="login-page" class="fade-in min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-brand-50">
+    <!-- Header -->
+    <div class="flex-1 flex items-center justify-center px-4">
+      <div class="w-full max-w-sm">
+        <!-- Logo & Title -->
+        <div class="text-center mb-8">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-brand-300 to-brand-700 mb-4">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
+            </svg>
+          </div>
+          <h1 class="text-2xl font-extrabold text-slate-900 mb-2">ClassHub</h1>
+          <p class="text-sm text-slate-500">Teacher Portal</p>
+        </div>
+
+        <!-- Form -->
+        <form class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-5" onsubmit="handleLogin(event)">
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Email or Username</label>
+            <input type="text" id="login-email" placeholder="teacher@school.com" class="w-full px-4 py-3 rounded-lg border border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition" required />
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Password</label>
+            <input type="password" id="login-password" placeholder="••••••••" class="w-full px-4 py-3 rounded-lg border border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition" required />
+          </div>
+
+          <div class="flex items-center justify-between">
+            <label class="flex items-center gap-2 text-sm text-slate-600">
+              <input type="checkbox" class="rounded border-slate-300" />
+              Remember me
+            </label>
+            <a href="#" class="text-sm text-brand-600 font-semibold hover:text-brand-700">Forgot?</a>
+          </div>
+
+          <button type="submit" class="w-full py-3 rounded-lg font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-600 hover:opacity-95 transition shadow-sm">Sign In</button>
+
+          <p class="text-center text-sm text-slate-600">
+            New here? <a href="#" class="text-brand-600 font-semibold hover:text-brand-700">Contact Admin</a>
+          </p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HOME PAGE ============ -->
+  <div id="home-page" class="page-hidden fade-in min-h-screen flex flex-col bg-slate-50">
+    <!-- Header -->
+    <header class="w-full bg-white border-b border-slate-100 sticky top-0 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-300 to-brand-700 flex items-center justify-center text-white font-extrabold text-sm">CH</div>
+          <div>
+            <div class="text-xs text-slate-500">ClassHub</div>
+            <div class="text-sm font-semibold text-slate-900">Teacher</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="text-right hidden sm:block">
+            <div class="text-xs text-slate-500">Welcome</div>
+            <div class="text-sm font-semibold text-slate-900">Ms. Taylor</div>
+          </div>
+          <button onclick="handleLogout()" class="p-2 rounded-lg hover:bg-slate-100 transition">
+            <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+      <div class="mb-8">
+        <h1 class="text-3xl font-extrabold text-slate-900 mb-1">Welcome back, Ms. Taylor</h1>
+        <p class="text-slate-500 text-sm">Class 8 • Section B</p>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+          <div class="text-xs text-slate-500 font-semibold mb-2">Total Students</div>
+          <div class="text-2xl font-extrabold text-slate-900">32</div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+          <div class="text-xs text-slate-500 font-semibold mb-2">Present Today</div>
+          <div class="text-2xl font-extrabold text-green-600">28</div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+          <div class="text-xs text-slate-500 font-semibold mb-2">Absent Today</div>
+          <div class="text-2xl font-extrabold text-red-600">4</div>
+        </div>
+      </div>
+
+      <!-- Main Actions -->
+      <div class="space-y-3 mb-8">
+        <h2 class="text-lg font-bold text-slate-900 mb-4">Quick Actions</h2>
+
+        <button onclick="goToPage('attendance-page')" class="w-full bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center">
+              <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3"></path>
+              </svg>
+            </div>
+            <div class="text-left">
+              <div class="font-semibold text-slate-900">Mark Attendance</div>
+              <div class="text-xs text-slate-500">Record today's attendance</div>
+            </div>
+          </div>
+          <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+          </svg>
+        </button>
+
+        <button onclick="goToPage('dashboard-page')" class="w-full bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+              <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+              </svg>
+            </div>
+            <div class="text-left">
+              <div class="font-semibold text-slate-900">Dashboard</div>
+              <div class="text-xs text-slate-500">View class overview</div>
+            </div>
+          </div>
+          <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+          </svg>
+        </button>
+
+        <button onclick="goToPage('dashboard-page')" class="w-full bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+              <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747S17.5 6.253 12 6.253z"></path>
+              </svg>
+            </div>
+            <div class="text-left">
+              <div class="font-semibold text-slate-900">Homework & Assignments</div>
+              <div class="text-xs text-slate-500">Manage student work</div>
+            </div>
+          </div>
+          <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+          </svg>
+        </button>
+
+        <button onclick="goToPage('dashboard-page')" class="w-full bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+              <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <div class="text-left">
+              <div class="font-semibold text-slate-900">Marks & Grades</div>
+              <div class="text-xs text-slate-500">Record student performance</div>
+            </div>
+          </div>
+          <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+          </svg>
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ DASHBOARD PAGE ============ -->
+  <div id="dashboard-page" class="page-hidden fade-in min-h-screen flex flex-col bg-slate-50">
+    <!-- Header -->
+    <header class="w-full bg-white border-b border-slate-100 sticky top-0 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <button onclick="goToPage('home-page')" class="p-2 rounded-lg hover:bg-slate-100 transition">
+            <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+          </button>
+          <div>
+            <div class="text-xs text-slate-500">Dashboard</div>
+            <div class="text-sm font-semibold text-slate-900">Class 8 • Section B</div>
+          </div>
+        </div>
+        <button onclick="handleLogout()" class="p-2 rounded-lg hover:bg-slate-100 transition">
+          <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+      <!-- Overview Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+          <div class="text-xs text-slate-500 font-semibold mb-1">Class</div>
+          <div class="text-2xl font-extrabold text-slate-900">8</div>
+          <div class="text-xs text-slate-400 mt-2">English Literature</div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+          <div class="text-xs text-slate-500 font-semibold mb-1">Total Students</div>
+          <div class="text-2xl font-extrabold text-slate-900">32</div>
+          <div class="text-xs text-slate-400 mt-2">Active in class</div>
+        </div>
+      </div>
+
+      <!-- Today's Overview -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 mb-8">
+        <h2 class="font-bold text-slate-900 mb-4">Today's Overview</h2>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <div class="text-sm font-semibold text-slate-900">Attendance</div>
+              <div class="text-xs text-slate-500">28 present out of 32</div>
+            </div>
+            <div class="text-sm font-bold text-green-600">87.5%</div>
+          </div>
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <div class="text-sm font-semibold text-slate-900">Homework</div>
+              <div class="text-xs text-slate-500">25 submissions pending</div>
+            </div>
+            <div class="text-sm font-bold text-amber-600">7</div>
+          </div>
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm font-semibold text-slate-900">Avg. Performance</div>
+              <div class="text-xs text-slate-500">Last exam results</div>
+            </div>
+            <div class="text-sm font-bold text-blue-600">76%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <h3 class="font-bold text-slate-900 mb-4">Recent Activity</h3>
+      <div class="space-y-3 mb-8">
+        <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-4 flex items-start gap-3">
+          <div class="w-2 h-2 rounded-full bg-brand-500 mt-2"></div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold text-slate-900">Attendance Submitted</div>
+            <div class="text-xs text-slate-500">Submitted attendance for Class 8B • 2 hours ago</div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-4 flex items-start gap-3">
+          <div class="w-2 h-2 rounded-full bg-brand-500 mt-2"></div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold text-slate-900">New Homework Posted</div>
+            <div class="text-xs text-slate-500">Posted "Chapter 5 Summary" as homework • 5 hours ago</div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-4 flex items-start gap-3">
+          <div class="w-2 h-2 rounded-full bg-slate-300 mt-2"></div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold text-slate-900">Class Report Generated</div>
+            <div class="text-xs text-slate-500">Monthly class performance report ready • 1 day ago</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ ATTENDANCE PAGE ============ -->
+  <div id="attendance-page" class="page-hidden fade-in min-h-screen flex flex-col bg-slate-50">
+    <!-- Header -->
+    <header class="w-full bg-white border-b border-slate-100 sticky top-0 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <button onclick="goToPage('home-page')" class="p-2 rounded-lg hover:bg-slate-100 transition">
+            <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+          </button>
+          <div>
+            <div class="text-xs text-slate-500">Attendance</div>
+            <div class="text-sm font-semibold text-slate-900">Class 8B</div>
+          </div>
+        </div>
+        <button onclick="handleLogout()" class="p-2 rounded-lg hover:bg-slate-100 transition">
+          <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+      <!-- Top Card -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div>
+            <h2 class="font-bold text-slate-900">Mark Attendance</h2>
+            <p class="text-xs text-slate-500 mt-1">Select Present or Absent for each student</p>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 block mb-1">Date</label>
+            <input type="date" id="attendance-date" class="text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700" />
+          </div>
+        </div>
+
+        <!-- Counters -->
+        <div class="flex gap-4 text-sm text-slate-600">
+          <div>Present: <span class="font-bold text-green-600" id="present-count">0</span></div>
+          <div>Absent: <span class="font-bold text-red-600" id="absent-count">0</span></div>
+          <div>Total: <span class="font-bold" id="total-count">0</span></div>
+        </div>
+      </div>
+
+      <!-- Student List -->
+      <div id="student-list" class="space-y-3 pb-32">
+        <!-- Students will be populated here -->
+      </div>
+    </main>
+
+    <!-- Fixed Bottom Bar -->
+    <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-4">
+      <div class="max-w-4xl mx-auto flex gap-3">
+        <button onclick="saveAttendance()" class="flex-1 py-3 rounded-lg font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 transition">Save Draft</button>
+        <button onclick="submitAttendance()" class="flex-1 py-3 rounded-lg font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-600 hover:opacity-95 transition">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODALS ============ -->
+  <div id="modal-overlay" class="page-hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div class="bg-white rounded-2xl shadow-lg p-6 w-[min(92%,420px)]">
+      <div class="flex items-start gap-3 mb-4">
+        <div id="modal-icon" class="text-2xl">ℹ️</div>
+        <div class="flex-1">
+          <h3 id="modal-title" class="font-bold text-lg text-slate-900">Message</h3>
+          <p id="modal-msg" class="text-sm text-slate-600 mt-1"></p>
+        </div>
+      </div>
+      <div class="text-right">
+        <button onclick="closeModal()" class="px-4 py-2 rounded-lg font-semibold bg-slate-100 text-slate-800 hover:bg-slate-200 transition">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ JAVASCRIPT ============ -->
+  <script>
+    // ===== PAGE NAVIGATION =====
+    function goToPage(pageId) {
+      document.querySelectorAll('[id$="-page"]').forEach(p => p.classList.add('page-hidden'));
+      document.getElementById(pageId).classList.remove('page-hidden');
+      window.scrollTo(0, 0);
+    }
+
+    // ===== LOGIN =====
+    function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      if (email && password) {
+        localStorage.setItem('teacher_logged_in', 'true');
+        localStorage.setItem('teacher_name', 'Ms. Taylor');
+        goToPage('home-page');
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('teacher_logged_in');
+      localStorage.removeItem('teacher_name');
+      goToPage('login-page');
+      document.getElementById('login-email').value = '';
+      document.getElementById('login-password').value = '';
+    }
+
+    // ===== ATTENDANCE STATE =====
+    const attendanceState = {
+      students: [
+        { id: 1, name: 'Aarav Kumar', roll: 12, percentage: 78 },
+        { id: 2, name: 'Fatima Begum', roll: 14, percentage: 92 },
+        { id: 3, name: 'Rohan Mehta', roll: 15, percentage: 65 },
+        { id: 4, name: 'Maya Patel', roll: 16, percentage: 88 },
+        { id: 5, name: 'Ananya Singh', roll: 17, percentage: 95 },
+        { id: 6, name: 'Vikram Joshi', roll: 18, percentage: 72 },
+        { id: 7, name: 'Priya Sharma', roll: 19, percentage: 85 },
+        { id: 8, name: 'Akshay Reddy', roll: 20, percentage: 78 },
+        { id: 9, name: 'Zara Khan', roll: 21, percentage: 91 },
+        { id: 10, name: 'Harsh Verma', roll: 22, percentage: 68 },
+      ],
+      attendance: {},
+    };
+
+    function initAttendance() {
+      const list = document.getElementById('student-list');
+      list.innerHTML = '';
+      attendanceState.students.forEach(student => {
+        if (!attendanceState.attendance[student.id]) {
+          attendanceState.attendance[student.id] = 'PRESENT';
+        }
+        const isPresent = attendanceState.attendance[student.id] === 'PRESENT';
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-lg shadow-sm border border-slate-100 p-4 flex items-center justify-between';
+        card.innerHTML = `
+          <div class="flex items-center gap-3 flex-1">
+            <div>
+              <div class="text-sm font-semibold text-slate-900">${student.name}</div>
+              <div class="text-xs text-slate-400 mt-0.5">Roll ${student.roll}</div>
+            </div>
+            <div class="text-sm text-slate-600 bg-slate-50 px-3 py-1 rounded-md font-semibold">${student.percentage}%</div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="setStatus(${student.id}, 'PRESENT')" class="px-3 py-2 rounded-full text-sm font-semibold transition ${isPresent ? 'bg-green-600 text-white shadow-sm' : 'border border-slate-200 text-slate-800 bg-white hover:bg-slate-50'}">Present</button>
+            <button onclick="setStatus(${student.id}, 'ABSENT')" class="px-3 py-2 rounded-full text-sm font-semibold transition ${!isPresent ? 'bg-red-600 text-white shadow-sm' : 'border border-slate-200 text-slate-800 bg-white hover:bg-slate-50'}">Absent</button>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+      updateCounters();
+    }
+
+    function setStatus(id, status) {
+      attendanceState.attendance[id] = status;
+      initAttendance();
+    }
+
+    function updateCounters() {
+      const present = Object.values(attendanceState.attendance).filter(s => s === 'PRESENT').length;
+      const absent = Object.values(attendanceState.attendance).filter(s => s === 'ABSENT').length;
+      document.getElementById('present-count').textContent = present;
+      document.getElementById('absent-count').textContent = absent;
+      document.getElementById('total-count').textContent = attendanceState.students.length;
+    }
+
+    function saveAttendance() {
+      const date = document.getElementById('attendance-date').value;
+      if (!date) {
+        showModal('Missing Date', 'Please select a date first', 'error');
+        return;
+      }
+      showModal('Saved', 'Attendance draft saved successfully', 'success');
+    }
+
+    function submitAttendance() {
+      const date = document.getElementById('attendance-date').value;
+      if (!date) {
+        showModal('Missing Date', 'Please select a date before finalizing', 'error');
+        return;
+      }
+      showModal('Finalized', 'Attendance submitted successfully', 'success');
+    }
+
+    // ===== MODALS =====
+    function showModal(title, msg, type = 'info') {
+      const icons = { success: '✅', error: '⚠️', info: 'ℹ️' };
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-msg').textContent = msg;
+      document.getElementById('modal-icon').textContent = icons[type];
+      document.getElementById('modal-overlay').classList.remove('page-hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.add('page-hidden');
+    }
+
+    // ===== INITIALIZE =====
+    document.addEventListener('DOMContentLoaded', () => {
+      const isLoggedIn = localStorage.getItem('teacher_logged_in');
+      if (isLoggedIn) {
+        goToPage('home-page');
+      } else {
+        goToPage('login-page');
+      }
+
+      // Set today's date
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('attendance-date').value = today;
+      initAttendance();
+    });
+
+    // Close modal on background click
+    document.getElementById('modal-overlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeModal();
+    });
+  </script>
+</body>
+</html>

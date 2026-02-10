@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>School Management System</title>
+
+  <!-- Inter font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind Play CDN -->
+  <script>
+    tailwind = {
+      config: {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#f0f9ff',
+                100: '#e0f2fe',
+                200: '#bae6fd',
+                300: '#7dd3fc',
+                500: '#0ea5e9',
+                600: '#0284c7',
+                700: '#0369a1',
+              },
+              slate: {
+                50: '#f8fafc',
+                100: '#f1f5f9',
+                200: '#e2e8f0',
+                300: '#cbd5e1',
+                400: '#94a3b8',
+                500: '#64748b',
+                600: '#475569',
+                700: '#334155',
+                800: '#1e293b',
+                900: '#0f172a',
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto']
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    html, body { height: 100%; overflow-x: hidden; }
+    body { background: #f8fafc; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+    .page-hidden { display: none !important; }
+    .fade-in { animation: fadeIn 0.3s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  </style>
+</head>
+<body class="font-sans text-slate-800">
+
+  <!-- ============ UNIFIED LOGIN PAGE ============ -->
+  <div id="login-page" class="fade-in min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-brand-50">
+    <div class="flex-1 flex items-center justify-center px-4">
+      <div class="w-full max-w-sm">
+        <!-- Logo & Title -->
+        <div class="text-center mb-8">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-brand-300 to-brand-700 mb-4">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
+            </svg>
+          </div>
+          <h1 class="text-2xl font-extrabold text-slate-900 mb-2">SchoolHub</h1>
+          <p class="text-sm text-slate-500">Management System</p>
+        </div>
+
+        <!-- Role Selector -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6">
+          <label class="block text-sm font-semibold text-slate-700 mb-3">Select Your Role</label>
+          <div class="grid grid-cols-2 gap-3">
+            <button onclick="selectRole('teacher')" class="role-btn p-3 rounded-lg border-2 border-slate-200 text-sm font-semibold text-slate-700 hover:border-brand-500 transition" data-role="teacher">
+              👨‍🏫 Teacher
+            </button>
+            <button onclick="selectRole('admin')" class="role-btn p-3 rounded-lg border-2 border-slate-200 text-sm font-semibold text-slate-700 hover:border-brand-500 transition" data-role="admin">
+              👨‍💼 Admin
+            </button>
+            <button onclick="selectRole('developer')" class="role-btn p-3 rounded-lg border-2 border-slate-200 text-sm font-semibold text-slate-700 hover:border-brand-500 transition" data-role="developer">
+              💻 Developer
+            </button>
+            <button onclick="selectRole('student')" class="role-btn p-3 rounded-lg border-2 border-slate-200 text-sm font-semibold text-slate-700 hover:border-brand-500 transition" data-role="student">
+              👨‍🎓 Student
+            </button>
+          </div>
+        </div>
+
+        <!-- Login Form -->
+        <form class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-5" onsubmit="handleLogin(event)">
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Email or Username</label>
+            <input type="text" id="login-email" placeholder="user@school.com" class="w-full px-4 py-3 rounded-lg border border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition" required />
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Password</label>
+            <input type="password" id="login-password" placeholder="••••••••" class="w-full px-4 py-3 rounded-lg border border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition" required />
+          </div>
+
+          <div class="flex items-center justify-between">
+            <label class="flex items-center gap-2 text-sm text-slate-600">
+              <input type="checkbox" class="rounded border-slate-300" />
+              Remember me
+            </label>
+            <a href="#" class="text-sm text-brand-600 font-semibold hover:text-brand-700">Forgot?</a>
+          </div>
+
+          <button type="submit" class="w-full py-3 rounded-lg font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-600 hover:opacity-95 transition shadow-sm">Sign In</button>
+
+          <p class="text-center text-sm text-slate-600">
+            New here? <a href="#" class="text-brand-600 font-semibold hover:text-brand-700">Contact Admin</a>
+          </p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TEACHER HOME PAGE ============ -->
+  <div id="teacher-home" class="page-hidden fade-in min-h-screen flex flex-col bg-slate-50">
+    <header class="w-full bg-white border-b border-slate-100 sticky top-0 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-300 to-brand-700 flex items-center justify-center text-white font-extrabold text-sm">SH</div>
+          <div>
+            <div class="text-xs text-slate-500">SchoolHub</div>
+            <div class="text-sm font-semibold text-slate-900">Teacher</div>
+          </div>
+        </div>
+        <button onclick="handleLogout()" class="p-2 rounded-lg hover:bg-slate-100 transition">
+          <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+      <h1 class="text-3xl font-extrabold text-slate-900 mb-1">Welcome, Teacher</h1>
+      <p class="text-slate-500 text-sm mb-8">Manage your class and attendance</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition cursor-pointer">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mb-3">📋</div>
+          <div class="font-semibold text-slate-900">Attendance</div>
+          <div class="text-xs text-slate-500">Mark student attendance</div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition cursor-pointer">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mb-3">📊</div>
+          <div class="font-semibold text-slate-900">Dashboard</div>
+          <div class="text-xs text-slate-500">View class overview</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ ADMIN HOME PAGE ============ -->
+  <div id="admin-home" class="page-hidden fade-in min-h-screen flex flex-col bg-slate-50">
+    <header class="w-full bg-white border-b border-slate-100 sticky top-0 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-300 to-brand-700 flex items-center justify-center text-white font-extrabold text-sm">SH</div>
+          <div>
+            <div class="text-xs text-slate-500">SchoolHub</div>
+            <div class="text-sm font-semibold text-slate-900">Admin</div>
+          </div>
+        </div>
+        <button onclick="handleLogout()" class="p-2 rounded-lg hover:bg-slate-100 transition">
+          <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+      <h1 class="text-3xl font-extrabold text-slate-900 mb-1">Welcome, Admin</h1>
+      <p class="text-slate-500 text-sm mb-8">Manage school and users</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition cursor-pointer">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mb-3">👥</div>
+          <div class="font-semibold text-slate-900">Users</div>
+          <div class="text-xs text-slate-500">Manage teachers and students</div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition cursor-pointer">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mb-3">⚙️</div>
+          <div class="font-semibold text-slate-900">Settings</div>
+          <div class="text-xs text-slate-500">School configuration</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ DEVELOPER HOME PAGE ============ -->
+  <div id="developer-home" class="page-hidden fade-in min-h-screen flex flex-col bg-slate-50">
+    <header class="w-full bg-white border-b border-slate-100 sticky top-0 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-300 to-brand-700 flex items-center justify-center text-white font-extrabold text-sm">SH</div>
+          <div>
+            <div class="text-xs text-slate-500">SchoolHub</div>
+            <div class="text-sm font-semibold text-slate-900">Developer</div>
+          </div>
+        </div>
+        <button onclick="handleLogout()" class="p-2 rounded-lg hover:bg-slate-100 transition">
+          <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+      <h1 class="text-3xl font-extrabold text-slate-900 mb-1">Welcome, Developer</h1>
+      <p class="text-slate-500 text-sm mb-8">System monitoring and API access</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition cursor-pointer">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mb-3">🔌</div>
+          <div class="font-semibold text-slate-900">APIs</div>
+          <div class="text-xs text-slate-500">Manage API endpoints</div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition cursor-pointer">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mb-3">📊</div>
+          <div class="font-semibold text-slate-900">Logs</div>
+          <div class="text-xs text-slate-500">System logs and monitoring</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ STUDENT HOME PAGE ============ -->
+  <div id="student-home" class="page-hidden fade-in min-h-screen flex flex-col bg-slate-50">
+    <header class="w-full bg-white border-b border-slate-100 sticky top-0 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-300 to-brand-700 flex items-center justify-center text-white font-extrabold text-sm">SH</div>
+          <div>
+            <div class="text-xs text-slate-500">SchoolHub</div>
+            <div class="text-sm font-semibold text-slate-900">Student</div>
+          </div>
+        </div>
+        <button onclick="handleLogout()" class="p-2 rounded-lg hover:bg-slate-100 transition">
+          <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+      <h1 class="text-3xl font-extrabold text-slate-900 mb-1">Welcome, Student</h1>
+      <p class="text-slate-500 text-sm mb-8">View your academics and information</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition cursor-pointer">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mb-3">📚</div>
+          <div class="font-semibold text-slate-900">Courses</div>
+          <div class="text-xs text-slate-500">View enrolled courses</div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition cursor-pointer">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mb-3">📊</div>
+          <div class="font-semibold text-slate-900">Grades</div>
+          <div class="text-xs text-slate-500">Check your marks</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ JAVASCRIPT ============ -->
+  <script>
+    let selectedRole = '';
+
+    function selectRole(role) {
+      selectedRole = role;
+      document.querySelectorAll('.role-btn').forEach(btn => {
+        btn.classList.remove('border-brand-500', 'bg-brand-50');
+        btn.classList.add('border-slate-200');
+      });
+      document.querySelector(`[data-role="${role}"]`).classList.remove('border-slate-200');
+      document.querySelector(`[data-role="${role}"]`).classList.add('border-brand-500', 'bg-brand-50');
+    }
+
+    function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      
+      if (!selectedRole) {
+        alert('Please select a role');
+        return;
+      }
+
+      if (email && password) {
+        localStorage.setItem('logged_in_role', selectedRole);
+        localStorage.setItem('user_email', email);
+        localStorage.setItem('user_name', email.split('@')[0]);
+        
+        goToPage(`${selectedRole}-home`);
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('logged_in_role');
+      localStorage.removeItem('user_email');
+      localStorage.removeItem('user_name');
+      selectedRole = '';
+      goToPage('login-page');
+      document.getElementById('login-email').value = '';
+      document.getElementById('login-password').value = '';
+      document.querySelectorAll('.role-btn').forEach(btn => {
+        btn.classList.remove('border-brand-500', 'bg-brand-50');
+        btn.classList.add('border-slate-200');
+      });
+    }
+
+    function goToPage(pageId) {
+      document.querySelectorAll('[id$="-page"], [id$="-home"]').forEach(p => p.classList.add('page-hidden'));
+      document.getElementById(pageId).classList.remove('page-hidden');
+      window.scrollTo(0, 0);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const loggedInRole = localStorage.getItem('logged_in_role');
+      if (loggedInRole) {
+        goToPage(`${loggedInRole}-home`);
+      } else {
+        goToPage('login-page');
+      }
+    });
+  </script>
+</body>
+</html>
