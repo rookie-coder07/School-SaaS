@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -5,6 +6,9 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
     "./node_modules/flowbite/**/*.js", // 👈 Flowbite scan path
   ],
+=======
+export default {
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   theme: {
     extend: {
       colors: {
@@ -22,7 +26,12 @@ export default {
       },
     },
   },
+<<<<<<< HEAD
   plugins: [
     require("flowbite/plugin"), // 👈 Flowbite plugin
   ],
 };
+=======
+  plugins: [],
+};
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262

@@ -47,6 +47,7 @@ export default function AdminLogin() {
   };
 
   return (
+<<<<<<< HEAD
     <div className="min-h-screen flex justify-center items-center bg-slate-50 px-4 py-8 font-sans">
       <form
         onSubmit={handleLogin}
@@ -61,15 +62,54 @@ export default function AdminLogin() {
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm font-semibold">
             {error}
           </div>
+=======
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "linear-gradient(135deg, #0f172a, #020617)",
+      }}
+    >
+      <form
+        onSubmit={handleLogin}
+        style={{
+          background: "#0f172a",
+          padding: "30px",
+          borderRadius: "12px",
+          width: "100%",
+          maxWidth: "380px",
+          color: "white",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.4)",
+        }}
+      >
+        <h2 style={{ textAlign: "center", marginBottom: "20px" }}>
+          Admin Login
+        </h2>
+
+        {error && (
+          <p style={{ color: "#f87171", marginBottom: "10px" }}>
+            {error}
+          </p>
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
         )}
 
         <input
           type="email"
+<<<<<<< HEAD
           placeholder="Email address"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
           className="w-full px-4 py-3 mb-4 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+=======
+          placeholder="Admin Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          style={inputStyle}
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
         />
 
         <input
@@ -78,13 +118,30 @@ export default function AdminLogin() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+<<<<<<< HEAD
           className="w-full px-4 py-3 mb-6 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+=======
+          style={inputStyle}
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
         />
 
         <button
           type="submit"
           disabled={loading}
+<<<<<<< HEAD
           className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 text-sm md:text-base"
+=======
+          style={{
+            width: "100%",
+            padding: "12px",
+            background: "#3b82f6",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: "8px",
+            fontWeight: "bold",
+            cursor: "pointer",
+          }}
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
         >
           {loading ? "Logging in..." : "Login"}
         </button>
@@ -95,6 +152,7 @@ export default function AdminLogin() {
 
 const inputStyle = {
   width: "100%",
+<<<<<<< HEAD
   padding: "12px 14px",
   marginBottom: "14px",
   borderRadius: "10px",
@@ -102,4 +160,11 @@ const inputStyle = {
   outline: "none",
   fontSize: "14px",
   fontWeight: "500",
+=======
+  padding: "10px",
+  marginBottom: "12px",
+  borderRadius: "6px",
+  border: "none",
+  outline: "none",
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
 };

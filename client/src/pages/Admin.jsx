@@ -15,8 +15,11 @@ export default function Admin() {
     rollNo: "",
     subject: "",
     password: "",
+<<<<<<< HEAD
     parentName: "",
     phone: "",
+=======
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   });
 
   const token = localStorage.getItem("adminToken") || localStorage.getItem("token") || "";
@@ -35,7 +38,11 @@ export default function Admin() {
       const endpoint = mode === "student" ? "/api/admin/add-student" : "/api/admin/add-teacher";
       const payload =
         mode === "student"
+<<<<<<< HEAD
           ? { name: form.name, email: form.email, rollNo: form.rollNo, className: form.className, section: form.section, password: form.password, parentName: form.parentName, phone: form.phone }
+=======
+          ? { name: form.name, email: form.email, rollNo: form.rollNo, className: form.className, section: form.section, password: form.password }
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
           : { name: form.name, email: form.email, className: form.className, section: form.section, subject: form.subject, password: form.password };
 
       const res = await fetch(`${API_URL}${endpoint}`, {
@@ -94,11 +101,15 @@ export default function Admin() {
           </div>
 
           {mode === "student" && (
+<<<<<<< HEAD
             <>
               <input placeholder="Roll No" value={form.rollNo} onChange={handleChange("rollNo")} style={styles.input} />
               <input placeholder="Parent Name" value={form.parentName} onChange={handleChange("parentName")} style={styles.input} />
               <input placeholder="Phone Number" value={form.phone} onChange={handleChange("phone")} style={styles.input} />
             </>
+=======
+            <input placeholder="Roll No" value={form.rollNo} onChange={handleChange("rollNo")} style={styles.input} />
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
           )}
 
           {mode === "teacher" && (
@@ -109,7 +120,11 @@ export default function Admin() {
 
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <button type="submit" disabled={loading} style={styles.primary}>{loading ? "Creating..." : `Create ${mode === "student" ? "Student" : "Teacher"}`}</button>
+<<<<<<< HEAD
             <button type="button" onClick={() => { setForm({ name: "", email: "", className: "", section: "", rollNo: "", subject: "", password: "", parentName: "", phone: "" }); setError(""); setMessage(""); }} style={styles.secondary}>Reset</button>
+=======
+            <button type="button" onClick={() => { setForm({ name: "", email: "", className: "", section: "", rollNo: "", subject: "", password: "" }); setError(""); setMessage(""); }} style={styles.secondary}>Reset</button>
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
           </div>
         </form>
       </div>

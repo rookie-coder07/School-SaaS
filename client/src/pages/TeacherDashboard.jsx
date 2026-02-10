@@ -11,11 +11,14 @@ export default function TeacherDashboard() {
   const [events, setEvents] = useState([]);
   const [marks, setMarks] = useState({});
   const [percentages, setPercentages] = useState({});
+<<<<<<< HEAD
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState("");
   const [modalMsg, setModalMsg] = useState("");
   const [modalType, setModalType] = useState("info");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+=======
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   
   const navigate = useNavigate();
   const [date, setDate] = useState("");
@@ -41,8 +44,13 @@ export default function TeacherDashboard() {
   const [subject, setSubject] = useState("");
   const [exam, setExam] = useState("");
   const [marksData, setMarksData] = useState({});
+<<<<<<< HEAD
   const [allMarks, setAllMarks] = useState([]);
   const [availableSubjects, setAvailableSubjects] = useState([]);
+=======
+  const [allMarks, setAllMarks] = useState([]); // For summary display
+  const [availableSubjects, setAvailableSubjects] = useState([]); // Fetch from admin
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
 
   // ===== EVENTS FORM STATE =====
   const [eventName, setEventName] = useState("");
@@ -68,7 +76,11 @@ export default function TeacherDashboard() {
     }
   };
 
+<<<<<<< HEAD
   // ===== FETCH CLASS SUMMARY =====
+=======
+  /* ===== FETCH CLASS SUMMARY ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     const fetchClassSummary = async () => {
       try {
@@ -90,7 +102,11 @@ export default function TeacherDashboard() {
     if (token) fetchClassSummary();
   }, [token]);
 
+<<<<<<< HEAD
   // ===== FETCH HOMEWORK =====
+=======
+  /* ===== FETCH HOMEWORK ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     if (activeTab !== "homework") return;
 
@@ -114,7 +130,11 @@ export default function TeacherDashboard() {
     fetchHomework();
   }, [activeTab, token]);
 
+<<<<<<< HEAD
   // ===== FETCH EVENTS =====
+=======
+  /* ===== FETCH EVENTS ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     if (activeTab !== "events") return;
 
@@ -138,7 +158,11 @@ export default function TeacherDashboard() {
     fetchEvents();
   }, [activeTab, token]);
 
+<<<<<<< HEAD
   // ===== FETCH ALL MARKS FOR SUMMARY =====
+=======
+  /* ===== FETCH ALL MARKS FOR SUMMARY ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     if (activeTab !== "summary") return;
 
@@ -162,15 +186,23 @@ export default function TeacherDashboard() {
     fetchAllMarks();
   }, [activeTab, token]);
 
+<<<<<<< HEAD
   // ===== FETCH AVAILABLE SUBJECTS =====
   useEffect(() => {
     if (activeTab !== "academics" || !className || !section) {
+=======
+  /* ===== FETCH AVAILABLE SUBJECTS ===== */
+  useEffect(() => {
+    if (activeTab !== "academics" || !className || !section) {
+      console.log("Skipping subjects fetch:", { activeTab, className, section });
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       return;
     }
 
     const fetchSubjects = async () => {
       try {
         const url = `${API_URL}/api/teacher/subjects?class=${encodeURIComponent(className)}&section=${encodeURIComponent(section)}`;
+<<<<<<< HEAD
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         
         const data = await res.json();
@@ -179,6 +211,22 @@ export default function TeacherDashboard() {
           const subjects = Array.isArray(data) ? data : (data.subjects || []);
           setAvailableSubjects(subjects);
         } else {
+=======
+        console.log("Fetching subjects from:", url);
+        console.log("Teacher data:", teacher);
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        
+        const data = await res.json();
+        console.log("Subjects response status:", res.status, "data:", JSON.stringify(data, null, 2));
+        console.log("Data is array?:", Array.isArray(data), "Data length:", Array.isArray(data) ? data.length : "N/A");
+        
+        if (res.ok) {
+          const subjects = Array.isArray(data) ? data : (data.subjects || []);
+          console.log("Setting availableSubjects to:", subjects);
+          setAvailableSubjects(subjects);
+        } else {
+          console.error("Subjects fetch error:", data);
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
           setAvailableSubjects([]);
         }
       } catch (err) {
@@ -188,9 +236,15 @@ export default function TeacherDashboard() {
     };
 
     fetchSubjects();
+<<<<<<< HEAD
   }, [activeTab, className, section, token]);
 
   // ===== FETCH STUDENTS =====
+=======
+  }, [activeTab, className, section, token, teacher]);
+
+  /* ===== FETCH STUDENTS ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     fetch(
       `${API_URL}/api/teacher/students?className=${className}&section=${section}`,
@@ -211,7 +265,11 @@ export default function TeacherDashboard() {
       });
   }, [className, section, token]);
 
+<<<<<<< HEAD
   // ===== FETCH ATTENDANCE SUMMARY =====
+=======
+  /* ===== FETCH ATTENDANCE SUMMARY ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     if (!token || !className) return;
 
@@ -241,22 +299,34 @@ export default function TeacherDashboard() {
     fetchSummary();
   }, [className, section, token, students.length]);
 
+<<<<<<< HEAD
   // ===== SET ATTENDANCE STATUS =====
+=======
+  /* ===== SET ATTENDANCE STATUS ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const setStatus = (id, status) => {
     if (locked) return;
     setAttendance((p) => ({ ...p, [id]: status }));
   };
 
+<<<<<<< HEAD
   // ===== SAVE ATTENDANCE =====
+=======
+  /* ===== SAVE ATTENDANCE ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const saveAttendance = async () => {
     setError("");
     setMessage("");
 
     if (!date) {
+<<<<<<< HEAD
       setModalTitle("Missing date");
       setModalMsg("Select a date first");
       setModalType("error");
       setModalVisible(true);
+=======
+      setError("Select a date first");
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       return;
     }
 
@@ -282,14 +352,19 @@ export default function TeacherDashboard() {
     const data = await res.json();
 
     if (!res.ok) {
+<<<<<<< HEAD
       setModalTitle("Save failed");
       setModalMsg(data.error || "Save failed");
       setModalType("error");
       setModalVisible(true);
+=======
+      setError(data.error || "Save failed");
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       return;
     }
 
     setMessage("Draft saved");
+<<<<<<< HEAD
     setModalTitle("Saved");
     setModalMsg("Draft saved successfully");
     setModalType("success");
@@ -297,15 +372,24 @@ export default function TeacherDashboard() {
   };
 
   // ===== SUBMIT ATTENDANCE =====
+=======
+  };
+
+  /* ===== SUBMIT ATTENDANCE ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const submitAttendance = async () => {
     setError("");
     setMessage("");
 
     if (!date) {
+<<<<<<< HEAD
       setModalTitle("Missing date");
       setModalMsg("Please select a date before finalizing attendance");
       setModalType("error");
       setModalVisible(true);
+=======
+      setError("Please select a date");
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       return;
     }
 
@@ -322,15 +406,20 @@ export default function TeacherDashboard() {
       const data = await res.json();
 
       if (!res.ok) {
+<<<<<<< HEAD
         setModalTitle("Submit failed");
         setModalMsg(data.error || "Submit failed");
         setModalType("error");
         setModalVisible(true);
+=======
+        setError(data.error || "Submit failed");
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
         return;
       }
 
       setLocked(true);
       setMessage("Attendance finalized");
+<<<<<<< HEAD
       setModalTitle("Finalized");
       setModalMsg("Attendance finalized successfully");
       setModalType("success");
@@ -344,6 +433,14 @@ export default function TeacherDashboard() {
   };
 
   // ===== SAVE HOMEWORK =====
+=======
+    } catch (e) {
+      setError("Server not reachable");
+    }
+  };
+
+  /* ===== SAVE HOMEWORK ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const saveHomework = async () => {
     setError("");
     setMessage("");
@@ -377,6 +474,10 @@ export default function TeacherDashboard() {
       setHwSubject("");
       setHwDueDate("");
 
+<<<<<<< HEAD
+=======
+      // Refresh homework list
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       const res2 = await fetch(`${API_URL}/api/teacher/homework`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -389,7 +490,11 @@ export default function TeacherDashboard() {
     }
   };
 
+<<<<<<< HEAD
   // ===== SAVE MARKS =====
+=======
+  /* ===== SAVE MARKS ===== */
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const saveMarks = async () => {
     setError("");
     setMessage("");
@@ -434,6 +539,7 @@ export default function TeacherDashboard() {
   const presentCount = Object.values(attendance || {}).filter((v) => v === "PRESENT").length;
   const absentCount = Object.values(attendance || {}).filter((v) => v === "ABSENT").length;
 
+<<<<<<< HEAD
   const navItems = [
     { id: "dashboard", label: "Dashboard" },
     { id: "academics", label: "Academics" },
@@ -486,10 +592,36 @@ export default function TeacherDashboard() {
                   ? "bg-slate-700 text-cyan-400"
                   : "text-slate-300 hover:bg-slate-700/50"
               }`}
+=======
+  return (
+    <div style={styles.layout}>
+      <div style={styles.sidebar}>
+        <h2 style={styles.logo}>{(teacher && (teacher.name || teacher.fullName || teacher.displayName)) || "Teacher"}</h2>
+        {(teacher && (teacher.class || teacher.section)) && (
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
+            {teacher.class ? `Class ${teacher.class}` : ""}{teacher.class && teacher.section ? ` • ` : ""}{teacher.section ? `Section ${teacher.section}` : ""}
+          </div>
+        )}
+
+        <div style={styles.navItems}>
+          {[
+            { id: "dashboard", label: "Dashboard" },
+            { id: "academics", label: "Academics" },
+            { id: "summary", label: "Students" },
+            { id: "homework", label: "Homework" },
+            { id: "events", label: "Events" },
+            { id: "attendance", label: "Attendance" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              style={styles.navBtn(activeTab === item.id)}
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
             >
               {item.label}
             </button>
           ))}
+<<<<<<< HEAD
         </nav>
 
         {/* Logout */}
@@ -497,10 +629,16 @@ export default function TeacherDashboard() {
           onClick={handleLogout}
           className="w-full py-3 bg-red-900 hover:bg-red-800 text-white font-bold rounded-lg transition text-sm"
         >
+=======
+        </div>
+
+        <button onClick={handleLogout} style={styles.logoutBtn}>
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
           Logout
         </button>
       </div>
 
+<<<<<<< HEAD
       {/* ===== MAIN CONTENT ===== */}
       <div className="flex-1 w-full md:w-auto">
         {/* Header */}
@@ -622,11 +760,132 @@ export default function TeacherDashboard() {
                       <input
                         type="text"
                         placeholder="Marks"
+=======
+      <div style={styles.page}>
+        {/* ===== DASHBOARD / CLASS SUMMARY ===== */}
+        {activeTab === "dashboard" && (
+          <>
+            <h1 style={styles.title}>Class Summary</h1>
+            <p style={styles.subtitle}>Overview of your class</p>
+
+            <div style={styles.grid}>
+              <div style={styles.card}>
+                <span style={styles.cardLabel}>Class</span>
+                <b style={styles.cardValue}>{classInfo?.className || "—"}</b>
+              </div>
+
+              <div style={styles.card}>
+                <span style={styles.cardLabel}>Section</span>
+                <b style={styles.cardValue}>{classInfo?.section || "—"}</b>
+              </div>
+
+              <div style={styles.card}>
+                <span style={styles.cardLabel}>Total Students</span>
+                <b style={styles.cardValue}>{classInfo?.totalStudents || 0}</b>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ===== STUDENTS SUMMARY ===== */}
+        {activeTab === "summary" && (
+          <>
+            <h1 style={styles.title}>Students Summary</h1>
+            <p style={styles.subtitle}>Class {teacher.class} • Section {teacher.section}</p>
+
+            {students.length === 0 ? (
+              <div style={styles.card}>No students in this class</div>
+            ) : (
+              students.map((student) => {
+                // Get all marks for this student
+                const studentMarks = allMarks.filter((m) => m.rollNo === student.rollNo);
+                // Group by subject
+                const bySubject = {};
+                studentMarks.forEach((m) => {
+                  if (!bySubject[m.subject]) bySubject[m.subject] = [];
+                  bySubject[m.subject].push(m);
+                });
+
+                return (
+                  <div key={student._id} style={styles.card}>
+                    <div style={{ marginBottom: 8 }}>
+                      <b style={{ fontSize: 14 }}>{student.name}</b>
+                      <span style={{ fontSize: 12, color: "#64748b", marginLeft: 8 }}>Roll #{student.rollNo}</span>
+                    </div>
+
+                    {Object.keys(bySubject).length === 0 ? (
+                      <div style={{ fontSize: 12, color: "#94a3b8" }}>No marks yet</div>
+                    ) : (
+                      <div style={{ fontSize: 12 }}>
+                        {Object.entries(bySubject).map(([subj, marks]) => (
+                          <div key={subj} style={{ marginBottom: 6, padding: 6, background: "#f1f5f9", borderRadius: 4 }}>
+                            <div style={{ fontWeight: 600, color: "#334155" }}>{subj}</div>
+                            {marks.map((m, idx) => (
+                              <div key={idx} style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>
+                                {m.examName}: <b>{m.marks}</b>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </>
+        )}
+
+        {/* ===== ACADEMICS / EXAMS ===== */}
+        {activeTab === "academics" && (
+          <>
+            <h1 style={styles.title}>Academics / Exams</h1>
+            <p style={styles.subtitle}>Manage exam marks</p>
+
+            {error && <div style={styles.error}>{error}</div>}
+            {message && <div style={styles.success}>{message}</div>}
+
+            <div style={styles.formSection}>
+              <div style={styles.inputGroup}>
+                <select
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  style={styles.input}
+                >
+                  <option value="">Select Subject</option>
+                  {availableSubjects.length > 0 ? (
+                    availableSubjects.map((subj) => (
+                      <option key={subj._id} value={subj.subjectName}>
+                        {subj.subjectName}
+                      </option>
+                    ))
+                  ) : (
+                    <option disabled>No subjects available</option>
+                  )}
+                </select>
+                <input
+                  placeholder="Exam Name"
+                  value={exam}
+                  onChange={(e) => setExam(e.target.value)}
+                  style={styles.input}
+                />
+              </div>
+
+              <div style={{ paddingBottom: "110px" }}>
+                {students.map((s) => (
+                  <div key={s._id} style={styles.card}>
+                    <div style={styles.studentRow}>
+                      <div style={styles.name}>{s.name}</div>
+                      <input
+                        type="text"
+                        placeholder="Marks / AB"
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
                         value={marksData[s._id] || ""}
                         onChange={(e) => {
                           const value = e.target.value.toUpperCase();
                           setMarksData((prev) => ({ ...prev, [s._id]: value }));
                         }}
+<<<<<<< HEAD
                         className="w-20 px-3 py-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -882,10 +1141,16 @@ export default function TeacherDashboard() {
                         Absent
                       </button>
                     </div>
+=======
+                        style={styles.marksInput}
+                      />
+                    </div>
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
                   </div>
                 ))}
               </div>
 
+<<<<<<< HEAD
               <div className="fixed bottom-0 left-0 right-0 bg-white/95 border-t border-slate-200 p-4 flex gap-3 sm:relative sm:mt-4 sm:bg-transparent sm:border-0">
                 <button
                   onClick={saveAttendance}
@@ -932,3 +1197,542 @@ export default function TeacherDashboard() {
     </div>
   );
 }
+=======
+              <button style={styles.primaryBtn} onClick={saveMarks}>
+                Save Marks
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ===== HOMEWORK ===== */}
+        {activeTab === "homework" && (
+          <>
+            <h1 style={styles.title}>Homework / Assignments</h1>
+            <p style={styles.subtitle}>Add and manage homework</p>
+
+            {error && <div style={styles.error}>{error}</div>}
+            {message && <div style={styles.success}>{message}</div>}
+
+            <div style={styles.formSection}>
+              <h3 style={styles.formTitle}>Add New Homework</h3>
+
+              <div style={styles.inputGroup}>
+                <input
+                  placeholder="Title"
+                  value={hwTitle}
+                  onChange={(e) => setHwTitle(e.target.value)}
+                  style={styles.input}
+                  required
+                />
+                <input
+                  placeholder="Subject"
+                  value={hwSubject}
+                  onChange={(e) => setHwSubject(e.target.value)}
+                  style={styles.input}
+                  required
+                />
+                <input
+                  type="date"
+                  value={hwDueDate}
+                  onChange={(e) => setHwDueDate(e.target.value)}
+                  style={styles.input}
+                  required
+                />
+              </div>
+
+              <textarea
+                placeholder="Description (optional)"
+                value={hwDesc}
+                onChange={(e) => setHwDesc(e.target.value)}
+                style={{ ...styles.input, minHeight: "80px", fontFamily: "inherit" }}
+              />
+
+              <button
+                style={styles.primaryBtn}
+                onClick={saveHomework}
+                disabled={hwLoading}
+              >
+                {hwLoading ? "Adding..." : "Add Homework"}
+              </button>
+            </div>
+
+            <h3 style={styles.formTitle}>Your Homework</h3>
+            {homework.length === 0 ? (
+              <div style={styles.card}>No homework yet</div>
+            ) : (
+              homework.map((hw) => (
+                <div key={hw._id} style={styles.card}>
+                  <div style={{ marginBottom: "6px" }}>
+                    <b style={{ fontSize: "14px" }}>{hw.title}</b>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#64748b" }}>
+                    {hw.subject} • Due: {hw.dueDate}
+                  </div>
+                  {hw.description && (
+                    <div style={{ fontSize: "12px", marginTop: "6px", color: "#475569" }}>
+                      {hw.description}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </>
+        )}
+
+        {/* ===== EVENTS & CALENDAR ===== */}
+        {activeTab === "events" && (
+          <>
+            <h1 style={styles.title}>Events & Calendar</h1>
+                <p style={styles.subtitle}>School events and holidays</p>
+
+                {/* Event creation form for teachers */}
+                <div style={{ marginBottom: 12, padding: 12, background: "#fff", border: "1px solid #e6eef7" }}>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <input
+                      placeholder="Event name"
+                      value={eventName}
+                      onChange={(e) => setEventName(e.target.value)}
+                      style={styles.input}
+                    />
+                    <input
+                      type="date"
+                      value={eventDateVal}
+                      onChange={(e) => setEventDateVal(e.target.value)}
+                      style={styles.input}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <input
+                      placeholder="Short description (optional)"
+                      value={eventDesc}
+                      onChange={(e) => setEventDesc(e.target.value)}
+                      style={styles.input}
+                    />
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#334155" }}>
+                      <input type="checkbox" checked={isHoliday} onChange={(e) => setIsHoliday(e.target.checked)} />
+                      Holiday
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={async () => {
+                        // create event
+                        if (!eventName || !eventDateVal) {
+                          setError("Event name and date are required");
+                          return;
+                        }
+                        setError("");
+                        setMessage("");
+                        setEventLoading(true);
+                        try {
+                          const res = await fetch(`${API_URL}/api/teacher/events`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({
+                              eventName: eventName,
+                              description: eventDesc,
+                              eventDate: eventDateVal,
+                              isHoliday,
+                            }),
+                          });
+                          if (!res.ok) {
+                            const err = await res.json().catch(() => ({}));
+                            setError(err.error || "Failed to create event");
+                            setEventLoading(false);
+                            return;
+                          }
+                          const data = await res.json();
+                          // prepend to local list so UI updates immediately
+                          setEvents((prev) => [data.event, ...prev]);
+                          setEventName("");
+                          setEventDesc("");
+                          setEventDateVal("");
+                          setIsHoliday(false);
+                          setMessage("Event created")
+                        } catch (err) {
+                          console.error("CREATE EVENT ERROR:", err);
+                          setError("Failed to create event");
+                        } finally {
+                          setEventLoading(false);
+                        }
+                      }}
+                      disabled={eventLoading}
+                      style={styles.primaryBtn}
+                    >
+                      {eventLoading ? "Creating..." : "Create Event"}
+                    </button>
+                    <button onClick={() => { setEventName(""); setEventDesc(""); setEventDateVal(""); setIsHoliday(false); setError(""); setMessage(""); }} style={styles.secondaryBtn}>
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                {events.length === 0 ? (
+                  <div style={styles.card}>No events scheduled</div>
+                ) : (
+                  events.map((event) => (
+                    <div key={event._id} style={styles.card}>
+                      <div style={{ marginBottom: "6px" }}>
+                        <b style={{ fontSize: "14px" }}>{event.eventName}</b>
+                        {event.isHoliday && <span style={{ marginLeft: 8, color: "#dc2626", fontSize: 12 }}>Holiday</span>}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#64748b" }}>
+                        📅 {new Date(event.eventDate).toLocaleDateString()}
+                      </div>
+                      {event.description && (
+                        <div style={{ fontSize: "12px", marginTop: "6px", color: "#475569" }}>
+                          {event.description}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+          </>
+        )}
+
+        {/* ===== ATTENDANCE ===== */}
+        {activeTab === "attendance" && (
+          <>
+            <h1 style={styles.title}>Attendance</h1>
+            <p style={styles.subtitle}>Mark student attendance</p>
+
+            <div style={styles.statsRow}>
+              <div style={styles.stat}>
+                <span style={styles.statLabel}>Total</span>
+                <b style={styles.statValue}>{totalStudents}</b>
+              </div>
+              <div style={styles.stat}>
+                <span style={styles.statLabel}>Present</span>
+                <b style={styles.statValue}>{presentCount}</b>
+              </div>
+              <div style={styles.stat}>
+                <span style={styles.statLabel}>Absent</span>
+                <b style={styles.statValue}>{absentCount}</b>
+              </div>
+            </div>
+
+            <div style={styles.inputGroup}>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                style={styles.input}
+              />
+              <input
+                placeholder="Search student"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={styles.input}
+              />
+            </div>
+
+            {error && <div style={styles.error}>{error}</div>}
+            {message && <div style={styles.success}>{message}</div>}
+
+            <div style={{ paddingBottom: "110px" }}>
+              {students.map((s) => (
+                <div key={s._id} style={styles.card}>
+                  <div style={styles.studentRow}>
+                    <div>
+                      <div style={styles.name}>{s.name}</div>
+                      <div style={styles.roll}>Roll #{s.rollNo}</div>
+                    </div>
+                    <div style={{ fontSize: "13px", fontWeight: "700", color: "#6b7280" }}>
+                      {(percentages[String(s._id)] ?? 0) + "%"}
+                    </div>
+                  </div>
+
+                  <div style={styles.statusGroup}>
+                    {["PRESENT", "ABSENT", "LEAVE"].map((st) => (
+                      <button
+                        key={st}
+                        onClick={() => setStatus(s._id, st)}
+                        disabled={locked}
+                        style={styles.statusBtn(attendance[s._id], st, locked)}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={styles.bottomBar}>
+              <button onClick={saveAttendance} disabled={locked} style={styles.secondaryBtn}>
+                Save
+              </button>
+              <button
+                onClick={submitAttendance}
+                disabled={locked}
+                style={styles.primaryBtn}
+              >
+                Finalize
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ================= STYLES ================= */
+
+const styles = {
+  layout: {
+    display: "flex",
+    minHeight: "100vh",
+    background: "#f8fafc",
+  },
+
+  sidebar: {
+    width: "220px",
+    background: "#ffffff",
+    borderRight: "1px solid #e5e7eb",
+    padding: "16px",
+    display: "flex",
+    flexDirection: "column",
+    height: "100vh",
+  },
+
+  navItems: {
+    flex: 1,
+  },
+
+  logo: {
+    fontSize: "17px",
+    fontWeight: "900",
+    marginBottom: "18px",
+    color: "#f97316",
+  },
+
+  navBtn: (active) => ({
+    width: "100%",
+    padding: "10px 12px",
+    marginBottom: "8px",
+    borderRadius: "10px",
+    fontSize: "13px",
+    fontWeight: "700",
+    border: "none",
+    cursor: "pointer",
+    background: active ? "#fed7aa" : "transparent",
+    color: active ? "#9a3412" : "#475569",
+    textAlign: "left",
+  }),
+
+  logoutBtn: {
+    width: "100%",
+    padding: "10px 16px",
+    borderRadius: "12px",
+    border: "none",
+    background: "#fee2e2",
+    color: "#991b1b",
+    fontWeight: "800",
+    fontSize: "13px",
+    cursor: "pointer",
+    marginTop: "auto",
+  },
+
+  page: {
+    flex: 1,
+    padding: "18px",
+    minHeight: "100vh",
+    background: "#f9fafb",
+    fontFamily: "system-ui",
+    color: "#0f172a",
+  },
+
+  title: { fontSize: "20px", fontWeight: "800", marginBottom: "6px" },
+  subtitle: { fontSize: "12px", color: "#64748b", marginBottom: "16px" },
+  formTitle: { fontSize: "14px", fontWeight: "700", marginTop: "16px", marginBottom: "12px" },
+
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "12px",
+    marginBottom: "16px",
+  },
+
+  card: {
+    background: "#ffffff",
+    padding: "14px",
+    borderRadius: "12px",
+    border: "1px solid #e5e7eb",
+    marginBottom: "10px",
+  },
+
+  cardLabel: {
+    fontSize: "11px",
+    color: "#64748b",
+    display: "block",
+    marginBottom: "6px",
+  },
+
+  cardValue: {
+    fontSize: "18px",
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  statsRow: {
+    display: "flex",
+    gap: "10px",
+    marginBottom: "16px",
+    overflowX: "auto",
+  },
+
+  stat: {
+    minWidth: "100px",
+    background: "#ffffff",
+    borderRadius: "12px",
+    padding: "10px",
+    border: "1px solid #e5e7eb",
+  },
+
+  statLabel: {
+    fontSize: "11px",
+    color: "#64748b",
+    display: "block",
+    marginBottom: "6px",
+  },
+
+  statValue: {
+    fontSize: "15px",
+    fontWeight: "800",
+  },
+
+  formSection: {
+    background: "#ffffff",
+    padding: "16px",
+    borderRadius: "12px",
+    border: "1px solid #e5e7eb",
+    marginBottom: "16px",
+  },
+
+  inputGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    marginBottom: "12px",
+  },
+
+  input: {
+    padding: "10px 12px",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
+    background: "#ffffff",
+    fontSize: "13px",
+    fontFamily: "inherit",
+  },
+
+  marksInput: {
+    width: "80px",
+    padding: "8px",
+    borderRadius: "8px",
+    border: "1px solid #e5e7eb",
+    fontSize: "13px",
+  },
+
+  studentRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "8px",
+  },
+
+  name: { fontSize: "14px", fontWeight: "700" },
+  roll: { fontSize: "11px", color: "#64748b" },
+
+  statusGroup: {
+    display: "flex",
+    background: "#f1f5f9",
+    padding: "3px",
+    borderRadius: "10px",
+  },
+
+  statusBtn: (active, s, locked) => ({
+    flex: 1,
+    padding: "7px 0",
+    borderRadius: "8px",
+    border: "none",
+    fontSize: "10px",
+    fontWeight: "700",
+    background:
+      active === s
+        ? s === "PRESENT"
+          ? "#dcfce7"
+          : s === "ABSENT"
+          ? "#fee2e2"
+          : "#e0f2fe"
+        : "transparent",
+    color:
+      active === s
+        ? s === "PRESENT"
+          ? "#166534"
+          : s === "ABSENT"
+          ? "#991b1b"
+          : "#075985"
+        : "#64748b",
+    cursor: locked ? "not-allowed" : "pointer",
+  }),
+
+  bottomBar: {
+    position: "fixed",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    background: "#ffffff",
+    padding: "12px",
+    display: "flex",
+    gap: "10px",
+    borderTop: "1px solid #e5e7eb",
+  },
+
+  primaryBtn: {
+    flex: 1,
+    background: "#4f46e5",
+    color: "#ffffff",
+    borderRadius: "12px",
+    padding: "12px",
+    fontWeight: "700",
+    border: "none",
+    fontSize: "13px",
+    cursor: "pointer",
+  },
+
+  secondaryBtn: {
+    flex: 1,
+    background: "#eef2ff",
+    color: "#3730a3",
+    borderRadius: "12px",
+    padding: "12px",
+    fontWeight: "700",
+    border: "none",
+    fontSize: "13px",
+    cursor: "pointer",
+  },
+
+  error: {
+    background: "#fee2e2",
+    color: "#991b1b",
+    padding: "10px",
+    borderRadius: "8px",
+    marginBottom: "12px",
+    fontSize: "13px",
+  },
+
+  success: {
+    background: "#dcfce7",
+    color: "#166534",
+    padding: "10px",
+    borderRadius: "8px",
+    marginBottom: "12px",
+    fontSize: "13px",
+  },
+};
+>>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
