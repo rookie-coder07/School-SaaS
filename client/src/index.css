@@ -1,5 +1,3 @@
-@import "flowbite/src/themes/default";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
