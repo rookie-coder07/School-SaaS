@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+// Use Vite proxy during development, or environment variable for production
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 export default function DeveloperDashboard() {
   const navigate = useNavigate();
@@ -485,6 +486,7 @@ export default function DeveloperDashboard() {
     <div style={styles.layout}>
       <div style={styles.sidebar}>
         <div style={styles.logo}>🚀 DevPanel</div>
+        <div style={{ fontSize: "11px", color: "#999", marginBottom: "12px", paddingLeft: "8px" }}>Platform Admin</div>
 
         <div style={styles.navItems}>
           {schoolTabOptions.map((item) => (

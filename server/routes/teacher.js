@@ -176,6 +176,40 @@ export default function teacherRoutes(db) {
   });
 
   /* ================================
+     GET MARKS (VIEW) - TEACHER
+     ================================= */
+  router.get("/marks", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const teacher = await teachers.findOne({
+        userId: safeObjectId(req.user.userId),
+        ...(schoolId ? { schoolId } : {}),
+      });
+
+      if (!teacher) {
+        return res.status(404).json({ error: "Teacher not found" });
+      }
+
+      const marksData = await marks.find({
+        class: String(teacher.class),
+        section: String(teacher.section),
+        ...(schoolId ? { schoolId } : {}),
+      }).toArray();
+
+      // Transform to match frontend expectations (score -> marks)
+      const enrichedMarks = marksData.map(mark => ({
+        ...mark,
+        marks: mark.score, // Frontend expects 'marks' field
+      }));
+
+      res.json(enrichedMarks);
+    } catch (err) {
+      console.error("FETCH MARKS ERROR:", err);
+      res.status(500).json({ error: "Failed to fetch marks" });
+    }
+  });
+
+  /* ================================
      SAVE MARKS (TEACHER)
      ================================= */
   router.post("/marks/save", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {

@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import multer from "multer";
 import XLSX from "xlsx";
 import { MongoClient, ObjectId } from "mongodb";
+import MockDatabase from "./mockDb.js";
 
 dotenv.config();
 
@@ -60,27 +61,53 @@ const safeObjectId = (id) => {
 /* ================================
    DB CONNECTION
    ================================= */
-if (!process.env.MONGO_URI) {
-  console.error("❌ FATAL ERROR: MONGO_URI is not set in environment variables");
-  console.error("Please set MONGO_URI in your .env file before starting the server");
-  process.exit(1);
-}
-
-const client = new MongoClient(process.env.MONGO_URI);
+const client = process.env.MONGO_URI ? new MongoClient(process.env.MONGO_URI) : null;
 let db;
+let isMongoConnected = false;
 
 async function startServer() {
   try {
-    await client.connect();
-    db = client.db("school_saas");
-    console.log("✅ MongoDB connected successfully");
+    if (client && process.env.MONGO_URI) {
+      try {
+        await client.connect();
+        db = client.db("school_saas");
+        isMongoConnected = true;
+        console.log("✅ MongoDB connected successfully");
+      } catch (mongoError) {
+        console.warn("⚠️  MongoDB connection failed, running in fallback mode:", mongoError.message);
+        console.log("💡 Tip: Install MongoDB locally or set MONGO_URI to a MongoDB Atlas connection string");
+        db = new MockDatabase();
+        isMongoConnected = false;
+      }
+    } else {
+      console.warn("⚠️  MONGO_URI not set - running in fallback mode with in-memory database");
+      console.log("💡 To enable MongoDB: Set MONGO_URI in .env file");
+      db = new MockDatabase();
+      isMongoConnected = false;
+    }
 
     const PORT = process.env.PORT || 5000;
     
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📍 API URL: http://localhost:${PORT}`);
       console.log(`✅ Health Check: GET http://localhost:${PORT}/`);
+    });
+
+    // Set timeout for large file uploads (5 minutes)
+    server.setTimeout(5 * 60 * 1000);
+    
+    // Handle server errors
+    server.on('error', (err) => {
+      console.error("❌ SERVER ERROR:", err);
+    });
+
+    process.on('SIGTERM', () => {
+      console.log('SIGTERM received, closing server...');
+      server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+      });
     });
   } catch (err) {
     console.error("❌ FATAL ERROR: Failed to connect to MongoDB");
@@ -144,7 +171,10 @@ function requireTenantId(req, res, next) {
   console.log("✅ TENANT CHECK: schoolId valid -", schoolObjectId.toString());
   next();
 }
-const upload = multer({ dest: "uploads/" });
+const upload = multer({ 
+  dest: "uploads/",
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
 
 /* ================================
    HEALTH CHECK
@@ -190,8 +220,19 @@ app.post("/api/auth/login", async (req, res) => {
       { expiresIn: "1d" }
     );
 
+    // Fetch school name
+    let schoolName = "School";
+    try {
+      const school = await db.collection("schools").findOne({ _id: user.schoolId });
+      if (school && school.name) {
+        schoolName = school.name;
+      }
+    } catch (err) {
+      console.warn("⚠️ Could not fetch school name:", err.message);
+    }
+
     console.log("✅ ADMIN LOGIN (DB) - user:", email, "schoolId:", user.schoolId.toString());
-    return res.json({ token });
+    return res.json({ token, schoolName });
   } catch (err) {
     console.error("❌ ADMIN LOGIN ERROR:", err);
     return res.status(500).json({ error: "Login failed" });
@@ -203,27 +244,51 @@ app.post("/api/auth/login", async (req, res) => {
    ================================= */
 app.post("/api/auth/student/login", async (req, res) => {
   try {
-    const normalizedEmail = String(email || "").toLowerCase();
+    console.log("🔍 STUDENT LOGIN REQUEST - Body:", JSON.stringify(req.body));
+    
+    const body = req.body || {};
+    const studentEmail = body.email || "";
+    const studentPassword = body.password || "";
+    
+    console.log("🔍 Extracted - Email:", studentEmail, "Password length:", studentPassword.length);
+    
+    if (!studentEmail || !studentPassword) {
+      console.warn("⚠️ Missing email or password");
+      return res.status(400).json({ error: "Email and password required" });
+    }
+    
+    const normalizedEmail = studentEmail.toLowerCase().trim();
+    console.log("🔍 Normalized email:", normalizedEmail);
 
     const user = await db.collection("users").findOne({
       email: normalizedEmail,
       role: "STUDENT",
     });
+    console.log("🔍 User found:", !!user);
 
-    if (!user) return res.status(401).json({ error: "Student not found" });
+    if (!user) {
+      console.warn(`⚠️ STUDENT LOGIN FAILED: User not found for email: ${normalizedEmail}`);
+      return res.status(401).json({ error: "Student not found" });
+    }
 
-    const match = await bcrypt.compare(password, user.passwordHash);
-    if (!match) return res.status(401).json({ error: "Wrong password" });
+    const match = await bcrypt.compare(studentPassword, user.passwordHash);
+    console.log("🔍 Password match:", match);
+    
+    if (!match) {
+      console.warn(`⚠️ STUDENT LOGIN FAILED: Wrong password for email: ${normalizedEmail}`);
+      return res.status(401).json({ error: "Wrong password" });
+    }
 
     const student = await db.collection("students").findOne({
       userId: user._id,
     });
+    console.log("🔍 Student profile found:", !!student);
 
     if (!student) {
+      console.warn(`⚠️ STUDENT LOGIN FAILED: Student profile not found for email: ${normalizedEmail}`);
       return res.status(404).json({ error: "Student profile not found" });
     }
 
-    // ✅ TENANT CHECK: Student must have schoolId
     if (!student.schoolId) {
       console.error("❌ STUDENT LOGIN BLOCKED: Student has no schoolId", student._id);
       return res.status(500).json({ error: "Student profile incomplete (missing schoolId)" });
@@ -240,11 +305,22 @@ app.post("/api/auth/student/login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    console.log("✅ STUDENT LOGIN - studentId:", student._id, "schoolId:", student.schoolId);
-    res.json({ token, student: { ...student, _id: student._id.toString(), schoolId: student.schoolId.toString() } });
+    // Fetch school name
+    let schoolName = "School";
+    try {
+      const school = await db.collection("schools").findOne({ _id: student.schoolId });
+      if (school && school.name) {
+        schoolName = school.name;
+      }
+    } catch (err) {
+      console.warn("⚠️ Could not fetch school name:", err.message);
+    }
+
+    console.log(`✅ STUDENT LOGIN SUCCESS - email: ${normalizedEmail}, studentId: ${student._id}`);
+    res.json({ token, schoolName, student: { ...student, _id: student._id.toString(), schoolId: student.schoolId.toString() } });
   } catch (err) {
-    console.error("❌ STUDENT LOGIN ERROR:", err);
-    return res.status(500).json({ error: "Login failed" });
+    console.error("❌ STUDENT LOGIN ERROR - Full error:", err.message, "Stack:", err.stack);
+    return res.status(500).json({ error: "Login failed - " + err.message });
   }
 });
 
@@ -292,9 +368,21 @@ app.post("/api/auth/teacher/login", async (req, res) => {
       { expiresIn: "1d" }
     );
 
+    // Fetch school name
+    let schoolName = "School";
+    try {
+      const school = await db.collection("schools").findOne({ _id: teacher.schoolId });
+      if (school && school.name) {
+        schoolName = school.name;
+      }
+    } catch (err) {
+      console.warn("⚠️ Could not fetch school name:", err.message);
+    }
+
     console.log("✅ TEACHER LOGIN - teacherId:", teacher._id, "schoolId:", teacher.schoolId);
     res.json({
       token,
+      schoolName,
       teacher: {
         ...teacher,
         _id: teacher._id.toString(),
@@ -670,13 +758,19 @@ app.get("/api/teacher/marks", requireAuth, requireRole("TEACHER"), requireTenant
     const marks = await db
       .collection("marks")
       .find({
-        className: teacher.class,
-        section: teacher.section,
+        class: String(teacher.class),
+        section: String(teacher.section),
         schoolId,
       })
       .toArray();
 
-    res.json(marks);
+    // Add 'marks' field for frontend (it stores as 'score')
+    const enrichedMarks = marks.map(mark => ({
+      ...mark,
+      marks: mark.score,
+    }));
+
+    res.json(enrichedMarks);
   } catch (err) {
     console.error("TEACHER MARKS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch marks" });
@@ -694,55 +788,98 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
     const schoolId = req.user.schoolIdObj;
     if (!schoolId) return res.status(400).json({ error: "Missing or invalid schoolId in token" });
 
-    console.log("FILE:", req.file.path);
+    console.log("FILE:", req.file.path, "SIZE:", req.file.size);
     const workbook = XLSX.readFile(req.file.path);
     const sheetName = workbook.SheetNames[0];
     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-    for (const row of rows) {
-      console.log("UPLOADING ROW:", row);
+    console.log("TOTAL ROWS TO PROCESS:", rows.length);
 
-      const email =
-        row.email ||
-        `${row.name.replace(/\s+/g, "").toLowerCase()}@school.com`;
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
 
-      let user = await db.collection("users").findOne({ email });
+    // Process in batches of 100 for better performance
+    const batchSize = 100;
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = rows.slice(i, i + batchSize);
+      
+      await Promise.all(
+        batch.map(async (row) => {
+          try {
+            if (!row.name || !row.class || !row.section) {
+              throw new Error(`Missing required fields: name, class, or section`);
+            }
 
-      if (!user) {
-        const hash = await bcrypt.hash("student123", 10);
-        const r = await db.collection("users").insertOne({
-          email,
-          passwordHash: hash,
-          role: "STUDENT",
-        });
-        user = { _id: r.insertedId };
-        console.log("CREATED USER:", user._id);
-      }
+            const email =
+              row.email ||
+              `${row.name.replace(/\s+/g, "").toLowerCase()}@school.com`;
 
-      const result = await db.collection("students").updateOne(
-        { userId: user._id },
-        {
-          $set: {
-            name: row.name,
-            class: String(row.class),
-            section: String(row.section),
-            rollNo: row.rollNo || "",
-            parentName: row.parentName || "",
-            phone: row.phone || "",
-            schoolId: schoolId,
-            createdAt: new Date(),
-          },
-        },
-        { upsert: true }
+            let user = await db.collection("users").findOne({ email });
+
+            if (!user) {
+              const hash = await bcrypt.hash("student123", 10);
+              const r = await db.collection("users").insertOne({
+                email,
+                passwordHash: hash,
+                role: "STUDENT",
+                schoolId: schoolId,
+                createdAt: new Date(),
+              });
+              user = { _id: r.insertedId };
+              console.log("CREATED USER:", user._id);
+            }
+
+            await db.collection("students").updateOne(
+              { userId: user._id, schoolId: schoolId },
+              {
+                $set: {
+                  userId: user._id,
+                  email: email,
+                  name: row.name,
+                  class: String(row.class),
+                  className: String(row.class),
+                  section: String(row.section),
+                  rollNo: row.rollNo || "",
+                  parentName: row.parentName || "",
+                  phone: row.phone || "",
+                  schoolId: schoolId,
+                  createdAt: new Date(),
+                },
+              },
+              { upsert: true }
+            );
+
+            successCount++;
+          } catch (rowError) {
+            errorCount++;
+            errors.push({
+              row: row.name || "Unknown",
+              error: rowError.message,
+            });
+            console.error("ROW ERROR:", rowError.message, row);
+          }
+        })
       );
 
-      console.log("STUDENT UPSERT RESULT:", result.upsertedId || result.matchedCount);
+      console.log(`BATCH PROGRESS: Processed ${Math.min(i + batchSize, rows.length)}/${rows.length}`);
     }
 
-    res.json({ message: "Students uploaded successfully" });
+    console.log(`UPLOAD COMPLETE: ${successCount} success, ${errorCount} errors`);
+    res.json({ 
+      success: true,
+      message: `Students uploaded successfully`,
+      successCount,
+      errorCount,
+      errors: errors.slice(0, 10), // Return first 10 errors
+      students: [] 
+    });
   } catch (err) {
-    console.error("UPLOAD STUDENTS ERROR:", err);
-    res.status(500).json({ error: "Students upload failed" });
+    console.error("UPLOAD STUDENTS ERROR:", err.message, err.stack);
+    res.status(500).json({ 
+      error: "Students upload failed",
+      details: err.message 
+    });
   }
 });
 
@@ -758,48 +895,97 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
     const schoolId = req.user.schoolIdObj;
     if (!schoolId) return res.status(400).json({ error: "Invalid schoolId in token" });
 
+    console.log("FILE:", req.file.path, "SIZE:", req.file.size);
     const workbook = XLSX.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
 
-    for (const row of rows) {
-      const email =
-        row.email ||
-        `${row.name.replace(/\s+/g, "").toLowerCase()}@school.com`;
+    console.log("TOTAL ROWS TO PROCESS:", rows.length);
 
-      let user = await db.collection("users").findOne({ email });
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
 
-      if (!user) {
-        const hash = await bcrypt.hash("teacher123", 10);
+    // Process in batches of 100 for better performance
+    const batchSize = 100;
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = rows.slice(i, i + batchSize);
+      
+      await Promise.all(
+        batch.map(async (row) => {
+          try {
+            if (!row.name || !row.class || !row.section) {
+              throw new Error(`Missing required fields: name, class, or section`);
+            }
 
-        const result = await db.collection("users").insertOne({
-          email,
-          passwordHash: hash,
-          role: "TEACHER",
-        });
+            const email =
+              row.email ||
+              `${row.name.replace(/\s+/g, "").toLowerCase()}@school.com`;
 
-        user = { _id: result.insertedId };
-      }
+            let user = await db.collection("users").findOne({ email });
 
-      await db.collection("teachers").updateOne(
-        { userId: user._id },
-        {
-          $set: {
-            name: row.name,
-            subject: row.subject || "",
-            class: row.class || "",
-            section: row.section || "",
-            schoolId: schoolId,
-          },
-        },
-        { upsert: true }
+            if (!user) {
+              const hash = await bcrypt.hash("teacher123", 10);
+
+              const result = await db.collection("users").insertOne({
+                email,
+                passwordHash: hash,
+                role: "TEACHER",
+                schoolId: schoolId,
+                createdAt: new Date(),
+              });
+
+              user = { _id: result.insertedId };
+              console.log("CREATED USER:", user._id);
+            }
+
+            await db.collection("teachers").updateOne(
+              { userId: user._id, schoolId: schoolId },
+              {
+                $set: {
+                  userId: user._id,
+                  email: email,
+                  name: row.name,
+                  subject: row.subject || "",
+                  class: String(row.class),
+                  section: String(row.section),
+                  schoolId: schoolId,
+                  createdAt: new Date(),
+                },
+              },
+              { upsert: true }
+            );
+
+            successCount++;
+          } catch (rowError) {
+            errorCount++;
+            errors.push({
+              row: row.name || "Unknown",
+              error: rowError.message,
+            });
+            console.error("ROW ERROR:", rowError.message, row);
+          }
+        })
       );
+
+      console.log(`BATCH PROGRESS: Processed ${Math.min(i + batchSize, rows.length)}/${rows.length}`);
     }
 
-    res.json({ message: "Teachers uploaded successfully" });
+    console.log(`UPLOAD COMPLETE: ${successCount} success, ${errorCount} errors`);
+    res.json({ 
+      success: true,
+      message: `Teachers uploaded successfully`,
+      successCount,
+      errorCount,
+      errors: errors.slice(0, 10), // Return first 10 errors
+      teachers: [] 
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Teacher upload failed" });
+    console.error("UPLOAD TEACHERS ERROR:", err.message, err.stack);
+    res.status(500).json({ 
+      error: "Teacher upload failed",
+      details: err.message 
+    });
   }
 });
 /* ================================

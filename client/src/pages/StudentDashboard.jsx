@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -5,197 +6,98 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [student, setStudent] = useState(null);
-  const [teacher, setTeacher] = useState(null);
-  const [loading, setLoading] = useState(true);
-<<<<<<< HEAD
   const [sidebarOpen, setSidebarOpen] = useState(false);
-=======
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
-  const token = localStorage.getItem("studentToken");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [schoolId, setSchoolId] = useState("");
+  const [schoolName, setSchoolName] = useState("");
+  
+  // Student data
+  const [student, setStudent] = useState(null);
   const [marks, setMarks] = useState([]);
-  const [attendance, setAttendance] = useState([]);
+  const [attendance, setAttendance] = useState(null);
   const [homework, setHomework] = useState([]);
   const [events, setEvents] = useState([]);
-  const navigate = useNavigate();
+  const [teacher, setTeacher] = useState(null);
 
-<<<<<<< HEAD
-=======
-  // Initial dashboard load (student info + attendance + marks)
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
+  const navigate = useNavigate();
+  const token = localStorage.getItem("studentToken");
+
+  // Fetch complete dashboard data (student, attendance, marks, teacher)
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        setLoading(true);
-        const token = localStorage.getItem("studentToken");
         const res = await fetch(`${API_URL}/api/student/dashboard`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
-<<<<<<< HEAD
-=======
-          console.error("DASHBOARD FETCH FAILED:", res.status);
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
-          setLoading(false);
+          console.warn("Dashboard fetch failed, redirecting to login");
+          navigate("/", { replace: true });
           return;
         }
         const data = await res.json();
-<<<<<<< HEAD
-=======
-        console.log("DASHBOARD DATA:", data);
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
         setStudent(data.student || null);
+        setAttendance(data.attendance || []);
+        setMarks(data.marks || []);
         setTeacher(data.teacher || null);
-        setAttendance(Array.isArray(data.attendance) ? data.attendance : []);
-        setMarks(Array.isArray(data.marks) ? data.marks : []);
       } catch (err) {
-        console.error("DASHBOARD ERROR:", err);
-      } finally {
-        setLoading(false);
+        console.error("STUDENT DASHBOARD FETCH ERROR:", err);
+        navigate("/", { replace: true });
       }
     };
+    if (token) fetchDashboard();
+  }, [token, navigate]);
 
-    fetchDashboard();
-  }, []);
+  // Marks and attendance are already loaded from the dashboard fetch above
+  // No need for additional fetches
 
-<<<<<<< HEAD
-=======
-  // Fetch marks (optional additional refresh)
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
-  useEffect(() => {
-    const fetchMarks = async () => {
-      try {
-        setLoading(true);
-        const token = localStorage.getItem("studentToken");
-        const res = await fetch(`${API_URL}/api/student/marks`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) {
-          setMarks([]);
-          setLoading(false);
-          return;
-        }
-        const data = await res.json();
-        setMarks(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error("MARKS FETCH ERROR:", err);
-        setMarks([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchMarks();
-  }, []);
-
-<<<<<<< HEAD
-=======
-  // Fetch attendance when user opens the attendance tab (or refresh)
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
-  useEffect(() => {
-    if (activeTab !== "attendance") return;
-
-    const fetchAttendance = async () => {
-      try {
-        setLoading(true);
-        const token = localStorage.getItem("studentToken");
-        const res = await fetch(`${API_URL}/api/student/attendance`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) {
-          setAttendance([]);
-          setLoading(false);
-          return;
-        }
-        const data = await res.json();
-        setAttendance(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error("ATTENDANCE FETCH ERROR:", err);
-        setAttendance([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAttendance();
-  }, [activeTab]);
-
-<<<<<<< HEAD
-=======
-  // Fetch homework when user opens the homework tab
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
+  // Fetch homework
   useEffect(() => {
     if (activeTab !== "homework") return;
-
     const fetchHomework = async () => {
       try {
-        setLoading(true);
-        const token = localStorage.getItem("studentToken");
         const res = await fetch(`${API_URL}/api/teacher/student/homework`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
           setHomework([]);
-          setLoading(false);
           return;
         }
         const data = await res.json();
-        setHomework(Array.isArray(data) ? data : []);
+        setHomework(Array.isArray(data) ? data : data.homework || []);
       } catch (err) {
         console.error("HOMEWORK FETCH ERROR:", err);
         setHomework([]);
-      } finally {
-        setLoading(false);
       }
     };
+    if (token) fetchHomework();
+  }, [activeTab, token]);
 
-    fetchHomework();
-  }, [activeTab]);
-
-<<<<<<< HEAD
-=======
-  // Fetch events when user opens the events tab
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
+  // Fetch events
   useEffect(() => {
     if (activeTab !== "events") return;
-
     const fetchEvents = async () => {
       try {
-        setLoading(true);
-        const token = localStorage.getItem("studentToken");
         const res = await fetch(`${API_URL}/api/teacher/student/events`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
           setEvents([]);
-          setLoading(false);
           return;
         }
         const data = await res.json();
-        setEvents(Array.isArray(data) ? data : []);
+        setEvents(Array.isArray(data) ? data : data.events || []);
       } catch (err) {
         console.error("EVENTS FETCH ERROR:", err);
         setEvents([]);
-      } finally {
-        setLoading(false);
       }
     };
+    if (token) fetchEvents();
+  }, [activeTab, token]);
 
-    fetchEvents();
-  }, [activeTab]);
+  // Teacher info is already loaded from the dashboard fetch above
+  // No need for additional fetch
 
-<<<<<<< HEAD
-=======
-  // simple attendance summary
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
-  const total = attendance.length;
-  const present = attendance.filter((a) => a.status === "PRESENT").length;
-  const percentage = total === 0 ? 0 : Math.round((present / total) * 100);
-
-<<<<<<< HEAD
-=======
-  // add logout handler
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const handleLogout = async () => {
     try {
       const token = localStorage.getItem("studentToken");
@@ -206,24 +108,27 @@ export default function StudentDashboard() {
         });
       }
     } catch (err) {
-      console.error("Logout API error:", err);
+      console.error("Logout error:", err);
     } finally {
-<<<<<<< HEAD
       localStorage.removeItem("studentToken");
-      localStorage.removeItem("token");
-      localStorage.removeItem("adminToken");
-=======
-      // remove possible tokens and any session keys
-      localStorage.removeItem("studentToken");
-      localStorage.removeItem("token");
-      localStorage.removeItem("adminToken");
-      // SPA navigation to avoid full reload (keeps dev server connection)
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
-      navigate("/", { replace: true });
+      localStorage.removeItem("studentSchoolId");
+      localStorage.removeItem("studentSchoolName");
+      navigate("/");
     }
   };
 
-<<<<<<< HEAD
+  // Load schoolId and schoolName from localStorage
+  useEffect(() => {
+    const storedSchoolId = localStorage.getItem("studentSchoolId");
+    const storedSchoolName = localStorage.getItem("studentSchoolName");
+    if (storedSchoolId) {
+      setSchoolId(storedSchoolId);
+    }
+    if (storedSchoolName) {
+      setSchoolName(storedSchoolName);
+    }
+  }, []);
+
   const navItems = [
     { id: "dashboard", label: "Dashboard" },
     { id: "marks", label: "Marks" },
@@ -235,7 +140,6 @@ export default function StudentDashboard() {
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
-      {/* ===== MOBILE HAMBURGER ===== */}
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -252,6 +156,8 @@ export default function StudentDashboard() {
       >
         <div className="mb-6">
           <h2 className="text-xl font-black text-green-400 tracking-tight">Student</h2>
+          {student?.name && <p className="text-xs text-slate-400 mt-2">{student.name}</p>}
+          {schoolName && <p className="text-xs text-slate-500 mt-1 font-semibold">{schoolName}</p>}
         </div>
 
         <nav className="flex-1 space-y-1">
@@ -267,49 +173,20 @@ export default function StudentDashboard() {
                   ? "bg-slate-700 text-green-400"
                   : "text-slate-300 hover:bg-slate-700/50"
               }`}
-=======
-  return (
-    <div style={styles.layout}>
-      <div style={styles.sidebar}>
-        <h2 style={styles.logo}>Student</h2>
-
-        <div style={styles.navItems}>
-          {[
-            { id: "marks", label: "Marks" },
-            { id: "dashboard", label: "Dashboard" },
-            { id: "attendance", label: "Attendance" },
-            { id: "homework", label: "Homework" },
-            { id: "events", label: "Events" },
-            { id: "profile", label: "Profile" },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              style={styles.navBtn(activeTab === item.id)}
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
             >
               {item.label}
             </button>
           ))}
-<<<<<<< HEAD
         </nav>
 
         <button
           onClick={handleLogout}
           className="w-full py-3 bg-red-900 hover:bg-red-800 text-white font-bold rounded-lg transition text-sm"
-=======
-        </div>
-
-        <button
-          onClick={handleLogout}
-          style={styles.logoutBtn}
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
         >
           Logout
         </button>
       </div>
 
-<<<<<<< HEAD
       {/* ===== MAIN CONTENT ===== */}
       <div className="flex-1 w-full md:w-auto">
         {/* Header */}
@@ -375,56 +252,34 @@ export default function StudentDashboard() {
                       if (!rowMap[key]) rowMap[key] = { exam: m.exam ?? "Exam", date: m.date ?? null, marks: {} };
                       rowMap[key].marks[m.subject ?? "Other"] = m.score ?? null;
                     });
-
-                    const rows = Object.values(rowMap).sort((a, b) => {
-                      const da = a.date ? new Date(a.date) : null;
-                      const db = b.date ? new Date(b.date) : null;
-                      if (da && db) return db - da;
-                      if (da) return -1;
-                      if (db) return 1;
-                      return a.exam.localeCompare(b.exam);
-                    });
-
-                    return rows.map((r, ri) => (
-                      <div key={`exam-${ri}`} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                        <div className="font-bold text-slate-900 text-sm">{r.exam}</div>
-                        {r.date && (
-                          <div className="text-xs text-slate-500 mt-1">
-                            📅 {new Date(r.date).toLocaleDateString()}
-                          </div>
-                        )}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
-                          {subjects.map((s) => {
-                            const score = r.marks[s];
-                            const numeric = typeof score === "string" || typeof score === "number" ? Number(score) : NaN;
-                            const bgColor = !isNaN(numeric)
-                              ? numeric >= 80
-                                ? "bg-green-50"
-                                : numeric >= 70
-                                ? "bg-blue-50"
-                                : numeric >= 60
-                                ? "bg-yellow-50"
-                                : "bg-red-50"
-                              : "bg-slate-50";
-                            const textColor = !isNaN(numeric)
-                              ? numeric >= 80
-                                ? "text-green-600"
-                                : numeric >= 70
-                                ? "text-blue-600"
-                                : numeric >= 60
-                                ? "text-yellow-600"
-                                : "text-red-600"
-                              : "text-slate-600";
-                            return (
-                              <div key={`${ri}-${s}`} className={`${bgColor} p-3 rounded-lg text-center`}>
-                                <div className="text-xs text-slate-500 mb-1 truncate">{s}</div>
-                                <div className={`text-lg font-black ${textColor}`}>
-                                  {score !== null && score !== undefined ? score : "—"}
-                                </div>
-                              </div>
-                            );
-                          })}
+                    return Object.entries(rowMap).map(([key, row], idx) => (
+                      <div key={idx} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
+                          <h3 className="font-bold text-slate-900 text-sm">{row.exam}</h3>
+                          {row.date && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              {new Date(row.date).toLocaleDateString()}
+                            </p>
+                          )}
                         </div>
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                              <th className="px-4 py-2 text-left font-semibold text-slate-700">Subject</th>
+                              <th className="px-4 py-2 text-right font-semibold text-slate-700">Score</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {subjects.map((subj) => (
+                              <tr key={subj} className="border-b border-slate-200 hover:bg-slate-50">
+                                <td className="px-4 py-2 text-slate-700">{subj}</td>
+                                <td className="px-4 py-2 text-right font-bold text-slate-900">
+                                  {row.marks[subj] ?? "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     ));
                   })()}
@@ -436,79 +291,63 @@ export default function StudentDashboard() {
           {/* ===== ATTENDANCE ===== */}
           {activeTab === "attendance" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Attendance Overview</h2>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-center">
-                  <div className="text-xs text-slate-500">Total</div>
-                  <div className="text-2xl font-black text-slate-900 mt-1">{total}</div>
-                </div>
-                <div className="bg-green-50 p-3 rounded-lg border border-green-200 text-center">
-                  <div className="text-xs text-slate-500">Present</div>
-                  <div className="text-2xl font-black text-green-600 mt-1">{present}</div>
-                </div>
-                <div className="bg-red-50 p-3 rounded-lg border border-red-200 text-center">
-                  <div className="text-xs text-slate-500">Absent</div>
-                  <div className="text-2xl font-black text-red-600 mt-1">{total - present}</div>
-                </div>
-                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-center">
-                  <div className="text-xs text-slate-500">%</div>
-                  <div className="text-2xl font-black text-blue-600 mt-1">{percentage}%</div>
-                </div>
-              </div>
-
-              {attendance.length === 0 ? (
+              <h2 className="text-lg font-bold text-slate-900">Attendance</h2>
+              {!attendance || attendance.length === 0 ? (
                 <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
-                  No attendance records
+                  No attendance data available
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div>
                   {(() => {
-                    const sorted = [...attendance].sort((a, b) => {
-                      const dateA = new Date(a.date || 0);
-                      const dateB = new Date(b.date || 0);
-                      return dateB - dateA;
-                    });
-
-                    const grouped = {};
-                    sorted.forEach((record) => {
-                      if (!record.date) return;
-                      const date = new Date(record.date);
-                      const monthKey = date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-                      if (!grouped[monthKey]) grouped[monthKey] = [];
-                      grouped[monthKey].push(record);
-                    });
-
-                    return Object.keys(grouped).map((month) => (
-                      <div key={month}>
-                        <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">{month}</h3>
-                        <div className="space-y-2">
-                          {grouped[month].map((a, idx) => (
-                            <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 flex items-center justify-between">
-                              <div>
-                                <div className="font-semibold text-slate-900 text-sm">
-                                  {new Date(a.date).toLocaleDateString("en-US", {
-                                    weekday: "short",
-                                    month: "short",
-                                    day: "numeric",
-                                  })}
-                                </div>
-                                {a.subject && <div className="text-xs text-slate-500 mt-1">{a.subject}</div>}
-                              </div>
-                              <span
-                                className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
-                                  a.status === "PRESENT"
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-red-100 text-red-700"
-                                }`}
-                              >
-                                {a.status}
-                              </span>
-                            </div>
-                          ))}
+                    const total = attendance.length;
+                    const present = attendance.filter(a => a.status?.toUpperCase() === 'PRESENT').length;
+                    const absent = attendance.filter(a => a.status?.toUpperCase() === 'ABSENT').length;
+                    const percentage = total > 0 ? ((present / total) * 100).toFixed(1) : 0;
+                    
+                    return (
+                      <>
+                        <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-3 mb-6">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-600 font-medium">Total Classes</span>
+                            <span className="text-2xl font-black text-slate-900">{total}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-600 font-medium">Present</span>
+                            <span className="text-2xl font-black text-green-600">{present}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-600 font-medium">Absent</span>
+                            <span className="text-2xl font-black text-red-600">{absent}</span>
+                          </div>
+                          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                            <span className="text-slate-600 font-medium">Percentage</span>
+                            <span className="text-2xl font-black text-blue-600">{percentage}%</span>
+                          </div>
                         </div>
-                      </div>
-                    ));
+                        
+                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                          <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
+                            <h3 className="font-bold text-slate-900 text-sm">Recent Attendance</h3>
+                          </div>
+                          <div className="divide-y divide-slate-200 max-h-80 overflow-y-auto">
+                            {attendance.slice(0, 10).map((record, idx) => (
+                              <div key={idx} className="px-4 py-2 flex items-center justify-between hover:bg-slate-50">
+                                <span className="text-sm text-slate-700">
+                                  {record.date ? new Date(record.date).toLocaleDateString() : 'N/A'}
+                                </span>
+                                <span className={`text-xs font-bold px-2 py-1 rounded ${
+                                  record.status?.toUpperCase() === 'PRESENT' 
+                                    ? 'bg-green-100 text-green-700' 
+                                    : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {record.status?.toUpperCase() || 'N/A'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    );
                   })()}
                 </div>
               )}
@@ -518,7 +357,7 @@ export default function StudentDashboard() {
           {/* ===== HOMEWORK ===== */}
           {activeTab === "homework" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Your Homework</h2>
+              <h2 className="text-lg font-bold text-slate-900">Homework</h2>
               {homework.length === 0 ? (
                 <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
                   No homework assigned
@@ -527,9 +366,13 @@ export default function StudentDashboard() {
                 <div className="space-y-3">
                   {homework.map((hw) => (
                     <div key={hw._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                      <div className="font-bold text-slate-900 text-sm">{hw.title}</div>
-                      <div className="text-xs text-slate-500 mt-1">{hw.subject} • Due: {hw.dueDate}</div>
-                      {hw.description && <div className="text-sm text-slate-600 mt-2">{hw.description}</div>}
+                      <div className="font-bold text-slate-900 text-sm">{hw.title || hw.subject || 'Homework'}</div>
+                      <div className="text-xs text-slate-600 mt-2 line-clamp-2">{hw.description || 'No description'}</div>
+                      {hw.dueDate && (
+                        <div className="text-xs text-slate-500 mt-2">
+                          Due: {new Date(hw.dueDate).toLocaleDateString()}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -540,18 +383,22 @@ export default function StudentDashboard() {
           {/* ===== EVENTS ===== */}
           {activeTab === "events" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Events & Calendar</h2>
+              <h2 className="text-lg font-bold text-slate-900">Events</h2>
               {events.length === 0 ? (
                 <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
                   No events scheduled
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {events.map((event) => (
-                    <div key={event._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                      <div className="font-bold text-slate-900 text-sm">{event.eventName}</div>
-                      <div className="text-xs text-slate-500 mt-1">📅 {event.eventDate}</div>
-                      {event.description && <div className="text-sm text-slate-600 mt-2">{event.description}</div>}
+                  {events.map((evt) => (
+                    <div key={evt._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="font-bold text-slate-900 text-sm">{evt.eventName || evt.title || 'Event'}</div>
+                      <div className="text-xs text-slate-600 mt-2">{evt.description || 'No description'}</div>
+                      {evt.eventDate && (
+                        <div className="text-xs text-slate-500 mt-2">
+                          {new Date(evt.eventDate).toLocaleDateString()}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -560,467 +407,35 @@ export default function StudentDashboard() {
           )}
 
           {/* ===== PROFILE ===== */}
-          {activeTab === "profile" && (
+          {activeTab === "profile" && student && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Your Profile</h2>
-              <div className="space-y-3">
-                <div className="bg-white p-4 rounded-xl border border-slate-200">
-                  <div className="text-xs font-semibold text-slate-500 uppercase">Name</div>
-                  <div className="text-lg font-bold text-slate-900 mt-2">{student?.name ?? "Student Name"}</div>
+              <h2 className="text-lg font-bold text-slate-900">My Profile</h2>
+              <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-slate-600 font-medium">Name</span>
+                  <span className="text-slate-900 font-bold">{student.name}</span>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200">
-                  <div className="text-xs font-semibold text-slate-500 uppercase">Class / Section</div>
-                  <div className="text-lg font-bold text-slate-900 mt-2">
-                    {(student?.class ?? "—") + " / " + (student?.section ?? "—")}
-                  </div>
+                <div className="flex justify-between border-t border-slate-200 pt-3">
+                  <span className="text-slate-600 font-medium">Email</span>
+                  <span className="text-slate-900 font-bold text-sm">{student.email}</span>
                 </div>
-                {student?.rollNo && (
-                  <div className="bg-white p-4 rounded-xl border border-slate-200">
-                    <div className="text-xs font-semibold text-slate-500 uppercase">Roll No</div>
-                    <div className="text-lg font-bold text-slate-900 mt-2">{student.rollNo}</div>
-                  </div>
-                )}
-                {student?.parentName && (
-                  <div className="bg-white p-4 rounded-xl border border-slate-200">
-                    <div className="text-xs font-semibold text-slate-500 uppercase">Parent Name</div>
-                    <div className="text-lg font-bold text-slate-900 mt-2">{student.parentName}</div>
-                  </div>
-                )}
-                {student?.phone && (
-                  <div className="bg-white p-4 rounded-xl border border-slate-200">
-                    <div className="text-xs font-semibold text-slate-500 uppercase">Phone</div>
-                    <div className="text-lg font-bold text-slate-900 mt-2">{student.phone}</div>
-                  </div>
-                )}
-                <div className="bg-white p-4 rounded-xl border border-slate-200">
-                  <div className="text-xs font-semibold text-slate-500 uppercase">Teacher</div>
-                  <div className="text-lg font-bold text-slate-900 mt-2">{teacher?.name ?? "Not assigned"}</div>
+                <div className="flex justify-between border-t border-slate-200 pt-3">
+                  <span className="text-slate-600 font-medium">Class</span>
+                  <span className="text-slate-900 font-bold">{student.class}</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-200 pt-3">
+                  <span className="text-slate-600 font-medium">Section</span>
+                  <span className="text-slate-900 font-bold">{student.section}</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-200 pt-3">
+                  <span className="text-slate-600 font-medium">Roll No</span>
+                  <span className="text-slate-900 font-bold">{student.rollNo}</span>
                 </div>
               </div>
             </div>
           )}
         </div>
-=======
-      <div style={styles.page}>
-        {loading && <div style={{ marginBottom: 12 }}>Loading...</div>}
-
-        {activeTab === "marks" && (
-          <>
-            <h1 style={styles.title}>Marks</h1>
-            <p style={styles.subtitle}>Your exam performance</p>
-
-            {marks.length === 0 ? (
-              <div style={{ ...styles.card, maxWidth: "100%" }}>
-                <span style={styles.cardLabel}>Status</span>
-                <b style={styles.cardValue}>No marks available</b>
-              </div>
-            ) : (
-              <>
-                {/* Build subjects and rows (exam+date) */}
-                {(() => {
-                  const subjects = Array.from(new Set(marks.map(m => m.subject ?? "Other"))).sort();
-
-                  const rowMap = {};
-                  marks.forEach(m => {
-                    const key = `${m.exam ?? "Exam"}|${m.date ?? ""}`;
-                    if (!rowMap[key]) rowMap[key] = { exam: m.exam ?? "Exam", date: m.date ?? null, marks: {} };
-                    rowMap[key].marks[m.subject ?? "Other"] = m.score ?? null;
-                  });
-
-                  const rows = Object.values(rowMap).sort((a, b) => {
-                    const da = a.date ? new Date(a.date) : null;
-                    const db = b.date ? new Date(b.date) : null;
-                    if (da && db) return db - da;
-                    if (da) return -1;
-                    if (db) return 1;
-                    return a.exam.localeCompare(b.exam);
-                  });
-
-                  return (
-                    <div style={{ overflowX: "auto", width: "100%" }}>
-                      <div style={{ ...styles.marksGrid, gridTemplateColumns: `200px repeat(${subjects.length}, minmax(120px, 1fr))` }}>
-                        <div style={styles.gridHeader}></div>
-                        {subjects.map(s => (
-                          <div key={s} style={styles.gridHeader}>{s}</div>
-                        ))}
-
-                        {rows.map((r, ri) => (
-                          <>
-                            <div key={`exam-${ri}`} style={styles.gridExamLabel}>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{r.exam}</div>
-                              {r.date && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>📅 {new Date(r.date).toLocaleDateString()}</div>}
-                            </div>
-
-                            {subjects.map(s => {
-                              const score = r.marks[s];
-                              const numeric = typeof score === "string" || typeof score === "number" ? Number(score) : NaN;
-                              const color = !isNaN(numeric) ? (numeric >= 80 ? "#15803d" : numeric >= 70 ? "#0891b2" : numeric >= 60 ? "#f59e0b" : "#dc2626") : "#0f172a";
-                              return (
-                                <div key={`${ri}-${s}`} style={styles.gridCell}>
-                                  <div style={{ ...styles.gridCellInner, color }}>{(score !== null && score !== undefined) ? score : "—"}</div>
-                                </div>
-                              );
-                            })}
-                          </>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </>
-            )}
-          </>
-        )}
-
-        {activeTab === "dashboard" && (
-          <>
-            <h1 style={styles.title}>Student Dashboard</h1>
-            <p style={styles.subtitle}>Welcome {student?.name ?? "Student"}</p>
-
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 8 }}>
-              <div style={{ ...styles.card, minWidth: 180 }}>
-                <span style={styles.cardLabel}>Class</span>
-                <b style={styles.cardValue}>{student?.class ?? "—"}</b>
-              </div>
-              <div style={{ ...styles.card, minWidth: 220 }}>
-                <span style={styles.cardLabel}>Assigned Teacher</span>
-                <b style={styles.cardValue}>{teacher?.name ?? "Not assigned"}</b>
-                {teacher?.subject && <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>{teacher.subject}</div>}
-              </div>
-            </div>
-
-            <div style={styles.card}>
-              <span style={styles.cardLabel}>Status</span>
-              <b style={styles.cardValue}>Active</b>
-            </div>
-          </>
-        )}
-
-        {activeTab === "attendance" && (
-          <>
-            <h1 style={styles.title}>Attendance</h1>
-            <p style={styles.subtitle}>Your attendance overview</p>
-
-            {/* Overall attendance summary */}
-            <div style={styles.attendanceSummary}>
-              <div style={styles.summaryCard}>
-                <span style={styles.summaryLabel}>Total Classes</span>
-                <b style={styles.summaryValue}>{attendance.length}</b>
-              </div>
-              <div style={styles.summaryCard}>
-                <span style={styles.summaryLabel}>Present</span>
-                <b style={{ ...styles.summaryValue, color: "#15803d" }}>
-                  {attendance.filter((a) => a.status === "PRESENT").length}
-                </b>
-              </div>
-              <div style={styles.summaryCard}>
-                <span style={styles.summaryLabel}>Absent</span>
-                <b style={{ ...styles.summaryValue, color: "#dc2626" }}>
-                  {attendance.filter((a) => a.status === "ABSENT").length}
-                </b>
-              </div>
-              <div style={styles.summaryCard}>
-                <span style={styles.summaryLabel}>Attendance %</span>
-                <b style={styles.summaryValue}>{percentage}%</b>
-              </div>
-            </div>
-
-            {attendance.length === 0 ? (
-              <div style={{ ...styles.card, maxWidth: "100%" }}>No attendance records</div>
-            ) : (
-              <>
-                {/* Sort by date (most recent first) and group by month */}
-                {(() => {
-                  const sorted = [...attendance].sort((a, b) => {
-                    const dateA = new Date(a.date || 0);
-                    const dateB = new Date(b.date || 0);
-                    return dateB - dateA;
-                  });
-
-                  const grouped = {};
-                  sorted.forEach(record => {
-                    if (!record.date) return;
-                    const date = new Date(record.date);
-                    const monthKey = date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-                    if (!grouped[monthKey]) grouped[monthKey] = [];
-                    grouped[monthKey].push(record);
-                  });
-
-                  return Object.keys(grouped).map(month => (
-                    <div key={month} style={{ marginBottom: 20 }}>
-                      <h3 style={{ fontSize: "13px", fontWeight: "700", color: "#334155", marginBottom: 10 }}>
-                        {month}
-                      </h3>
-                      {grouped[month].map((a, idx) => (
-                        <div key={idx} style={styles.attendanceCard}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div>
-                              <div style={{ fontSize: "13px", fontWeight: "600", color: "#1e293b" }}>
-                                {new Date(a.date).toLocaleDateString("en-US", { 
-                                  weekday: "short", 
-                                  month: "short", 
-                                  day: "numeric" 
-                                })}
-                              </div>
-                              {a.subject && (
-                                <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
-                                  {a.subject}
-                                </div>
-                              )}
-                            </div>
-                            <div style={{
-                              padding: "4px 12px",
-                              borderRadius: "6px",
-                              background: a.status === "PRESENT" ? "#ecfdf5" : "#fee2e2",
-                              color: a.status === "PRESENT" ? "#15803d" : "#991b1b",
-                              fontSize: "12px",
-                              fontWeight: "700"
-                            }}>
-                              {a.status}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ));
-                })()}
-              </>
-            )}
-          </>
-        )}
-
-        {activeTab === "profile" && (
-          <>
-            <h1 style={styles.title}>Profile</h1>
-            <p style={styles.subtitle}>Your student information</p>
-
-            <div style={styles.card}>
-              <span style={styles.cardLabel}>Name</span>
-              <b style={styles.cardValue}>{student?.name ?? "Student Name"}</b>
-            </div>
-            <div style={{ ...styles.card, marginTop: 12 }}>
-              <span style={styles.cardLabel}>Class / Section</span>
-              <b style={styles.cardValue}>{(student?.class ?? "—") + " / " + (student?.section ?? "—")}</b>
-            </div>
-            <div style={{ ...styles.card, marginTop: 12 }}>
-              <span style={styles.cardLabel}>Teacher</span>
-              <b style={styles.cardValue}>{teacher?.name ?? "Not assigned"}</b>
-            </div>
-          </>
-        )}
-
-        {activeTab === "homework" && (
-          <>
-            <h1 style={styles.title}>Homework / Assignments</h1>
-            <p style={styles.subtitle}>Your assigned homework</p>
-
-            {homework.length === 0 ? (
-              <div style={styles.card}>No homework assigned</div>
-            ) : (
-              homework.map((hw) => (
-                <div key={hw._id} style={styles.card}>
-                  <div style={{ marginBottom: "6px" }}>
-                    <b style={{ fontSize: "14px" }}>{hw.title}</b>
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#64748b" }}>
-                    {hw.subject} • Due: {hw.dueDate}
-                  </div>
-                  {hw.description && (
-                    <div style={{ fontSize: "12px", marginTop: "6px", color: "#475569" }}>
-                      {hw.description}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </>
-        )}
-
-        {activeTab === "events" && (
-          <>
-            <h1 style={styles.title}>Events & Calendar</h1>
-            <p style={styles.subtitle}>School events and holidays</p>
-
-            {events.length === 0 ? (
-              <div style={styles.card}>No events scheduled</div>
-            ) : (
-              events.map((event) => (
-                <div key={event._id} style={styles.card}>
-                  <div style={{ marginBottom: "6px" }}>
-                    <b style={{ fontSize: "14px" }}>{event.eventName}</b>
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#64748b" }}>
-                    📅 {event.eventDate}
-                  </div>
-                  {event.description && (
-                    <div style={{ fontSize: "12px", marginTop: "6px", color: "#475569" }}>
-                      {event.description}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </>
-        )}
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       </div>
     </div>
   );
 }
-<<<<<<< HEAD
-=======
-
-/* STYLES (unchanged) */
-const styles = {
-  layout: {
-    display: "flex",
-    minHeight: "100vh",
-    background: "#f8fafc",
-  },
-  sidebar: {
-    width: "220px",
-    background: "#ffffff",
-    borderRight: "1px solid #e5e7eb",
-    padding: "16px",
-    display: "flex",
-    flexDirection: "column",
-    height: "100vh",
-  },
-  navItems: {
-    flex: 1,
-  },
-  logo: {
-    fontSize: "17px",
-    fontWeight: "900",
-    marginBottom: "18px",
-    color: "#16a34a",
-  },
-  navBtn: (active) => ({
-    width: "100%",
-    padding: "10px 12px",
-    marginBottom: "8px",
-    borderRadius: "10px",
-    fontSize: "13px",
-    fontWeight: "700",
-    border: "none",
-    cursor: "pointer",
-    background: active ? "#ecfdf5" : "transparent",
-    color: active ? "#15803d" : "#475569",
-    textAlign: "left",
-  }),
-  page: {
-    flex: 1,
-    padding: "18px",
-  },
-  title: {
-    fontSize: "20px",
-    fontWeight: "800",
-  },
-  subtitle: {
-    fontSize: "12px",
-    color: "#64748b",
-    marginBottom: "14px",
-  },
-  card: {
-    background: "#ffffff",
-    padding: "16px",
-    borderRadius: "12px",
-    border: "1px solid #e5e7eb",
-    marginBottom: "14px",
-  },
-  cardLabel: {
-    fontSize: "11px",
-    color: "#64748b",
-    display: "block",
-    marginBottom: "6px",
-  },
-  cardValue: {
-    fontSize: "18px",
-    fontWeight: "900",
-    color: "#0f172a",
-  },
-  logoutBtn: {
-    width: "100%",
-    padding: "10px 16px",
-    borderRadius: "12px",
-    border: "none",
-    background: "#fee2e2",
-    color: "#991b1b",
-    fontWeight: "800",
-    fontSize: "13px",
-    cursor: "pointer",
-    marginTop: "auto",
-  },
-  marksCard: {
-    background: "#ffffff",
-    padding: "14px 16px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    marginBottom: "10px",
-    transition: "all 0.2s ease",
-  },
-  marksGrid: {
-    display: "grid",
-    gap: "8px",
-    alignItems: "start",
-    width: "100%",
-  },
-  gridHeader: {
-    fontSize: 13,
-    fontWeight: 800,
-    padding: "10px 12px",
-    borderBottom: "2px solid #e6eef5",
-    color: "#0f172a",
-    background: "#ffffff",
-  },
-  gridExamLabel: {
-    padding: "10px 12px",
-    borderRight: "1px solid #eef2f7",
-    background: "#fff",
-  },
-  gridCell: {
-    padding: "8px 10px",
-  },
-  gridCellInner: {
-    background: "#ffffff",
-    border: "1px solid #e5e7eb",
-    borderRadius: 8,
-    padding: "8px 10px",
-    fontWeight: 800,
-    textAlign: "center",
-  },
-  attendanceCard: {
-    background: "#ffffff",
-    padding: "14px 16px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    marginBottom: "10px",
-    transition: "all 0.2s ease",
-  },
-  attendanceSummary: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-    gap: "12px",
-    marginBottom: "20px",
-  },
-  summaryCard: {
-    background: "#ffffff",
-    padding: "16px",
-    borderRadius: "12px",
-    border: "1px solid #e5e7eb",
-    textAlign: "center",
-  },
-  summaryLabel: {
-    fontSize: "11px",
-    color: "#64748b",
-    display: "block",
-    marginBottom: "8px",
-    fontWeight: "600",
-  },
-  summaryValue: {
-    fontSize: "24px",
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-};
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262

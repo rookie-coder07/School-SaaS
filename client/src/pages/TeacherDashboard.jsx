@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import * as XLSX from "xlsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -11,14 +13,9 @@ export default function TeacherDashboard() {
   const [events, setEvents] = useState([]);
   const [marks, setMarks] = useState({});
   const [percentages, setPercentages] = useState({});
-<<<<<<< HEAD
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalTitle, setModalTitle] = useState("");
-  const [modalMsg, setModalMsg] = useState("");
-  const [modalType, setModalType] = useState("info");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-=======
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
+  const [schoolId, setSchoolId] = useState("");
+  const [schoolName, setSchoolName] = useState("");
   
   const navigate = useNavigate();
   const [date, setDate] = useState("");
@@ -44,13 +41,14 @@ export default function TeacherDashboard() {
   const [subject, setSubject] = useState("");
   const [exam, setExam] = useState("");
   const [marksData, setMarksData] = useState({});
-<<<<<<< HEAD
   const [allMarks, setAllMarks] = useState([]);
   const [availableSubjects, setAvailableSubjects] = useState([]);
-=======
-  const [allMarks, setAllMarks] = useState([]); // For summary display
-  const [availableSubjects, setAvailableSubjects] = useState([]); // Fetch from admin
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
+
+  // ===== EXCEL UPLOAD STATE =====
+  const [excelFile, setExcelFile] = useState(null);
+  const [excelSubject, setExcelSubject] = useState("");
+  const [excelExam, setExcelExam] = useState("");
+  const [excelLoading, setExcelLoading] = useState(false);
 
   // ===== EVENTS FORM STATE =====
   const [eventName, setEventName] = useState("");
@@ -58,6 +56,17 @@ export default function TeacherDashboard() {
   const [eventDateVal, setEventDateVal] = useState("");
   const [isHoliday, setIsHoliday] = useState(false);
   const [eventLoading, setEventLoading] = useState(false);
+
+  // ===== ANALYTICS STATE =====
+  const [analyticsData, setAnalyticsData] = useState({
+    marksData: [],
+    attendanceData: [],
+    classAverage: 0,
+    topper: null,
+    lowScorer: null,
+    averageAttendance: 0,
+  });
+  const [marksRefreshTrigger, setMarksRefreshTrigger] = useState(0);
 
   const handleLogout = async () => {
     try {
@@ -72,15 +81,25 @@ export default function TeacherDashboard() {
       console.error("Logout API error:", err);
     } finally {
       localStorage.removeItem("teacherToken");
+      localStorage.removeItem("teacherSchoolId");
+      localStorage.removeItem("teacherSchoolName");
       navigate("/");
     }
   };
 
-<<<<<<< HEAD
-  // ===== FETCH CLASS SUMMARY =====
-=======
+  // Load schoolId and schoolName from localStorage
+  useEffect(() => {
+    const storedSchoolId = localStorage.getItem("teacherSchoolId");
+    const storedSchoolName = localStorage.getItem("teacherSchoolName");
+    if (storedSchoolId) {
+      setSchoolId(storedSchoolId);
+    }
+    if (storedSchoolName) {
+      setSchoolName(storedSchoolName);
+    }
+  }, []);
+
   /* ===== FETCH CLASS SUMMARY ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     const fetchClassSummary = async () => {
       try {
@@ -102,11 +121,7 @@ export default function TeacherDashboard() {
     if (token) fetchClassSummary();
   }, [token]);
 
-<<<<<<< HEAD
-  // ===== FETCH HOMEWORK =====
-=======
   /* ===== FETCH HOMEWORK ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     if (activeTab !== "homework") return;
 
@@ -130,11 +145,7 @@ export default function TeacherDashboard() {
     fetchHomework();
   }, [activeTab, token]);
 
-<<<<<<< HEAD
-  // ===== FETCH EVENTS =====
-=======
   /* ===== FETCH EVENTS ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     if (activeTab !== "events") return;
 
@@ -158,11 +169,7 @@ export default function TeacherDashboard() {
     fetchEvents();
   }, [activeTab, token]);
 
-<<<<<<< HEAD
-  // ===== FETCH ALL MARKS FOR SUMMARY =====
-=======
   /* ===== FETCH ALL MARKS FOR SUMMARY ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     if (activeTab !== "summary") return;
 
@@ -186,23 +193,15 @@ export default function TeacherDashboard() {
     fetchAllMarks();
   }, [activeTab, token]);
 
-<<<<<<< HEAD
-  // ===== FETCH AVAILABLE SUBJECTS =====
-  useEffect(() => {
-    if (activeTab !== "academics" || !className || !section) {
-=======
   /* ===== FETCH AVAILABLE SUBJECTS ===== */
   useEffect(() => {
     if (activeTab !== "academics" || !className || !section) {
-      console.log("Skipping subjects fetch:", { activeTab, className, section });
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       return;
     }
 
     const fetchSubjects = async () => {
       try {
         const url = `${API_URL}/api/teacher/subjects?class=${encodeURIComponent(className)}&section=${encodeURIComponent(section)}`;
-<<<<<<< HEAD
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         
         const data = await res.json();
@@ -211,22 +210,6 @@ export default function TeacherDashboard() {
           const subjects = Array.isArray(data) ? data : (data.subjects || []);
           setAvailableSubjects(subjects);
         } else {
-=======
-        console.log("Fetching subjects from:", url);
-        console.log("Teacher data:", teacher);
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        
-        const data = await res.json();
-        console.log("Subjects response status:", res.status, "data:", JSON.stringify(data, null, 2));
-        console.log("Data is array?:", Array.isArray(data), "Data length:", Array.isArray(data) ? data.length : "N/A");
-        
-        if (res.ok) {
-          const subjects = Array.isArray(data) ? data : (data.subjects || []);
-          console.log("Setting availableSubjects to:", subjects);
-          setAvailableSubjects(subjects);
-        } else {
-          console.error("Subjects fetch error:", data);
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
           setAvailableSubjects([]);
         }
       } catch (err) {
@@ -236,15 +219,9 @@ export default function TeacherDashboard() {
     };
 
     fetchSubjects();
-<<<<<<< HEAD
-  }, [activeTab, className, section, token]);
-
-  // ===== FETCH STUDENTS =====
-=======
   }, [activeTab, className, section, token, teacher]);
 
   /* ===== FETCH STUDENTS ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     fetch(
       `${API_URL}/api/teacher/students?className=${className}&section=${section}`,
@@ -265,11 +242,7 @@ export default function TeacherDashboard() {
       });
   }, [className, section, token]);
 
-<<<<<<< HEAD
-  // ===== FETCH ATTENDANCE SUMMARY =====
-=======
   /* ===== FETCH ATTENDANCE SUMMARY ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   useEffect(() => {
     if (!token || !className) return;
 
@@ -299,34 +272,122 @@ export default function TeacherDashboard() {
     fetchSummary();
   }, [className, section, token, students.length]);
 
-<<<<<<< HEAD
-  // ===== SET ATTENDANCE STATUS =====
-=======
+  /* ===== FETCH ANALYTICS DATA ===== */
+  useEffect(() => {
+    if (activeTab !== "analytics" || !students.length) return;
+
+    const fetchAnalytics = async () => {
+      try {
+        // Fetch marks data
+        const marksRes = await fetch(`${API_URL}/api/teacher/marks`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const marksArray = marksRes.ok ? await marksRes.json() : [];
+        console.log("📊 MARKS FETCHED:", marksArray.length, marksArray.slice(0, 2));
+
+        // Fetch attendance summary
+        const attRes = await fetch(
+          `${API_URL}/api/teacher/attendance/summary?className=${encodeURIComponent(className)}&section=${encodeURIComponent(section || "")}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const attData = attRes.ok ? await attRes.json() : [];
+
+        // Process marks data
+        const studentMarksMap = {};
+        const subjectsSet = new Set();
+        
+        marksArray.forEach((m) => {
+          const studentId = String(m.studentId); // Convert to string for consistent key
+          if (!studentMarksMap[studentId]) {
+            studentMarksMap[studentId] = { name: "", marks: [] };
+          }
+          studentMarksMap[studentId].marks.push({ subject: m.subject, marks: m.marks, exam: m.exam });
+          subjectsSet.add(m.subject);
+        });
+
+        // Combine with student names
+        const enrichedMarks = students.map((s) => ({
+          name: s.name,
+          id: s._id,
+          ...(studentMarksMap[String(s._id)]?.marks || []).reduce((acc, m) => {
+            acc[`${m.subject} (${m.exam})`] = m.marks;
+            return acc;
+          }, {}),
+        }));
+
+        // Calculate statistics
+        const allMarksValues = marksArray.filter(m => m.marks).map(m => m.marks);
+        const classAverage = allMarksValues.length > 0 ? Math.round(allMarksValues.reduce((a, b) => a + b, 0) / allMarksValues.length) : 0;
+        const topper = marksArray.length > 0 ? marksArray.reduce((prev, current) => {
+          const matched = students.find(s => String(s._id) === String(current.studentId));
+          const currentWithName = { ...current, name: matched?.name || "Unknown" };
+          if (!prev) return currentWithName;
+          return current.marks > prev.marks ? currentWithName : prev;
+        }, null) : null;
+        console.log("🏆 TOPPER:", topper);
+        const lowScorer = marksArray.length > 0 ? marksArray.reduce((prev, current) => {
+          const matched = students.find(s => String(s._id) === String(current.studentId));
+          const currentWithName = { ...current, name: matched?.name || "Unknown" };
+          if (!prev) return currentWithName;
+          return current.marks < prev.marks ? currentWithName : prev;
+        }, null) : null;
+        console.log("📉 LOW SCORER:", lowScorer);
+
+        // Process attendance data
+        const attPercentages = {};
+        attData.forEach((d) => {
+          const id = String(d.studentId ?? d._id ?? "");
+          const total = Number(d.total) || 0;
+          const present = Number(d.present) || 0;
+          attPercentages[id] = total > 0 ? Math.round((present / total) * 100) : 0;
+        });
+
+        const attendanceData = students.map((s) => ({
+          name: s.name,
+          attendance: attPercentages[s._id] || 0,
+        }));
+
+        const averageAttendance = attendanceData.length > 0 
+          ? Math.round(attendanceData.reduce((sum, d) => sum + d.attendance, 0) / attendanceData.length)
+          : 0;
+
+        setAnalyticsData({
+          marksData: enrichedMarks,
+          attendanceData,
+          classAverage,
+          topper,
+          lowScorer,
+          averageAttendance,
+        });
+      } catch (err) {
+        console.error("ANALYTICS FETCH ERROR:", err);
+        setAnalyticsData({
+          marksData: [],
+          attendanceData: [],
+          classAverage: 0,
+          topper: null,
+          lowScorer: null,
+          averageAttendance: 0,
+        });
+      }
+    };
+
+    fetchAnalytics();
+}, [activeTab, students, token, className, section, marksRefreshTrigger]);
+
   /* ===== SET ATTENDANCE STATUS ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const setStatus = (id, status) => {
     if (locked) return;
     setAttendance((p) => ({ ...p, [id]: status }));
   };
 
-<<<<<<< HEAD
-  // ===== SAVE ATTENDANCE =====
-=======
   /* ===== SAVE ATTENDANCE ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const saveAttendance = async () => {
     setError("");
     setMessage("");
 
     if (!date) {
-<<<<<<< HEAD
-      setModalTitle("Missing date");
-      setModalMsg("Select a date first");
-      setModalType("error");
-      setModalVisible(true);
-=======
       setError("Select a date first");
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       return;
     }
 
@@ -352,44 +413,20 @@ export default function TeacherDashboard() {
     const data = await res.json();
 
     if (!res.ok) {
-<<<<<<< HEAD
-      setModalTitle("Save failed");
-      setModalMsg(data.error || "Save failed");
-      setModalType("error");
-      setModalVisible(true);
-=======
       setError(data.error || "Save failed");
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       return;
     }
 
     setMessage("Draft saved");
-<<<<<<< HEAD
-    setModalTitle("Saved");
-    setModalMsg("Draft saved successfully");
-    setModalType("success");
-    setModalVisible(true);
-  };
-
-  // ===== SUBMIT ATTENDANCE =====
-=======
   };
 
   /* ===== SUBMIT ATTENDANCE ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const submitAttendance = async () => {
     setError("");
     setMessage("");
 
     if (!date) {
-<<<<<<< HEAD
-      setModalTitle("Missing date");
-      setModalMsg("Please select a date before finalizing attendance");
-      setModalType("error");
-      setModalVisible(true);
-=======
       setError("Please select a date");
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       return;
     }
 
@@ -406,41 +443,18 @@ export default function TeacherDashboard() {
       const data = await res.json();
 
       if (!res.ok) {
-<<<<<<< HEAD
-        setModalTitle("Submit failed");
-        setModalMsg(data.error || "Submit failed");
-        setModalType("error");
-        setModalVisible(true);
-=======
         setError(data.error || "Submit failed");
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
         return;
       }
 
       setLocked(true);
       setMessage("Attendance finalized");
-<<<<<<< HEAD
-      setModalTitle("Finalized");
-      setModalMsg("Attendance finalized successfully");
-      setModalType("success");
-      setModalVisible(true);
-    } catch (e) {
-      setModalTitle("Server error");
-      setModalMsg("Server not reachable");
-      setModalType("error");
-      setModalVisible(true);
-    }
-  };
-
-  // ===== SAVE HOMEWORK =====
-=======
     } catch (e) {
       setError("Server not reachable");
     }
   };
 
   /* ===== SAVE HOMEWORK ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const saveHomework = async () => {
     setError("");
     setMessage("");
@@ -474,10 +488,6 @@ export default function TeacherDashboard() {
       setHwSubject("");
       setHwDueDate("");
 
-<<<<<<< HEAD
-=======
-      // Refresh homework list
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
       const res2 = await fetch(`${API_URL}/api/teacher/homework`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -490,11 +500,7 @@ export default function TeacherDashboard() {
     }
   };
 
-<<<<<<< HEAD
-  // ===== SAVE MARKS =====
-=======
   /* ===== SAVE MARKS ===== */
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
   const saveMarks = async () => {
     setError("");
     setMessage("");
@@ -533,15 +539,127 @@ export default function TeacherDashboard() {
     setSubject("");
     setExam("");
     setMarksData({});
+    // Trigger analytics refresh
+    setMarksRefreshTrigger(prev => prev + 1);
+  };
+
+  /* ===== EXCEL UPLOAD HANDLERS ===== */
+  const handleExcelFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setExcelFile(file);
+      setError("");
+    }
+  };
+
+  const uploadMarksFromExcel = async () => {
+    setError("");
+    setMessage("");
+
+    if (!excelFile) {
+      setError("Please select an Excel file");
+      return;
+    }
+
+    if (!excelSubject || !excelExam) {
+      setError("Please select subject and exam name");
+      return;
+    }
+
+    try {
+      setExcelLoading(true);
+      
+      // Read Excel file
+      const arrayBuffer = await excelFile.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(worksheet);
+
+      if (!data || data.length === 0) {
+        setError("Excel file is empty or invalid");
+        return;
+      }
+
+      // Parse the data - expecting columns: StudentName, RollNo, or StudentId, Marks
+      const marksRecords = data
+        .map((row) => {
+          // Try different possible column names
+          const marks = Number(row.Marks || row.marks || row.MARKS || 0);
+          const studentName = row.StudentName || row.Student || row.studentName || "";
+          const studentRollNo = row.RollNo || row.RollNumber || row.rollNo || row["Roll No"] || "";
+          
+          if (marks < 0 || marks > 100 || isNaN(marks)) {
+            throw new Error(`Invalid marks value: ${marks} in row with student: ${studentName || studentRollNo}`);
+          }
+          
+          return {
+            studentName: String(studentName).trim(),
+            rollNo: String(studentRollNo).trim(),
+            marks,
+          };
+        });
+
+      // Match students by name or roll number
+      const matchedRecords = marksRecords.map((record) => {
+        const foundStudent = students.find(
+          (s) =>
+            s.name.toLowerCase() === record.studentName.toLowerCase() ||
+            (record.rollNo && s.rollNo === record.rollNo)
+        );
+
+        if (!foundStudent) {
+          throw new Error(`Student not found: ${record.studentName || record.rollNo}`);
+        }
+
+        return {
+          studentId: foundStudent._id,
+          marks: record.marks,
+        };
+      });
+
+      // Send to backend
+      const res = await fetch(`${API_URL}/api/teacher/marks/save`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          className,
+          section,
+          subject: excelSubject,
+          exam: excelExam,
+          records: matchedRecords,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to save marks");
+      }
+
+      setMessage(`✅ Successfully imported ${matchedRecords.length} student marks from Excel!`);
+      setExcelFile(null);
+      setExcelSubject("");
+      setExcelExam("");
+      document.getElementById("excelFileInput").value = "";
+      // Trigger analytics refresh
+      setMarksRefreshTrigger(prev => prev + 1);
+    } catch (err) {
+      setError(err.message || "Error processing Excel file");
+      console.error("Excel upload error:", err);
+    } finally {
+      setExcelLoading(false);
+    }
   };
 
   const totalStudents = students.length;
   const presentCount = Object.values(attendance || {}).filter((v) => v === "PRESENT").length;
   const absentCount = Object.values(attendance || {}).filter((v) => v === "ABSENT").length;
 
-<<<<<<< HEAD
   const navItems = [
     { id: "dashboard", label: "Dashboard" },
+    { id: "analytics", label: "Analytics" },
     { id: "academics", label: "Academics" },
     { id: "summary", label: "Students" },
     { id: "homework", label: "Homework" },
@@ -551,7 +669,6 @@ export default function TeacherDashboard() {
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
-      {/* ===== MOBILE HAMBURGER ===== */}
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -576,6 +693,7 @@ export default function TeacherDashboard() {
               {teacher.class ? `Class ${teacher.class}` : ""}{teacher.class && teacher.section ? " • " : ""}{teacher.section ? `Section ${teacher.section}` : ""}
             </div>
           )}
+          {schoolName && <p className="text-xs text-slate-500 mt-1 font-semibold">{schoolName}</p>}
         </div>
 
         {/* Nav Items */}
@@ -592,36 +710,10 @@ export default function TeacherDashboard() {
                   ? "bg-slate-700 text-cyan-400"
                   : "text-slate-300 hover:bg-slate-700/50"
               }`}
-=======
-  return (
-    <div style={styles.layout}>
-      <div style={styles.sidebar}>
-        <h2 style={styles.logo}>{(teacher && (teacher.name || teacher.fullName || teacher.displayName)) || "Teacher"}</h2>
-        {(teacher && (teacher.class || teacher.section)) && (
-          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
-            {teacher.class ? `Class ${teacher.class}` : ""}{teacher.class && teacher.section ? ` • ` : ""}{teacher.section ? `Section ${teacher.section}` : ""}
-          </div>
-        )}
-
-        <div style={styles.navItems}>
-          {[
-            { id: "dashboard", label: "Dashboard" },
-            { id: "academics", label: "Academics" },
-            { id: "summary", label: "Students" },
-            { id: "homework", label: "Homework" },
-            { id: "events", label: "Events" },
-            { id: "attendance", label: "Attendance" },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              style={styles.navBtn(activeTab === item.id)}
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
             >
               {item.label}
             </button>
           ))}
-<<<<<<< HEAD
         </nav>
 
         {/* Logout */}
@@ -629,16 +721,10 @@ export default function TeacherDashboard() {
           onClick={handleLogout}
           className="w-full py-3 bg-red-900 hover:bg-red-800 text-white font-bold rounded-lg transition text-sm"
         >
-=======
-        </div>
-
-        <button onClick={handleLogout} style={styles.logoutBtn}>
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
           Logout
         </button>
       </div>
 
-<<<<<<< HEAD
       {/* ===== MAIN CONTENT ===== */}
       <div className="flex-1 w-full md:w-auto">
         {/* Header */}
@@ -680,6 +766,93 @@ export default function TeacherDashboard() {
                   <div className="text-2xl font-black text-slate-900 mt-2">{classInfo?.totalStudents || 0}</div>
                 </div>
               </div>
+
+              {/* ===== ATTENDANCE INSIGHTS ===== */}
+              <div className="space-y-4 mt-6">
+                <h2 className="text-lg font-bold text-slate-900">Student Attendance Insights</h2>
+                {students.length === 0 ? (
+                  <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
+                    No students to display
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Attendance Overview Stats */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                        <div className="text-xs font-semibold text-green-700 uppercase">Excellent (90%+)</div>
+                        <div className="text-2xl font-bold text-green-900 mt-1">
+                          {students.filter((s) => (percentages[s._id] || 0) >= 90).length}
+                        </div>
+                      </div>
+                      <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                        <div className="text-xs font-semibold text-yellow-700 uppercase">Average (75-89%)</div>
+                        <div className="text-2xl font-bold text-yellow-900 mt-1">
+                          {students.filter((s) => {
+                            const p = percentages[s._id] || 0;
+                            return p >= 75 && p < 90;
+                          }).length}
+                        </div>
+                      </div>
+                      <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                        <div className="text-xs font-semibold text-red-700 uppercase">Needs Attention (&lt;75%)</div>
+                        <div className="text-2xl font-bold text-red-900 mt-1">
+                          {students.filter((s) => (percentages[s._id] || 0) < 75).length}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Detailed Student List Sorted by Attendance */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-200 bg-slate-50">
+                              <th className="px-4 py-3 text-left font-bold text-slate-900">Rank</th>
+                              <th className="px-4 py-3 text-left font-bold text-slate-900">Student Name</th>
+                              <th className="px-4 py-3 text-left font-bold text-slate-900">Roll No</th>
+                              <th className="px-4 py-3 text-right font-bold text-slate-900">Attendance %</th>
+                              <th className="px-4 py-3 text-center font-bold text-slate-900">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {students
+                              .map((s) => ({
+                                student: s,
+                                percentage: percentages[s._id] || 0,
+                              }))
+                              .sort((a, b) => b.percentage - a.percentage)
+                              .map((item, idx) => {
+                                const { student, percentage } = item;
+                                let statusColor = "bg-green-100 text-green-700";
+                                let statusText = "Excellent";
+                                if (percentage < 75) {
+                                  statusColor = "bg-red-100 text-red-700";
+                                  statusText = "Low";
+                                } else if (percentage < 90) {
+                                  statusColor = "bg-yellow-100 text-yellow-700";
+                                  statusText = "Average";
+                                }
+                                return (
+                                  <tr key={student._id} className="border-b border-slate-100 hover:bg-slate-50">
+                                    <td className="px-4 py-3 text-slate-700 font-semibold">{idx + 1}</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-900">{student.name}</td>
+                                    <td className="px-4 py-3 text-slate-600">{student.rollNo}</td>
+                                    <td className="px-4 py-3 text-right font-bold text-slate-900">{percentage}%</td>
+                                    <td className="px-4 py-3 text-center">
+                                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${statusColor}`}>
+                                        {statusText}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -720,6 +893,160 @@ export default function TeacherDashboard() {
             </div>
           )}
 
+          {/* ===== ANALYTICS ===== */}
+          {activeTab === "analytics" && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-bold text-slate-900">Student Analytics & Insights</h2>
+
+              {/* KPI Section */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border border-blue-200 shadow-sm">
+                  <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Class Average</div>
+                  <div className="text-3xl font-black text-blue-900 mt-2">{analyticsData.classAverage}%</div>
+                  <p className="text-xs text-blue-700 mt-2">Overall class performance</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border border-green-200 shadow-sm">
+                  <div className="text-xs font-semibold text-green-600 uppercase tracking-wide">Avg Attendance</div>
+                  <div className="text-3xl font-black text-green-900 mt-2">{analyticsData.averageAttendance}%</div>
+                  <p className="text-xs text-green-700 mt-2">Class attendance rate</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border border-purple-200 shadow-sm">
+                  <div className="text-xs font-semibold text-purple-600 uppercase tracking-wide">Total Students</div>
+                  <div className="text-3xl font-black text-purple-900 mt-2">{students.length}</div>
+                  <p className="text-xs text-purple-700 mt-2">Class strength</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border border-orange-200 shadow-sm">
+                  <div className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Performance</div>
+                  <div className="text-3xl font-black text-orange-900 mt-2">{analyticsData.classAverage >= 75 ? "Good" : analyticsData.classAverage >= 60 ? "Okay" : "Need Help"}</div>
+                  <p className="text-xs text-orange-700 mt-2">Class status</p>
+                </div>
+              </div>
+
+              {/* Top & Low Scorers */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-900 mb-4">🏆 Topper Student</h3>
+                  {analyticsData.topper ? (
+                    <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-lg border border-yellow-200">
+                      <div className="font-bold text-yellow-900">{analyticsData.topper.name}</div>
+                      <div className="text-sm text-yellow-700 mt-1">Subject: {analyticsData.topper.subject}</div>
+                      <div className="text-lg font-black text-yellow-900 mt-2">{analyticsData.topper.marks}/100</div>
+                      <div className="text-xs text-yellow-600 mt-1">{analyticsData.topper.exam}</div>
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-sm">No marks data yet</p>
+                  )}
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-900 mb-4">📉 Needs Improvement</h3>
+                  {analyticsData.lowScorer ? (
+                    <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg border border-red-200">
+                      <div className="font-bold text-red-900">{analyticsData.lowScorer.name}</div>
+                      <div className="text-sm text-red-700 mt-1">Subject: {analyticsData.lowScorer.subject}</div>
+                      <div className="text-lg font-black text-red-900 mt-2">{analyticsData.lowScorer.marks}/100</div>
+                      <div className="text-xs text-red-600 mt-1">Recommendation: Extra coaching needed in {analyticsData.lowScorer.subject}</div>
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-sm">No marks data yet</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Charts Section */}
+              {analyticsData.attendanceData.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Attendance Bar Chart */}
+                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 className="text-sm font-bold text-slate-900 mb-4">📊 Attendance by Student</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={analyticsData.attendanceData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={80} />
+                        <YAxis />
+                        <Tooltip formatter={(value) => `${value}%`} />
+                        <Bar dataKey="attendance" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Attendance Distribution Pie Chart */}
+                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 className="text-sm font-bold text-slate-900 mb-4">🔄 Attendance Distribution</h3>
+                    {(() => {
+                      const highAtt = analyticsData.attendanceData.filter(d => d.attendance >= 80).length;
+                      const medAtt = analyticsData.attendanceData.filter(d => d.attendance >= 60 && d.attendance < 80).length;
+                      const lowAtt = analyticsData.attendanceData.filter(d => d.attendance < 60).length;
+                      const pieData = [
+                        { name: "Excellent (≥80%)", value: highAtt, color: "#10b981" },
+                        { name: "Good (60-79%)", value: medAtt, color: "#f59e0b" },
+                        { name: "Low (<60%)", value: lowAtt, color: "#ef4444" },
+                      ];
+                      return (
+                        <ResponsiveContainer width="100%" height={300}>
+                          <PieChart>
+                            <Pie data={pieData} cx="50%" cy="50%" labelLine={false} label={({ name, value }) => `${name}: ${value}`} outerRadius={80} fill="#8884d8" dataKey="value">
+                              {pieData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* Remarks & Insights */}
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 className="text-sm font-bold text-slate-900 mb-4">💡 Insights & Remarks</h3>
+                <div className="space-y-3">
+                  {analyticsData.classAverage >= 80 && (
+                    <div className="bg-green-50 border border-green-200 p-4 rounded-lg text-sm text-green-700">
+                      ✅ <strong>Excellent Performance:</strong> Your class is performing exceptionally well with an average of {analyticsData.classAverage}%. Keep up the great teaching!
+                    </div>
+                  )}
+                  {analyticsData.classAverage >= 60 && analyticsData.classAverage < 80 && (
+                    <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-sm text-yellow-700">
+                      ⚠️ <strong>Good Performance:</strong> Class average is {analyticsData.classAverage}%. Focus on helping weaker students improve.
+                    </div>
+                  )}
+                  {analyticsData.classAverage < 60 && (
+                    <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-sm text-red-700">
+                      ❌ <strong>Needs Attention:</strong> Class average is only {analyticsData.classAverage}%. Consider reviewing teaching methods and providing additional support.
+                    </div>
+                  )}
+
+                  {analyticsData.averageAttendance >= 90 && (
+                    <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg text-sm text-blue-700">
+                      ✅ <strong>Excellent Attendance:</strong> Average attendance is {analyticsData.averageAttendance}%. This is excellent!
+                    </div>
+                  )}
+                  {analyticsData.averageAttendance < 75 && (
+                    <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg text-sm text-orange-700">
+                      ⚠️ <strong>Low Attendance Alert:</strong> Average attendance is {analyticsData.averageAttendance}%. Follow up with absent students.
+                    </div>
+                  )}
+
+                  <div className="bg-slate-100 border border-slate-300 p-4 rounded-lg text-sm text-slate-700">
+                    📈 <strong>Action Items:</strong>
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li>Review {analyticsData.lowScorer ? `${analyticsData.lowScorer.name}'s` : "weaker"} performance and provide extra support</li>
+                      <li>Maintain regular follow-ups with low-attendance students</li>
+                      <li>Celebrate achievements of high-performing students</li>
+                      <li>Schedule individual meetings with struggling students</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ===== ACADEMICS ===== */}
           {activeTab === "academics" && (
             <div className="space-y-4">
@@ -727,7 +1054,80 @@ export default function TeacherDashboard() {
               {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
               {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
 
+              {/* ===== EXCEL IMPORT SECTION ===== */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 md:p-6 rounded-xl border border-blue-200 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-2xl">📊</span>
+                  <div>
+                    <h3 className="font-bold text-slate-900">Import Marks from Excel</h3>
+                    <p className="text-xs text-slate-600 mt-1">Upload an Excel file with student marks</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-blue-200">
+                  <p className="text-xs text-slate-600 mb-3">
+                    <strong>Excel Format:</strong> Your file should have columns: <code className="bg-slate-100 px-2 py-1 rounded">StudentName</code>, <code className="bg-slate-100 px-2 py-1 rounded">Marks</code> (optional: <code className="bg-slate-100 px-2 py-1 rounded">RollNo</code>)
+                  </p>
+                  <a
+                    href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEsDBBQABgAIAAAAIQDfpq/8FwEAABMFAAATAAAAeGwvd29ya3NoZWV0MS54bWykU0tugzAM/RVLT1WVpk0n7bRpN500TetFm0kxIFJiEJsCqvj7HKZp0nQnbMt+fu/t9xvM15sTYGJWCZDCGwRBKB7sRi2QuKVg3DkLUIh6FoxFy0mBrWGeMy0d3V3DEo/KPuUVplSYHvALM4sVlyxE8RN+c8n4QRYsxN0ECkN9G1cY8XvPYv8Rx1QwKBRKhSNhR3TBhMa8oGgWHW4nVIEXNyOKLZdApSb4fYmRupWKFR1N2bFmwSmwddFNCNXZMTGxD5Eev4OhXxw8Cr2/MUmZrfVZApAIqx3T1YKLdNQqwb9K0bwGGFNVTi6l0Y5E7M8KoVVFzn6MZqvJ0p6u0bfqfWoOj+ub3cqCRpP3NPCn6GFvz7v7UqpQvAAY2RnYy8X7V8bzpGfj90Y7+Bl1BLBwgHzXI+MQEAABMFAAAAAAAAAAAAAAAAAAATAAAAeGwvd29ya3NoZWV0MS54bWxQSwECLQAUAAYACAAAACEAB81yPjEBAAATBQATAAAAAAAAAAAAAAAAAAATAAAAeGwvd29ya3NoZWV0MS54bWxQSwUGAAAAAAEAAQA7AAAALgEAAAAA"
+                    download="marks_template.xlsx"
+                    className="text-blue-600 hover:text-blue-800 text-xs font-semibold underline"
+                  >
+                    📥 Download Template
+                  </a>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <select
+                      value={excelSubject}
+                      onChange={(e) => setExcelSubject(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Subject</option>
+                      {availableSubjects.length > 0 ? (
+                        availableSubjects.map((subj) => (
+                          <option key={subj._id} value={subj.subjectName}>
+                            {subj.subjectName}
+                          </option>
+                        ))
+                      ) : (
+                        <option disabled>No subjects</option>
+                      )}
+                    </select>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Exam Name (e.g., Midterm, Final)"
+                    value={excelExam}
+                    onChange={(e) => setExcelExam(e.target.value)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <label className="relative cursor-pointer">
+                    <input
+                      id="excelFileInput"
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={handleExcelFileSelect}
+                      className="hidden"
+                    />
+                    <span className="block px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition text-center">
+                      {excelFile ? "✓ " + excelFile.name.slice(0, 20) : "Choose File"}
+                    </span>
+                  </label>
+                </div>
+
+                <button
+                  onClick={uploadMarksFromExcel}
+                  disabled={excelLoading || !excelFile}
+                  className="w-full py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {excelLoading ? "⏳ Importing..." : "📤 Import Marks"}
+                </button>
+              </div>
+
               <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-bold text-slate-900 text-sm">Or Enter Marks Manually</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <select
                     value={subject}
@@ -760,132 +1160,11 @@ export default function TeacherDashboard() {
                       <input
                         type="text"
                         placeholder="Marks"
-=======
-      <div style={styles.page}>
-        {/* ===== DASHBOARD / CLASS SUMMARY ===== */}
-        {activeTab === "dashboard" && (
-          <>
-            <h1 style={styles.title}>Class Summary</h1>
-            <p style={styles.subtitle}>Overview of your class</p>
-
-            <div style={styles.grid}>
-              <div style={styles.card}>
-                <span style={styles.cardLabel}>Class</span>
-                <b style={styles.cardValue}>{classInfo?.className || "—"}</b>
-              </div>
-
-              <div style={styles.card}>
-                <span style={styles.cardLabel}>Section</span>
-                <b style={styles.cardValue}>{classInfo?.section || "—"}</b>
-              </div>
-
-              <div style={styles.card}>
-                <span style={styles.cardLabel}>Total Students</span>
-                <b style={styles.cardValue}>{classInfo?.totalStudents || 0}</b>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ===== STUDENTS SUMMARY ===== */}
-        {activeTab === "summary" && (
-          <>
-            <h1 style={styles.title}>Students Summary</h1>
-            <p style={styles.subtitle}>Class {teacher.class} • Section {teacher.section}</p>
-
-            {students.length === 0 ? (
-              <div style={styles.card}>No students in this class</div>
-            ) : (
-              students.map((student) => {
-                // Get all marks for this student
-                const studentMarks = allMarks.filter((m) => m.rollNo === student.rollNo);
-                // Group by subject
-                const bySubject = {};
-                studentMarks.forEach((m) => {
-                  if (!bySubject[m.subject]) bySubject[m.subject] = [];
-                  bySubject[m.subject].push(m);
-                });
-
-                return (
-                  <div key={student._id} style={styles.card}>
-                    <div style={{ marginBottom: 8 }}>
-                      <b style={{ fontSize: 14 }}>{student.name}</b>
-                      <span style={{ fontSize: 12, color: "#64748b", marginLeft: 8 }}>Roll #{student.rollNo}</span>
-                    </div>
-
-                    {Object.keys(bySubject).length === 0 ? (
-                      <div style={{ fontSize: 12, color: "#94a3b8" }}>No marks yet</div>
-                    ) : (
-                      <div style={{ fontSize: 12 }}>
-                        {Object.entries(bySubject).map(([subj, marks]) => (
-                          <div key={subj} style={{ marginBottom: 6, padding: 6, background: "#f1f5f9", borderRadius: 4 }}>
-                            <div style={{ fontWeight: 600, color: "#334155" }}>{subj}</div>
-                            {marks.map((m, idx) => (
-                              <div key={idx} style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>
-                                {m.examName}: <b>{m.marks}</b>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </>
-        )}
-
-        {/* ===== ACADEMICS / EXAMS ===== */}
-        {activeTab === "academics" && (
-          <>
-            <h1 style={styles.title}>Academics / Exams</h1>
-            <p style={styles.subtitle}>Manage exam marks</p>
-
-            {error && <div style={styles.error}>{error}</div>}
-            {message && <div style={styles.success}>{message}</div>}
-
-            <div style={styles.formSection}>
-              <div style={styles.inputGroup}>
-                <select
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  style={styles.input}
-                >
-                  <option value="">Select Subject</option>
-                  {availableSubjects.length > 0 ? (
-                    availableSubjects.map((subj) => (
-                      <option key={subj._id} value={subj.subjectName}>
-                        {subj.subjectName}
-                      </option>
-                    ))
-                  ) : (
-                    <option disabled>No subjects available</option>
-                  )}
-                </select>
-                <input
-                  placeholder="Exam Name"
-                  value={exam}
-                  onChange={(e) => setExam(e.target.value)}
-                  style={styles.input}
-                />
-              </div>
-
-              <div style={{ paddingBottom: "110px" }}>
-                {students.map((s) => (
-                  <div key={s._id} style={styles.card}>
-                    <div style={styles.studentRow}>
-                      <div style={styles.name}>{s.name}</div>
-                      <input
-                        type="text"
-                        placeholder="Marks / AB"
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
                         value={marksData[s._id] || ""}
                         onChange={(e) => {
                           const value = e.target.value.toUpperCase();
                           setMarksData((prev) => ({ ...prev, [s._id]: value }));
                         }}
-<<<<<<< HEAD
                         className="w-20 px-3 py-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -1107,6 +1386,9 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
+              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+              {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
+
               <div className="space-y-3">
                 {students.map((s) => (
                   <div key={s._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1141,16 +1423,10 @@ export default function TeacherDashboard() {
                         Absent
                       </button>
                     </div>
-=======
-                        style={styles.marksInput}
-                      />
-                    </div>
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
                   </div>
                 ))}
               </div>
 
-<<<<<<< HEAD
               <div className="fixed bottom-0 left-0 right-0 bg-white/95 border-t border-slate-200 p-4 flex gap-3 sm:relative sm:mt-4 sm:bg-transparent sm:border-0">
                 <button
                   onClick={saveAttendance}
@@ -1171,568 +1447,6 @@ export default function TeacherDashboard() {
           )}
         </div>
       </div>
-
-      {/* ===== MODAL ===== */}
-      {modalVisible && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-4 z-50">
-          <div className="bg-white w-full sm:w-auto sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-xl p-6 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="text-3xl">
-                {modalType === "success" ? "✅" : modalType === "error" ? "⚠️" : "ℹ️"}
-              </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-slate-900">{modalTitle}</h3>
-                <p className="text-sm text-slate-600 mt-1">{modalMsg}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setModalVisible(false)}
-              className="w-full py-2 bg-slate-100 text-slate-900 font-semibold rounded-lg hover:bg-slate-200 transition text-sm"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-=======
-              <button style={styles.primaryBtn} onClick={saveMarks}>
-                Save Marks
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* ===== HOMEWORK ===== */}
-        {activeTab === "homework" && (
-          <>
-            <h1 style={styles.title}>Homework / Assignments</h1>
-            <p style={styles.subtitle}>Add and manage homework</p>
-
-            {error && <div style={styles.error}>{error}</div>}
-            {message && <div style={styles.success}>{message}</div>}
-
-            <div style={styles.formSection}>
-              <h3 style={styles.formTitle}>Add New Homework</h3>
-
-              <div style={styles.inputGroup}>
-                <input
-                  placeholder="Title"
-                  value={hwTitle}
-                  onChange={(e) => setHwTitle(e.target.value)}
-                  style={styles.input}
-                  required
-                />
-                <input
-                  placeholder="Subject"
-                  value={hwSubject}
-                  onChange={(e) => setHwSubject(e.target.value)}
-                  style={styles.input}
-                  required
-                />
-                <input
-                  type="date"
-                  value={hwDueDate}
-                  onChange={(e) => setHwDueDate(e.target.value)}
-                  style={styles.input}
-                  required
-                />
-              </div>
-
-              <textarea
-                placeholder="Description (optional)"
-                value={hwDesc}
-                onChange={(e) => setHwDesc(e.target.value)}
-                style={{ ...styles.input, minHeight: "80px", fontFamily: "inherit" }}
-              />
-
-              <button
-                style={styles.primaryBtn}
-                onClick={saveHomework}
-                disabled={hwLoading}
-              >
-                {hwLoading ? "Adding..." : "Add Homework"}
-              </button>
-            </div>
-
-            <h3 style={styles.formTitle}>Your Homework</h3>
-            {homework.length === 0 ? (
-              <div style={styles.card}>No homework yet</div>
-            ) : (
-              homework.map((hw) => (
-                <div key={hw._id} style={styles.card}>
-                  <div style={{ marginBottom: "6px" }}>
-                    <b style={{ fontSize: "14px" }}>{hw.title}</b>
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#64748b" }}>
-                    {hw.subject} • Due: {hw.dueDate}
-                  </div>
-                  {hw.description && (
-                    <div style={{ fontSize: "12px", marginTop: "6px", color: "#475569" }}>
-                      {hw.description}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </>
-        )}
-
-        {/* ===== EVENTS & CALENDAR ===== */}
-        {activeTab === "events" && (
-          <>
-            <h1 style={styles.title}>Events & Calendar</h1>
-                <p style={styles.subtitle}>School events and holidays</p>
-
-                {/* Event creation form for teachers */}
-                <div style={{ marginBottom: 12, padding: 12, background: "#fff", border: "1px solid #e6eef7" }}>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                    <input
-                      placeholder="Event name"
-                      value={eventName}
-                      onChange={(e) => setEventName(e.target.value)}
-                      style={styles.input}
-                    />
-                    <input
-                      type="date"
-                      value={eventDateVal}
-                      onChange={(e) => setEventDateVal(e.target.value)}
-                      style={styles.input}
-                    />
-                  </div>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                    <input
-                      placeholder="Short description (optional)"
-                      value={eventDesc}
-                      onChange={(e) => setEventDesc(e.target.value)}
-                      style={styles.input}
-                    />
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#334155" }}>
-                      <input type="checkbox" checked={isHoliday} onChange={(e) => setIsHoliday(e.target.checked)} />
-                      Holiday
-                    </label>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      onClick={async () => {
-                        // create event
-                        if (!eventName || !eventDateVal) {
-                          setError("Event name and date are required");
-                          return;
-                        }
-                        setError("");
-                        setMessage("");
-                        setEventLoading(true);
-                        try {
-                          const res = await fetch(`${API_URL}/api/teacher/events`, {
-                            method: "POST",
-                            headers: {
-                              "Content-Type": "application/json",
-                              Authorization: `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({
-                              eventName: eventName,
-                              description: eventDesc,
-                              eventDate: eventDateVal,
-                              isHoliday,
-                            }),
-                          });
-                          if (!res.ok) {
-                            const err = await res.json().catch(() => ({}));
-                            setError(err.error || "Failed to create event");
-                            setEventLoading(false);
-                            return;
-                          }
-                          const data = await res.json();
-                          // prepend to local list so UI updates immediately
-                          setEvents((prev) => [data.event, ...prev]);
-                          setEventName("");
-                          setEventDesc("");
-                          setEventDateVal("");
-                          setIsHoliday(false);
-                          setMessage("Event created")
-                        } catch (err) {
-                          console.error("CREATE EVENT ERROR:", err);
-                          setError("Failed to create event");
-                        } finally {
-                          setEventLoading(false);
-                        }
-                      }}
-                      disabled={eventLoading}
-                      style={styles.primaryBtn}
-                    >
-                      {eventLoading ? "Creating..." : "Create Event"}
-                    </button>
-                    <button onClick={() => { setEventName(""); setEventDesc(""); setEventDateVal(""); setIsHoliday(false); setError(""); setMessage(""); }} style={styles.secondaryBtn}>
-                      Reset
-                    </button>
-                  </div>
-                </div>
-
-                {events.length === 0 ? (
-                  <div style={styles.card}>No events scheduled</div>
-                ) : (
-                  events.map((event) => (
-                    <div key={event._id} style={styles.card}>
-                      <div style={{ marginBottom: "6px" }}>
-                        <b style={{ fontSize: "14px" }}>{event.eventName}</b>
-                        {event.isHoliday && <span style={{ marginLeft: 8, color: "#dc2626", fontSize: 12 }}>Holiday</span>}
-                      </div>
-                      <div style={{ fontSize: "12px", color: "#64748b" }}>
-                        📅 {new Date(event.eventDate).toLocaleDateString()}
-                      </div>
-                      {event.description && (
-                        <div style={{ fontSize: "12px", marginTop: "6px", color: "#475569" }}>
-                          {event.description}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-          </>
-        )}
-
-        {/* ===== ATTENDANCE ===== */}
-        {activeTab === "attendance" && (
-          <>
-            <h1 style={styles.title}>Attendance</h1>
-            <p style={styles.subtitle}>Mark student attendance</p>
-
-            <div style={styles.statsRow}>
-              <div style={styles.stat}>
-                <span style={styles.statLabel}>Total</span>
-                <b style={styles.statValue}>{totalStudents}</b>
-              </div>
-              <div style={styles.stat}>
-                <span style={styles.statLabel}>Present</span>
-                <b style={styles.statValue}>{presentCount}</b>
-              </div>
-              <div style={styles.stat}>
-                <span style={styles.statLabel}>Absent</span>
-                <b style={styles.statValue}>{absentCount}</b>
-              </div>
-            </div>
-
-            <div style={styles.inputGroup}>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                style={styles.input}
-              />
-              <input
-                placeholder="Search student"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={styles.input}
-              />
-            </div>
-
-            {error && <div style={styles.error}>{error}</div>}
-            {message && <div style={styles.success}>{message}</div>}
-
-            <div style={{ paddingBottom: "110px" }}>
-              {students.map((s) => (
-                <div key={s._id} style={styles.card}>
-                  <div style={styles.studentRow}>
-                    <div>
-                      <div style={styles.name}>{s.name}</div>
-                      <div style={styles.roll}>Roll #{s.rollNo}</div>
-                    </div>
-                    <div style={{ fontSize: "13px", fontWeight: "700", color: "#6b7280" }}>
-                      {(percentages[String(s._id)] ?? 0) + "%"}
-                    </div>
-                  </div>
-
-                  <div style={styles.statusGroup}>
-                    {["PRESENT", "ABSENT", "LEAVE"].map((st) => (
-                      <button
-                        key={st}
-                        onClick={() => setStatus(s._id, st)}
-                        disabled={locked}
-                        style={styles.statusBtn(attendance[s._id], st, locked)}
-                      >
-                        {st}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={styles.bottomBar}>
-              <button onClick={saveAttendance} disabled={locked} style={styles.secondaryBtn}>
-                Save
-              </button>
-              <button
-                onClick={submitAttendance}
-                disabled={locked}
-                style={styles.primaryBtn}
-              >
-                Finalize
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ================= STYLES ================= */
-
-const styles = {
-  layout: {
-    display: "flex",
-    minHeight: "100vh",
-    background: "#f8fafc",
-  },
-
-  sidebar: {
-    width: "220px",
-    background: "#ffffff",
-    borderRight: "1px solid #e5e7eb",
-    padding: "16px",
-    display: "flex",
-    flexDirection: "column",
-    height: "100vh",
-  },
-
-  navItems: {
-    flex: 1,
-  },
-
-  logo: {
-    fontSize: "17px",
-    fontWeight: "900",
-    marginBottom: "18px",
-    color: "#f97316",
-  },
-
-  navBtn: (active) => ({
-    width: "100%",
-    padding: "10px 12px",
-    marginBottom: "8px",
-    borderRadius: "10px",
-    fontSize: "13px",
-    fontWeight: "700",
-    border: "none",
-    cursor: "pointer",
-    background: active ? "#fed7aa" : "transparent",
-    color: active ? "#9a3412" : "#475569",
-    textAlign: "left",
-  }),
-
-  logoutBtn: {
-    width: "100%",
-    padding: "10px 16px",
-    borderRadius: "12px",
-    border: "none",
-    background: "#fee2e2",
-    color: "#991b1b",
-    fontWeight: "800",
-    fontSize: "13px",
-    cursor: "pointer",
-    marginTop: "auto",
-  },
-
-  page: {
-    flex: 1,
-    padding: "18px",
-    minHeight: "100vh",
-    background: "#f9fafb",
-    fontFamily: "system-ui",
-    color: "#0f172a",
-  },
-
-  title: { fontSize: "20px", fontWeight: "800", marginBottom: "6px" },
-  subtitle: { fontSize: "12px", color: "#64748b", marginBottom: "16px" },
-  formTitle: { fontSize: "14px", fontWeight: "700", marginTop: "16px", marginBottom: "12px" },
-
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: "12px",
-    marginBottom: "16px",
-  },
-
-  card: {
-    background: "#ffffff",
-    padding: "14px",
-    borderRadius: "12px",
-    border: "1px solid #e5e7eb",
-    marginBottom: "10px",
-  },
-
-  cardLabel: {
-    fontSize: "11px",
-    color: "#64748b",
-    display: "block",
-    marginBottom: "6px",
-  },
-
-  cardValue: {
-    fontSize: "18px",
-    fontWeight: "900",
-    color: "#0f172a",
-  },
-
-  statsRow: {
-    display: "flex",
-    gap: "10px",
-    marginBottom: "16px",
-    overflowX: "auto",
-  },
-
-  stat: {
-    minWidth: "100px",
-    background: "#ffffff",
-    borderRadius: "12px",
-    padding: "10px",
-    border: "1px solid #e5e7eb",
-  },
-
-  statLabel: {
-    fontSize: "11px",
-    color: "#64748b",
-    display: "block",
-    marginBottom: "6px",
-  },
-
-  statValue: {
-    fontSize: "15px",
-    fontWeight: "800",
-  },
-
-  formSection: {
-    background: "#ffffff",
-    padding: "16px",
-    borderRadius: "12px",
-    border: "1px solid #e5e7eb",
-    marginBottom: "16px",
-  },
-
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-    marginBottom: "12px",
-  },
-
-  input: {
-    padding: "10px 12px",
-    borderRadius: "10px",
-    border: "1px solid #e5e7eb",
-    background: "#ffffff",
-    fontSize: "13px",
-    fontFamily: "inherit",
-  },
-
-  marksInput: {
-    width: "80px",
-    padding: "8px",
-    borderRadius: "8px",
-    border: "1px solid #e5e7eb",
-    fontSize: "13px",
-  },
-
-  studentRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "8px",
-  },
-
-  name: { fontSize: "14px", fontWeight: "700" },
-  roll: { fontSize: "11px", color: "#64748b" },
-
-  statusGroup: {
-    display: "flex",
-    background: "#f1f5f9",
-    padding: "3px",
-    borderRadius: "10px",
-  },
-
-  statusBtn: (active, s, locked) => ({
-    flex: 1,
-    padding: "7px 0",
-    borderRadius: "8px",
-    border: "none",
-    fontSize: "10px",
-    fontWeight: "700",
-    background:
-      active === s
-        ? s === "PRESENT"
-          ? "#dcfce7"
-          : s === "ABSENT"
-          ? "#fee2e2"
-          : "#e0f2fe"
-        : "transparent",
-    color:
-      active === s
-        ? s === "PRESENT"
-          ? "#166534"
-          : s === "ABSENT"
-          ? "#991b1b"
-          : "#075985"
-        : "#64748b",
-    cursor: locked ? "not-allowed" : "pointer",
-  }),
-
-  bottomBar: {
-    position: "fixed",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    background: "#ffffff",
-    padding: "12px",
-    display: "flex",
-    gap: "10px",
-    borderTop: "1px solid #e5e7eb",
-  },
-
-  primaryBtn: {
-    flex: 1,
-    background: "#4f46e5",
-    color: "#ffffff",
-    borderRadius: "12px",
-    padding: "12px",
-    fontWeight: "700",
-    border: "none",
-    fontSize: "13px",
-    cursor: "pointer",
-  },
-
-  secondaryBtn: {
-    flex: 1,
-    background: "#eef2ff",
-    color: "#3730a3",
-    borderRadius: "12px",
-    padding: "12px",
-    fontWeight: "700",
-    border: "none",
-    fontSize: "13px",
-    cursor: "pointer",
-  },
-
-  error: {
-    background: "#fee2e2",
-    color: "#991b1b",
-    padding: "10px",
-    borderRadius: "8px",
-    marginBottom: "12px",
-    fontSize: "13px",
-  },
-
-  success: {
-    background: "#dcfce7",
-    color: "#166534",
-    padding: "10px",
-    borderRadius: "8px",
-    marginBottom: "12px",
-    fontSize: "13px",
-  },
-};
->>>>>>> 86da91ecb79c10b4ea4564248eadddf5de227262
