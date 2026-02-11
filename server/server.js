@@ -35,8 +35,8 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // ✅ Allow if origin is in list OR ends with .netlify.app (catches all Netlify domains)
-    if (allowedOrigins.includes(origin) || origin.endsWith('.netlify.app')) {
+    // ✅ Allow if origin is in list OR ends with .netlify.app OR .vercel.app (catches all deployment domains)
+    if (allowedOrigins.includes(origin) || origin.endsWith('.netlify.app') || origin.endsWith('.vercel.app')) {
       callback(null, true);
     } else {
       console.warn(`❌ CORS REJECTED: ${origin}`);
