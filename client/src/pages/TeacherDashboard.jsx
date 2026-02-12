@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
+import VoiceRecorder from "../components/VoiceRecorder";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -67,6 +68,25 @@ export default function TeacherDashboard() {
     averageAttendance: 0,
   });
   const [marksRefreshTrigger, setMarksRefreshTrigger] = useState(0);
+
+  // ===== VOICE MESSAGES STATE =====
+  const [voiceMessages, setVoiceMessages] = useState([]);
+  const [audioFile, setAudioFile] = useState(null);
+  const [voiceLoading, setVoiceLoading] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState([]);
+  const [broadcastToClass, setBroadcastToClass] = useState(true);
+
+  // ===== TIMETABLE STATE =====
+  const [timetable, setTimetable] = useState([]);
+  const [timetableForm, setTimetableForm] = useState({
+    day: "",
+    period: "",
+    subject: "",
+    startTime: "",
+    endTime: "",
+    timetableId: null,
+  });
+  const [timetableLoading, setTimetableLoading] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -375,6 +395,46 @@ export default function TeacherDashboard() {
     fetchAnalytics();
 }, [activeTab, students, token, className, section, marksRefreshTrigger]);
 
+/* ===== FETCH VOICE MESSAGES ===== */
+useEffect(() => {
+  if (activeTab !== "voice" || !token) return;
+
+  const fetchVoiceMessages = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/teacher/voice-messages`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setVoiceMessages(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("VOICE MESSAGES FETCH ERROR:", err);
+      setVoiceMessages([]);
+    }
+  };
+
+  fetchVoiceMessages();
+}, [activeTab, token]);
+
+/* ===== FETCH TIMETABLE ===== */
+useEffect(() => {
+  if (activeTab !== "timetable" || !token) return;
+
+  const fetchTimetable = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/teacher/timetable`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setTimetable(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("TIMETABLE FETCH ERROR:", err);
+      setTimetable([]);
+    }
+  };
+
+  fetchTimetable();
+}, [activeTab, token]);
+
   /* ===== SET ATTENDANCE STATUS ===== */
   const setStatus = (id, status) => {
     if (locked) return;
@@ -662,7 +722,9 @@ export default function TeacherDashboard() {
     { id: "analytics", label: "Analytics" },
     { id: "academics", label: "Academics" },
     { id: "summary", label: "Students" },
+    { id: "timetable", label: "Timetable" },
     { id: "homework", label: "Homework" },
+    { id: "voice", label: "Voice Messages" },
     { id: "events", label: "Events" },
     { id: "attendance", label: "Attendance" },
   ];
@@ -1442,6 +1504,320 @@ export default function TeacherDashboard() {
                 >
                   Submit
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* ===== TIMETABLE ===== */}
+          {activeTab === "timetable" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Class Timetable</h2>
+              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+              {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
+
+              {/* Add Timetable Entry Form */}
+              <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-bold text-slate-900">Add/Edit Timetable Entry</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <select
+                    value={timetableForm.day}
+                    onChange={(e) => setTimetableForm({ ...timetableForm, day: e.target.value })}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Day</option>
+                    {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    placeholder="Period"
+                    value={timetableForm.period}
+                    onChange={(e) => setTimetableForm({ ...timetableForm, period: e.target.value })}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    placeholder="Subject"
+                    value={timetableForm.subject}
+                    onChange={(e) => setTimetableForm({ ...timetableForm, subject: e.target.value })}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="time"
+                    value={timetableForm.startTime}
+                    onChange={(e) => setTimetableForm({ ...timetableForm, startTime: e.target.value })}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="time"
+                    value={timetableForm.endTime}
+                    onChange={(e) => setTimetableForm({ ...timetableForm, endTime: e.target.value })}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!timetableForm.day || !timetableForm.period || !timetableForm.subject || !timetableForm.startTime || !timetableForm.endTime) {
+                        setError("All fields are required");
+                        return;
+                      }
+                      setError("");
+                      setMessage("");
+                      setTimetableLoading(true);
+                      try {
+                        const res = await fetch(`${API_URL}/api/teacher/timetable`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({
+                            day: timetableForm.day,
+                            period: Number(timetableForm.period),
+                            subject: timetableForm.subject,
+                            startTime: timetableForm.startTime,
+                            endTime: timetableForm.endTime,
+                            timetableId: timetableForm.timetableId || null,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                          setError(data.error || "Failed to save timetable");
+                          return;
+                        }
+                        setMessage(timetableForm.timetableId ? "Timetable updated" : "Timetable entry added");
+                        setTimetableForm({ day: "", period: "", subject: "", startTime: "", endTime: "", timetableId: null });
+                        // Fetch updated timetable
+                        const getRes = await fetch(`${API_URL}/api/teacher/timetable`, {
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        const timetableData = await getRes.json();
+                        setTimetable(Array.isArray(timetableData) ? timetableData : []);
+                      } catch (err) {
+                        console.error("TIMETABLE ERROR:", err);
+                        setError("Failed to save timetable");
+                      } finally {
+                        setTimetableLoading(false);
+                      }
+                    }}
+                    disabled={timetableLoading}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition text-sm disabled:opacity-50 col-span-1 sm:col-span-2 lg:col-span-1"
+                  >
+                    {timetableLoading ? "Saving..." : timetableForm.timetableId ? "Update" : "Add"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Timetable Display */}
+              {timetable.length === 0 ? (
+                <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
+                  No timetable entries yet
+                </div>
+              ) : (
+                <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <th className="px-4 py-3 text-left font-bold text-slate-900">Day</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-900">Period</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-900">Subject</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-900">Time</th>
+                        <th className="px-4 py-3 text-center font-bold text-slate-900">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {timetable.map((entry) => (
+                        <tr key={entry._id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="px-4 py-3 font-semibold text-slate-900">{entry.day}</td>
+                          <td className="px-4 py-3 text-slate-700">{entry.period}</td>
+                          <td className="px-4 py-3 text-slate-700">{entry.subject}</td>
+                          <td className="px-4 py-3 text-slate-600 text-xs">{entry.startTime} - {entry.endTime}</td>
+                          <td className="px-4 py-3 text-center space-x-2">
+                            <button
+                              onClick={() => {
+                                setTimetableForm({
+                                  day: entry.day,
+                                  period: String(entry.period),
+                                  subject: entry.subject,
+                                  startTime: entry.startTime,
+                                  endTime: entry.endTime,
+                                  timetableId: entry._id,
+                                });
+                              }}
+                              className="text-blue-600 hover:text-blue-800 text-xs font-semibold"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={async () => {
+                                setTimetableLoading(true);
+                                try {
+                                  const res = await fetch(`${API_URL}/api/teacher/timetable/${entry._id}`, {
+                                    method: "DELETE",
+                                    headers: { Authorization: `Bearer ${token}` },
+                                  });
+                                  if (res.ok) {
+                                    setMessage("Entry deleted");
+                                    const getRes = await fetch(`${API_URL}/api/teacher/timetable`, {
+                                      headers: { Authorization: `Bearer ${token}` },
+                                    });
+                                    const data = await getRes.json();
+                                    setTimetable(Array.isArray(data) ? data : []);
+                                  }
+                                } catch (err) {
+                                  setError("Failed to delete");
+                                } finally {
+                                  setTimetableLoading(false);
+                                }
+                              }}
+                              className="text-red-600 hover:text-red-800 text-xs font-semibold"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ===== VOICE MESSAGES ===== */}
+          {activeTab === "voice" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Voice Messages</h2>
+              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+              {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
+
+              {/* Send Voice Message Form */}
+              <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-bold text-slate-900">📢 Send Voice Message to Students</h3>
+                
+                <div className="flex items-center gap-2 text-slate-600 text-sm">
+                  <input
+                    type="checkbox"
+                    id="broadcastToClass"
+                    checked={broadcastToClass}
+                    onChange={(e) => {
+                      setBroadcastToClass(e.target.checked);
+                      setSelectedStudents([]);
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="broadcastToClass" className="font-semibold">Broadcast to entire class</label>
+                </div>
+
+                {!broadcastToClass && students.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-600 font-semibold">Select Students:</p>
+                    <div className="max-h-40 overflow-y-auto space-y-2">
+                      {students.map((student) => (
+                        <label key={student._id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedStudents.includes(student._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedStudents([...selectedStudents, student._id]);
+                              } else {
+                                setSelectedStudents(selectedStudents.filter((id) => id !== student._id));
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm text-slate-700">{student.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <VoiceRecorder
+                  onRecordingComplete={async (audioBlob) => {
+                    if (!broadcastToClass && selectedStudents.length === 0) {
+                      setError("Please select at least one student");
+                      return;
+                    }
+                    
+                    // Log blob size before upload
+                    console.log(`✅ TEACHER VOICE: Audio blob ready, size: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+                    
+                    if (audioBlob.size === 0) {
+                      setError("Audio recording is empty. Please record again.");
+                      return;
+                    }
+                    
+                    setError("");
+                    setMessage("");
+                    setVoiceLoading(true);
+                    try {
+                      const formData = new FormData();
+                      formData.append("audio", audioBlob, "recording.webm");
+                      if (broadcastToClass) {
+                        formData.append("broadcastToClass", "true");
+                      } else {
+                        formData.append("targetStudentIds", JSON.stringify(selectedStudents));
+                      }
+
+                      console.log("📤 TEACHER VOICE: Uploading to /api/teacher/voice-broadcast");
+                      const res = await fetch(`${API_URL}/api/teacher/voice-broadcast`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${token}` },
+                        body: formData,
+                      });
+                      const data = await res.json();
+                      if (!res.ok) {
+                        console.error("❌ UPLOAD FAILED:", data);
+                        setError(data.error || "Failed to send voice message");
+                        return;
+                      }
+                      console.log(`✅ UPLOAD SUCCESS: Audio URL = ${data.audioUrl}`);
+                      setMessage(`Voice message sent to ${data.broadcastTo} student(s)`);
+                      setAudioFile(null);
+                      setSelectedStudents([]);
+                    } catch (err) {
+                      console.error("❌ VOICE BROADCAST ERROR:", err);
+                      setError("Failed to send voice message");
+                    } finally {
+                      setVoiceLoading(false);
+                    }
+                  }}
+                  onError={(errMsg) => {
+                    setError(errMsg);
+                  }}
+                />
+              </div>
+
+              {/* Received Messages */}
+              <div>
+                <h3 className="font-bold text-slate-900 mb-4">📨 Messages from Admin</h3>
+                {voiceMessages.length === 0 ? (
+                  <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
+                    No voice messages from admin
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {voiceMessages.map((msg) => (
+                      <div key={msg._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <div className="font-semibold text-slate-900 text-sm">From: {msg.senderName}</div>
+                            <div className="text-xs text-slate-500">
+                              {new Date(msg.createdAt).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                        <audio controls className="w-full max-w-md">
+                          <source src={`${API_URL}${msg.audioUrl}`} type="audio/mpeg" />
+                          Your browser does not support the audio element.
+                        </audio>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

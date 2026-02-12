@@ -19,6 +19,8 @@ export default function StudentDashboard() {
   const [homework, setHomework] = useState([]);
   const [events, setEvents] = useState([]);
   const [teacher, setTeacher] = useState(null);
+  const [voiceMessages, setVoiceMessages] = useState([]);
+  const [timetable, setTimetable] = useState([]);
 
   const navigate = useNavigate();
   const token = localStorage.getItem("studentToken");
@@ -95,6 +97,58 @@ export default function StudentDashboard() {
     if (token) fetchEvents();
   }, [activeTab, token]);
 
+  // Fetch voice messages
+  useEffect(() => {
+    if (activeTab !== "voice") return;
+    const fetchVoiceMessages = async () => {
+      try {
+        console.log("📡 STUDENT VOICE: Fetching voice messages from /api/student/voice-messages");
+        const res = await fetch(`${API_URL}/api/student/voice-messages`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          console.warn("❌ STUDENT VOICE: Fetch failed with status", res.status);
+          setVoiceMessages([]);
+          return;
+        }
+        const data = await res.json();
+        console.log(`✅ STUDENT VOICE: Fetched ${Array.isArray(data) ? data.length : 0} voice messages`);
+        if (Array.isArray(data)) {
+          data.forEach((msg) => {
+            console.log(`   📝 Message from ${msg.senderName}: ${msg.audioUrl}`);
+          });
+        }
+        setVoiceMessages(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("❌ VOICE MESSAGES FETCH ERROR:", err);
+        setVoiceMessages([]);
+      }
+    };
+    if (token) fetchVoiceMessages();
+  }, [activeTab, token]);
+
+  // Fetch timetable
+  useEffect(() => {
+    if (activeTab !== "timetable") return;
+    const fetchTimetable = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/student/timetable`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          setTimetable([]);
+          return;
+        }
+        const data = await res.json();
+        setTimetable(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("TIMETABLE FETCH ERROR:", err);
+        setTimetable([]);
+      }
+    };
+    if (token) fetchTimetable();
+  }, [activeTab, token]);
+
   // Teacher info is already loaded from the dashboard fetch above
   // No need for additional fetch
 
@@ -133,7 +187,9 @@ export default function StudentDashboard() {
     { id: "dashboard", label: "Dashboard" },
     { id: "marks", label: "Marks" },
     { id: "attendance", label: "Attendance" },
+    { id: "timetable", label: "Timetable" },
     { id: "homework", label: "Homework" },
+    { id: "voice", label: "Voice Messages" },
     { id: "events", label: "Events" },
     { id: "profile", label: "Profile" },
   ];
@@ -432,6 +488,80 @@ export default function StudentDashboard() {
                   <span className="text-slate-900 font-bold">{student.rollNo}</span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ===== TIMETABLE ===== */}
+          {activeTab === "timetable" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Class Timetable</h2>
+              {timetable.length === 0 ? (
+                <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
+                  No timetable available
+                </div>
+              ) : (
+                <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <th className="px-4 py-3 text-left font-bold text-slate-900">Day</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-900">Period</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-900">Subject</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-900">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {timetable.map((entry) => (
+                        <tr key={entry._id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="px-4 py-3 font-semibold text-slate-900">{entry.day}</td>
+                          <td className="px-4 py-3 text-slate-700">{entry.period}</td>
+                          <td className="px-4 py-3 text-slate-700">{entry.subject}</td>
+                          <td className="px-4 py-3 text-slate-600 text-xs">{entry.startTime} - {entry.endTime}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ===== VOICE MESSAGES ===== */}
+          {activeTab === "voice" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Voice Messages</h2>
+              {voiceMessages.length === 0 ? (
+                <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
+                  No voice messages yet
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {voiceMessages.map((msg) => (
+                    <div key={msg._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <div className="font-semibold text-slate-900 text-sm">
+                            From: {msg.senderName}
+                          </div>
+                          {msg.senderRole === "TEACHER" && (
+                            <div className="text-xs text-slate-500">Teacher</div>
+                          )}
+                          {msg.senderRole === "ADMIN" && (
+                            <div className="text-xs text-slate-500">Admin</div>
+                          )}
+                          <div className="text-xs text-slate-400 mt-1">
+                            {new Date(msg.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      <audio controls className="w-full max-w-md">
+                        <source src={`${API_URL}${msg.audioUrl}`} type="audio/webm" />
+                        Your browser does not support the audio element.
+                      </audio>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

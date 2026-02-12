@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import VoiceRecorder from "../components/VoiceRecorder";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -65,6 +66,12 @@ export default function AdminDashboard() {
   const [selectedStudents, setSelectedStudents] = useState({});
   const [selectedTeachers, setSelectedTeachers] = useState({});
   const [deletingIds, setDeletingIds] = useState([]);
+
+  // Voice Broadcast
+  const [audioFile, setAudioFile] = useState(null);
+  const [voiceLoading, setVoiceLoading] = useState(false);
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState([]);
+  const [broadcastToAll, setBroadcastToAll] = useState(true);
   
   const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
   const token = localStorage.getItem("adminToken");
@@ -711,7 +718,6 @@ export default function AdminDashboard() {
       return matchesSearch && matchesClass && matchesSection;
     });
   };
-
   const navItems = [
     { id: "dashboard", label: "Dashboard" },
     { id: "students", label: "Students" },
@@ -719,6 +725,7 @@ export default function AdminDashboard() {
     { id: "add-user", label: "Add User" },
     { id: "bulk-upload", label: "Bulk Upload" },
     { id: "subjects", label: "Subjects" },
+    { id: "voice-broadcast", label: "Voice Broadcast" },
   ];
 
   return (
@@ -1388,6 +1395,113 @@ export default function AdminDashboard() {
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ===== VOICE BROADCAST ===== */}
+          {activeTab === "voice-broadcast" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">📢 Voice Broadcast to Teachers</h2>
+              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+              {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
+
+              <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-bold text-slate-900">Send Voice Message to All Teachers</h3>
+                
+                <div className="flex items-center gap-2 text-slate-600 text-sm">
+                  <input
+                    type="checkbox"
+                    id="broadcastToAllTeachers"
+                    checked={broadcastToAll}
+                    onChange={(e) => {
+                      setBroadcastToAll(e.target.checked);
+                      setSelectedTeacherIds([]);
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="broadcastToAllTeachers" className="font-semibold">Broadcast to all teachers</label>
+                </div>
+
+                {!broadcastToAll && teachers.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-600 font-semibold">Select Teachers:</p>
+                    <div className="max-h-48 overflow-y-auto space-y-2 border border-slate-200 p-3 rounded-lg bg-slate-50">
+                      {teachers.map((teacher) => (
+                        <label key={teacher._id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedTeacherIds.includes(teacher._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedTeacherIds([...selectedTeacherIds, teacher._id]);
+                              } else {
+                                setSelectedTeacherIds(selectedTeacherIds.filter((id) => id !== teacher._id));
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm text-slate-700">{teacher.name} ({teacher.class}-{teacher.section})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <VoiceRecorder
+                  onRecordingComplete={async (audioBlob) => {
+                    if (!broadcastToAll && selectedTeacherIds.length === 0) {
+                      setError("Please select at least one teacher or broadcast to all");
+                      return;
+                    }
+                    
+                    // Log blob size before upload
+                    console.log(`✅ ADMIN VOICE: Audio blob ready, size: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+                    
+                    if (audioBlob.size === 0) {
+                      setError("Audio recording is empty. Please record again.");
+                      return;
+                    }
+                    
+                    setError("");
+                    setMessage("");
+                    setVoiceLoading(true);
+                    try {
+                      const formData = new FormData();
+                      formData.append("audio", audioBlob, "recording.webm");
+                      if (broadcastToAll) {
+                        formData.append("broadcastToAll", "true");
+                      } else {
+                        formData.append("targetTeacherIds", JSON.stringify(selectedTeacherIds));
+                      }
+
+                      console.log("📤 ADMIN VOICE: Uploading to /api/admin/voice-broadcast");
+                      const res = await fetch(`${API_URL}/api/admin/voice-broadcast`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${token}` },
+                        body: formData,
+                      });
+                      const data = await res.json();
+                      if (!res.ok) {
+                        console.error("❌ UPLOAD FAILED:", data);
+                        setError(data.error || "Failed to broadcast voice message");
+                        return;
+                      }
+                      console.log(`✅ UPLOAD SUCCESS: Audio URL = ${data.audioUrl}`);
+                      setMessage(`Voice message sent to ${data.broadcastTo} teacher(s)`);
+                      setAudioFile(null);
+                      setSelectedTeacherIds([]);
+                    } catch (err) {
+                      console.error("❌ VOICE BROADCAST ERROR:", err);
+                      setError("Failed to send voice message");
+                    } finally {
+                      setVoiceLoading(false);
+                    }
+                  }}
+                  onError={(errMsg) => {
+                    setError(errMsg);
+                  }}
+                />
               </div>
             </div>
           )}

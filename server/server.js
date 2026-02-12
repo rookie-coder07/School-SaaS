@@ -50,6 +50,11 @@ app.use(cors({
 
 app.use(express.json());
 
+// 🎙️ Serve uploaded files (voice recordings, documents, etc)
+// This makes /uploads/{filename} accessible publicly
+app.use("/uploads", express.static("uploads"));
+console.log("✅ Static file serving enabled at /uploads");
+
 const safeObjectId = (id) => {
   try {
     return new ObjectId(id);
@@ -171,6 +176,14 @@ function requireTenantId(req, res, next) {
   console.log("✅ TENANT CHECK: schoolId valid -", schoolObjectId.toString());
   next();
 }
+
+// Configure multer to save voice files in /uploads/voice/ directory
+const voiceUpload = multer({
+  dest: "uploads/voice/",
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
+
+// Keep original multer for other uploads
 const upload = multer({ 
   dest: "uploads/",
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
@@ -2554,6 +2567,411 @@ app.post("/api/admin/reset-password", async (req, res) => {
   } catch (err) {
     console.error("❌ PASSWORD RESET ERROR:", err);
     res.status(500).json({ error: "Password reset failed" });
+  }
+});
+
+/* ================================
+   VOICE MESSAGES ROUTES
+   ================================= */
+
+/**
+ * ADMIN: POST /api/admin/voice-broadcast
+ * Admin broadcasts a voice message to teachers (all or selected)
+ */
+app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requireTenantId, voiceUpload.single("audio"), async (req, res) => {
+  try {
+    const { targetTeacherIds, broadcastToAll } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const senderId = safeObjectId(req.user.userId);
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No audio file uploaded" });
+    }
+
+    // Log file details for debugging
+    console.log(`📝 ADMIN VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
+
+    // Check for empty files
+    if (req.file.size === 0) {
+      console.error("❌ ADMIN VOICE BROADCAST: Uploaded file is empty (0 bytes)");
+      return res.status(400).json({ error: "Audio file is empty. Please record audio and try again." });
+    }
+
+    if (!senderId) {
+      return res.status(400).json({ error: "Invalid admin ID" });
+    }
+
+    // Generate audio URL (public path to uploaded file)
+    const audioUrl = `/uploads/voice/${req.file.filename}`;
+    console.log(`✅ ADMIN VOICE BROADCAST: Audio URL = ${audioUrl}`);
+
+    // Determine target teachers
+    let targetUserIds = [];
+    if (broadcastToAll === "true" || broadcastToAll === true) {
+      // Get all teachers for this school
+      const teachers = await db.collection("teachers").find({ schoolId }).toArray();
+      targetUserIds = teachers.map((t) => t.userId);
+    } else if (targetTeacherIds && Array.isArray(targetTeacherIds)) {
+      targetUserIds = targetTeacherIds.map((id) => safeObjectId(id)).filter(Boolean);
+    }
+
+    if (targetUserIds.length === 0) {
+      return res.status(400).json({ error: "No target teachers selected" });
+    }
+
+    // Create voice message document
+    const voiceMessage = {
+      schoolId,
+      senderRole: "ADMIN",
+      senderId,
+      targetRole: "TEACHER",
+      targetUserIds,
+      audioUrl,
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("voiceMessages").insertOne(voiceMessage);
+
+    console.log("✅ ADMIN VOICE BROADCAST - Recipients:", targetUserIds.length, "Audio URL:", audioUrl);
+    res.json({
+      success: true,
+      messageId: result.insertedId.toString(),
+      broadcastTo: targetUserIds.length,
+      audioUrl,
+    });
+  } catch (err) {
+    console.error("❌ ADMIN VOICE BROADCAST ERROR:", err);
+    res.status(500).json({ error: "Failed to broadcast voice message" });
+  }
+});
+
+/**
+ * TEACHER: POST /api/teacher/voice-broadcast
+ * Teacher broadcasts a voice message to their class/section students
+ */
+app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), requireTenantId, voiceUpload.single("audio"), async (req, res) => {
+  try {
+    const { targetStudentIds, broadcastToClass } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const senderId = safeObjectId(req.user.userId);
+    const className = req.user.class;
+    const section = req.user.section;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No audio file uploaded" });
+    }
+
+    // Log file details for debugging
+    console.log(`📝 TEACHER VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
+
+    // Check for empty files
+    if (req.file.size === 0) {
+      console.error("❌ TEACHER VOICE BROADCAST: Uploaded file is empty (0 bytes)");
+      return res.status(400).json({ error: "Audio file is empty. Please record audio and try again." });
+    }
+
+    if (!senderId) {
+      return res.status(400).json({ error: "Invalid teacher ID" });
+    }
+
+    // Generate audio URL (public path to uploaded file)
+    const audioUrl = `/uploads/voice/${req.file.filename}`;
+    console.log(`✅ TEACHER VOICE BROADCAST: Audio URL = ${audioUrl}`);
+
+    // Determine target students
+    let targetUserIds = [];
+    if (broadcastToClass === "true" || broadcastToClass === true) {
+      // Get all students in teacher's class/section
+      const students = await db.collection("students").find({
+        schoolId,
+        class: className,
+        section: section,
+      }).toArray();
+      targetUserIds = students.map((s) => s.userId);
+    } else if (targetStudentIds && Array.isArray(targetStudentIds)) {
+      targetUserIds = targetStudentIds.map((id) => safeObjectId(id)).filter(Boolean);
+    }
+
+    if (targetUserIds.length === 0) {
+      return res.status(400).json({ error: "No target students selected" });
+    }
+
+    const voiceMessage = {
+      schoolId,
+      senderRole: "TEACHER",
+      senderId,
+      targetRole: "STUDENT",
+      targetClass: className,
+      targetSection: section,
+      targetUserIds,
+      audioUrl,
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("voiceMessages").insertOne(voiceMessage);
+
+    console.log("✅ TEACHER VOICE BROADCAST - Recipients:", targetUserIds.length, "Class:", className, "Section:", section, "Audio URL:", audioUrl);
+    res.json({
+      success: true,
+      messageId: result.insertedId.toString(),
+      broadcastTo: targetUserIds.length,
+      audioUrl,
+    });
+  } catch (err) {
+    console.error("❌ TEACHER VOICE BROADCAST ERROR:", err);
+    res.status(500).json({ error: "Failed to broadcast voice message" });
+  }
+});
+
+/**
+ * TEACHER: GET /api/teacher/voice-messages
+ * Get voice messages received by this teacher from admin
+ */
+app.get("/api/teacher/voice-messages", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const userId = safeObjectId(req.user.userId);
+
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    const messages = await db.collection("voiceMessages")
+      .find({
+        schoolId,
+        targetRole: "TEACHER",
+        targetUserIds: userId,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // Enrich with sender info
+    const enrichedMessages = await Promise.all(
+      messages.map(async (msg) => {
+        const admin = await db.collection("users").findOne({ _id: msg.senderId });
+        return {
+          ...msg,
+          senderName: admin?.email || "Admin",
+          _id: msg._id.toString(),
+        };
+      })
+    );
+
+    console.log("✅ TEACHER VOICE MESSAGES - Count:", messages.length);
+    res.json(enrichedMessages);
+  } catch (err) {
+    console.error("❌ TEACHER VOICE MESSAGES ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch voice messages" });
+  }
+});
+
+/**
+ * STUDENT: GET /api/student/voice-messages
+ * Get voice messages received by this student from teachers/admin
+ */
+app.get("/api/student/voice-messages", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const userId = safeObjectId(req.user.userId);
+
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    const messages = await db.collection("voiceMessages")
+      .find({
+        schoolId,
+        targetRole: "STUDENT",
+        targetUserIds: userId,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // Enrich with sender info
+    const enrichedMessages = await Promise.all(
+      messages.map(async (msg) => {
+        let senderName = "Unknown";
+        if (msg.senderRole === "TEACHER") {
+          const teacher = await db.collection("teachers").findOne({ userId: msg.senderId });
+          senderName = teacher?.name || "Teacher";
+        } else if (msg.senderRole === "ADMIN") {
+          const admin = await db.collection("users").findOne({ _id: msg.senderId });
+          senderName = admin?.email || "Admin";
+        }
+        return {
+          ...msg,
+          senderName,
+          _id: msg._id.toString(),
+        };
+      })
+    );
+
+    console.log("✅ STUDENT VOICE MESSAGES - Count:", messages.length);
+    res.json(enrichedMessages);
+  } catch (err) {
+    console.error("❌ STUDENT VOICE MESSAGES ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch voice messages" });
+  }
+});
+
+/* ================================
+   TIMETABLE ROUTES
+   ================================= */
+
+/**
+ * TEACHER: POST /api/teacher/timetable
+ * Create or update a timetable entry
+ */
+app.post("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const { day, period, subject, startTime, endTime, timetableId } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    if (!day || !period || !subject || !startTime || !endTime) {
+      return res.status(400).json({ error: "Missing required fields: day, period, subject, startTime, endTime" });
+    }
+
+    const timetableEntry = {
+      schoolId,
+      class: className,
+      section,
+      day: String(day),
+      period: Number(period),
+      subject: String(subject),
+      startTime: String(startTime),
+      endTime: String(endTime),
+      updatedAt: new Date(),
+    };
+
+    let result;
+    if (timetableId && timetableId !== "undefined") {
+      // Update existing entry
+      const objId = safeObjectId(timetableId);
+      result = await db.collection("timetables").findOneAndUpdate(
+        { _id: objId, schoolId, class: className, section },
+        { $set: timetableEntry },
+        { returnDocument: "after" }
+      );
+      console.log("✅ TIMETABLE UPDATED - ID:", timetableId, "Day:", day, "Period:", period);
+    } else {
+      // Create new entry
+      timetableEntry.createdAt = new Date();
+      const insertResult = await db.collection("timetables").insertOne(timetableEntry);
+      console.log("✅ TIMETABLE CREATED - ID:", insertResult.insertedId, "Day:", day, "Period:", period);
+      result = { value: { ...timetableEntry, _id: insertResult.insertedId } };
+    }
+
+    res.json({
+      success: true,
+      timetable: {
+        ...result.value,
+        _id: result.value._id.toString(),
+      },
+    });
+  } catch (err) {
+    console.error("❌ TIMETABLE SAVE ERROR:", err);
+    res.status(500).json({ error: "Failed to save timetable" });
+  }
+});
+
+/**
+ * TEACHER: GET /api/teacher/timetable
+ * Get timetable for teacher's class/section
+ */
+app.get("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    const timetable = await db.collection("timetables")
+      .find({
+        schoolId,
+        class: className,
+        section,
+      })
+      .sort({ day: 1, period: 1 })
+      .toArray();
+
+    console.log("✅ TEACHER TIMETABLE - Count:", timetable.length, "Class:", className, "Section:", section);
+    res.json(timetable);
+  } catch (err) {
+    console.error("❌ TEACHER TIMETABLE FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch timetable" });
+  }
+});
+
+/**
+ * STUDENT: GET /api/student/timetable
+ * Get timetable for student's class/section
+ */
+app.get("/api/student/timetable", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const userId = safeObjectId(req.user.userId);
+
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    // Find student profile to get class/section
+    const student = await db.collection("students").findOne({
+      userId,
+      schoolId,
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: "Student profile not found" });
+    }
+
+    const timetable = await db.collection("timetables")
+      .find({
+        schoolId,
+        class: student.class,
+        section: student.section,
+      })
+      .sort({ day: 1, period: 1 })
+      .toArray();
+
+    console.log("✅ STUDENT TIMETABLE - Count:", timetable.length, "Class:", student.class, "Section:", student.section);
+    res.json(timetable);
+  } catch (err) {
+    console.error("❌ STUDENT TIMETABLE FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch timetable" });
+  }
+});
+
+/**
+ * TEACHER: DELETE /api/teacher/timetable/:id
+ * Delete a timetable entry
+ */
+app.delete("/api/teacher/timetable/:id", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const timetableId = safeObjectId(req.params.id);
+    const schoolId = req.user.schoolIdObj;
+
+    if (!timetableId) {
+      return res.status(400).json({ error: "Invalid timetable ID" });
+    }
+
+    const result = await db.collection("timetables").deleteOne({
+      _id: timetableId,
+      schoolId,
+      class: req.user.class,
+      section: req.user.section,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Timetable entry not found" });
+    }
+
+    console.log("✅ TIMETABLE DELETED - ID:", timetableId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ TIMETABLE DELETE ERROR:", err);
+    res.status(500).json({ error: "Failed to delete timetable" });
   }
 });
 
