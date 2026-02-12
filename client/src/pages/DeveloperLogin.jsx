@@ -14,9 +14,9 @@ export default function DeveloperLogin() {
     setLoading(true);
 
     try {
-      // Use relative URL which will be proxied by Vite to http://localhost:5000
-      const API_URL = import.meta.env.VITE_API_URL || "";
-      const endpoint = API_URL ? `${API_URL}/api/auth/developer/login` : "/api/auth/developer/login";
+      // Use environment variable with fallback to localhost for development
+      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      const endpoint = `${API_URL}/api/auth/developer/login`;
       
       const res = await fetch(endpoint, {
         method: "POST",
