@@ -1,6 +1,9 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import AttendanceCalendar from "../components/AttendanceCalendar";
+import StudentSyllabus from "../components/StudentSyllabus";
+import StudentExams from "../components/StudentExams";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -187,6 +190,8 @@ export default function StudentDashboard() {
     { id: "dashboard", label: "Dashboard" },
     { id: "marks", label: "Marks" },
     { id: "attendance", label: "Attendance" },
+    { id: "syllabus", label: "Syllabus" },
+    { id: "exams", label: "Exams" },
     { id: "timetable", label: "Timetable" },
     { id: "homework", label: "Homework" },
     { id: "voice", label: "Voice Messages" },
@@ -353,60 +358,24 @@ export default function StudentDashboard() {
                   No attendance data available
                 </div>
               ) : (
-                <div>
-                  {(() => {
-                    const total = attendance.length;
-                    const present = attendance.filter(a => a.status?.toUpperCase() === 'PRESENT').length;
-                    const absent = attendance.filter(a => a.status?.toUpperCase() === 'ABSENT').length;
-                    const percentage = total > 0 ? ((present / total) * 100).toFixed(1) : 0;
-                    
-                    return (
-                      <>
-                        <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-3 mb-6">
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-600 font-medium">Total Classes</span>
-                            <span className="text-2xl font-black text-slate-900">{total}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-600 font-medium">Present</span>
-                            <span className="text-2xl font-black text-green-600">{present}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-600 font-medium">Absent</span>
-                            <span className="text-2xl font-black text-red-600">{absent}</span>
-                          </div>
-                          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-                            <span className="text-slate-600 font-medium">Percentage</span>
-                            <span className="text-2xl font-black text-blue-600">{percentage}%</span>
-                          </div>
-                        </div>
-                        
-                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                          <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-                            <h3 className="font-bold text-slate-900 text-sm">Recent Attendance</h3>
-                          </div>
-                          <div className="divide-y divide-slate-200 max-h-80 overflow-y-auto">
-                            {attendance.slice(0, 10).map((record, idx) => (
-                              <div key={idx} className="px-4 py-2 flex items-center justify-between hover:bg-slate-50">
-                                <span className="text-sm text-slate-700">
-                                  {record.date ? new Date(record.date).toLocaleDateString() : 'N/A'}
-                                </span>
-                                <span className={`text-xs font-bold px-2 py-1 rounded ${
-                                  record.status?.toUpperCase() === 'PRESENT' 
-                                    ? 'bg-green-100 text-green-700' 
-                                    : 'bg-red-100 text-red-700'
-                                }`}>
-                                  {record.status?.toUpperCase() || 'N/A'}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
+                <AttendanceCalendar attendanceData={attendance} />
               )}
+            </div>
+          )}
+
+          {/* ===== SYLLABUS ===== */}
+          {activeTab === "syllabus" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Syllabus</h2>
+              <StudentSyllabus token={token} />
+            </div>
+          )}
+
+          {/* ===== EXAMS ===== */}
+          {activeTab === "exams" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Exam Timetable</h2>
+              <StudentExams token={token} />
             </div>
           )}
 
@@ -435,6 +404,8 @@ export default function StudentDashboard() {
               )}
             </div>
           )}
+
+          {/* ===== EVENTS ===== */}
 
           {/* ===== EVENTS ===== */}
           {activeTab === "events" && (
@@ -541,7 +512,7 @@ export default function StudentDashboard() {
                       <div className="flex items-center justify-between mb-3">
                         <div>
                           <div className="font-semibold text-slate-900 text-sm">
-                            From: {msg.senderName}
+                            From: {msg.senderName || (msg.senderRole === "ADMIN" ? "Admin" : "Teacher")}
                           </div>
                           {msg.senderRole === "TEACHER" && (
                             <div className="text-xs text-slate-500">Teacher</div>
@@ -554,10 +525,24 @@ export default function StudentDashboard() {
                           </div>
                         </div>
                       </div>
-                      <audio controls className="w-full max-w-md">
-                        <source src={`${API_URL}${msg.audioUrl}`} type="audio/webm" />
-                        Your browser does not support the audio element.
-                      </audio>
+                      {msg.audioUrl ? (
+                        <audio 
+                          controls 
+                          className="w-full max-w-md"
+                          controlsList="nodownload"
+                          onError={(e) => {
+                            console.error("Audio loading error:", e);
+                            console.error("Audio URL:", `${API_URL}${msg.audioUrl}`);
+                          }}
+                          onLoadedMetadata={(e) => {
+                            console.log(`✅ Audio loaded: ${msg._id}, duration: ${e.target.duration}s`);
+                          }}>
+                          <source src={`${API_URL}${msg.audioUrl}`} type="audio/webm" />
+                          Your browser does not support the audio element.
+                        </audio>
+                      ) : (
+                        <div className="text-sm text-red-500">Audio file not available</div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
 import VoiceRecorder from "../components/VoiceRecorder";
+import SyllabusManager from "../components/SyllabusManager";
+import ExamTimetableManager from "../components/ExamTimetableManager";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -723,6 +725,8 @@ useEffect(() => {
     { id: "academics", label: "Academics" },
     { id: "summary", label: "Students" },
     { id: "timetable", label: "Timetable" },
+    { id: "syllabus", label: "Syllabus" },
+    { id: "exams", label: "Exam Timetable" },
     { id: "homework", label: "Homework" },
     { id: "voice", label: "Voice Messages" },
     { id: "events", label: "Events" },
@@ -1819,6 +1823,22 @@ useEffect(() => {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ===== SYLLABUS ===== */}
+          {activeTab === "syllabus" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Syllabus Management</h2>
+              <SyllabusManager token={token} teacher={teacher} />
+            </div>
+          )}
+
+          {/* ===== EXAM TIMETABLE ===== */}
+          {activeTab === "exams" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Exam Timetable</h2>
+              <ExamTimetableManager token={token} teacher={teacher} />
             </div>
           )}
         </div>

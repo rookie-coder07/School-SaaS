@@ -7,6 +7,8 @@ import multer from "multer";
 import XLSX from "xlsx";
 import { MongoClient, ObjectId } from "mongodb";
 import MockDatabase from "./mockDb.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
@@ -54,6 +56,16 @@ app.use(express.json());
 // This makes /uploads/{filename} accessible publicly
 app.use("/uploads", express.static("uploads"));
 console.log("✅ Static file serving enabled at /uploads");
+
+// 🔧 Serve built React frontend from /client/dist
+// This allows the backend to serve the production build
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendBuildPath = path.join(__dirname, "../client/dist");
+
+// Serve static assets (CSS, JS, images)
+app.use(express.static(frontendBuildPath));
+console.log(`✅ Frontend static files enabled at ${frontendBuildPath}`);
 
 const safeObjectId = (id) => {
   try {
@@ -2976,8 +2988,312 @@ app.delete("/api/teacher/timetable/:id", requireAuth, requireRole("TEACHER"), re
 });
 
 /* ================================
-   GENERAL FALLBACK
+   SYLLABUS ROUTES
    ================================= */
-app.use((req, res) => {
-  res.status(404).json({ error: "Not found" });
+
+/**
+ * TEACHER: POST /api/teacher/syllabus
+ * Create a new syllabus
+ */
+app.post("/api/teacher/syllabus", requireAuth, requireRole("TEACHER"), requireTenantId, upload.single("file"), async (req, res) => {
+  try {
+    const { subject, title, description } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const teacherId = safeObjectId(req.user.userId);
+    const className = req.user.class;
+    const section = req.user.section;
+
+    if (!subject || !title) {
+      return res.status(400).json({ error: "Missing required fields: subject, title" });
+    }
+
+    let fileUrl = null;
+    if (req.file) {
+      fileUrl = `/uploads/${req.file.filename}`;
+    }
+
+    const syllabus = {
+      schoolId,
+      class: className,
+      section: section,
+      subject,
+      title,
+      description: description || "",
+      fileUrl,
+      createdBy: teacherId,
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("syllabus").insertOne(syllabus);
+
+    console.log("✅ SYLLABUS CREATED - ID:", result.insertedId, "Subject:", subject, "Title:", title);
+    res.json({
+      success: true,
+      syllabusId: result.insertedId.toString(),
+      syllabus: { ...syllabus, _id: result.insertedId.toString() },
+    });
+  } catch (err) {
+    console.error("❌ SYLLABUS CREATE ERROR:", err);
+    res.status(500).json({ error: "Failed to create syllabus" });
+  }
+});
+
+/**
+ * TEACHER: GET /api/teacher/syllabus
+ * Get syllabus for teacher's class/section
+ */
+app.get("/api/teacher/syllabus", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    const syllabuses = await db.collection("syllabus")
+      .find({
+        schoolId,
+        class: className,
+        section: section,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    console.log("✅ TEACHER SYLLABUS - Count:", syllabuses.length);
+    res.json(syllabuses.map(s => ({ ...s, _id: s._id.toString() })));
+  } catch (err) {
+    console.error("❌ TEACHER SYLLABUS FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch syllabus" });
+  }
+});
+
+/**
+ * TEACHER: DELETE /api/teacher/syllabus/:id
+ * Delete a syllabus
+ */
+app.delete("/api/teacher/syllabus/:id", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const syllabusId = safeObjectId(req.params.id);
+    const schoolId = req.user.schoolIdObj;
+
+    if (!syllabusId) {
+      return res.status(400).json({ error: "Invalid syllabus ID" });
+    }
+
+    const result = await db.collection("syllabus").deleteOne({
+      _id: syllabusId,
+      schoolId,
+      class: req.user.class,
+      section: req.user.section,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Syllabus not found" });
+    }
+
+    console.log("✅ SYLLABUS DELETED - ID:", syllabusId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ SYLLABUS DELETE ERROR:", err);
+    res.status(500).json({ error: "Failed to delete syllabus" });
+  }
+});
+
+/**
+ * STUDENT: GET /api/student/syllabus
+ * Get syllabus for student's class/section
+ */
+app.get("/api/student/syllabus", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const userId = safeObjectId(req.user.userId);
+
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    // Get student's class and section
+    const student = await db.collection("students").findOne({ userId, schoolId });
+
+    if (!student) {
+      return res.status(404).json({ error: "Student profile not found" });
+    }
+
+    const syllabuses = await db.collection("syllabus")
+      .find({
+        schoolId,
+        class: student.class,
+        section: student.section,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    console.log("✅ STUDENT SYLLABUS - Count:", syllabuses.length, "Class:", student.class, "Section:", student.section);
+    res.json(syllabuses.map(s => ({ ...s, _id: s._id.toString() })));
+  } catch (err) {
+    console.error("❌ STUDENT SYLLABUS FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch syllabus" });
+  }
+});
+
+/* ================================
+   EXAM TIMETABLE ROUTES
+   ================================= */
+
+/**
+ * TEACHER: POST /api/teacher/exams
+ * Create a new exam
+ */
+app.post("/api/teacher/exams", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const { subject, examName, examDate, startTime, endTime } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const teacherId = safeObjectId(req.user.userId);
+    const className = req.user.class;
+    const section = req.user.section;
+
+    if (!subject || !examName || !examDate || !startTime || !endTime) {
+      return res.status(400).json({ error: "Missing required fields: subject, examName, examDate, startTime, endTime" });
+    }
+
+    const exam = {
+      schoolId,
+      class: className,
+      section: section,
+      subject,
+      examName,
+      examDate: new Date(examDate),
+      startTime,
+      endTime,
+      createdBy: teacherId,
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("exams").insertOne(exam);
+
+    console.log("✅ EXAM CREATED - ID:", result.insertedId, "Name:", examName, "Subject:", subject);
+    res.json({
+      success: true,
+      examId: result.insertedId.toString(),
+      exam: { ...exam, _id: result.insertedId.toString(), examDate: exam.examDate.toISOString() },
+    });
+  } catch (err) {
+    console.error("❌ EXAM CREATE ERROR:", err);
+    res.status(500).json({ error: "Failed to create exam" });
+  }
+});
+
+/**
+ * TEACHER: GET /api/teacher/exams
+ * Get exams for teacher's class/section
+ */
+app.get("/api/teacher/exams", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    const exams = await db.collection("exams")
+      .find({
+        schoolId,
+        class: className,
+        section: section,
+      })
+      .sort({ examDate: 1 })
+      .toArray();
+
+    console.log("✅ TEACHER EXAMS - Count:", exams.length);
+    res.json(exams.map(e => ({ ...e, _id: e._id.toString(), examDate: e.examDate.toISOString() })));
+  } catch (err) {
+    console.error("❌ TEACHER EXAMS FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch exams" });
+  }
+});
+
+/**
+ * TEACHER: DELETE /api/teacher/exams/:id
+ * Delete an exam
+ */
+app.delete("/api/teacher/exams/:id", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const examId = safeObjectId(req.params.id);
+    const schoolId = req.user.schoolIdObj;
+
+    if (!examId) {
+      return res.status(400).json({ error: "Invalid exam ID" });
+    }
+
+    const result = await db.collection("exams").deleteOne({
+      _id: examId,
+      schoolId,
+      class: req.user.class,
+      section: req.user.section,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Exam not found" });
+    }
+
+    console.log("✅ EXAM DELETED - ID:", examId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ EXAM DELETE ERROR:", err);
+    res.status(500).json({ error: "Failed to delete exam" });
+  }
+});
+
+/**
+ * STUDENT: GET /api/student/exams
+ * Get exams for student's class/section
+ */
+app.get("/api/student/exams", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const userId = safeObjectId(req.user.userId);
+
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    // Get student's class and section
+    const student = await db.collection("students").findOne({ userId, schoolId });
+
+    if (!student) {
+      return res.status(404).json({ error: "Student profile not found" });
+    }
+
+    const exams = await db.collection("exams")
+      .find({
+        schoolId,
+        class: student.class,
+        section: student.section,
+      })
+      .sort({ examDate: 1 })
+      .toArray();
+
+    console.log("✅ STUDENT EXAMS - Count:", exams.length, "Class:", student.class, "Section:", student.section);
+    res.json(exams.map(e => ({ ...e, _id: e._id.toString(), examDate: e.examDate.toISOString() })));
+  } catch (err) {
+    console.error("❌ STUDENT EXAMS FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch exams" });
+  }
+});
+
+/* ================================
+   SPA FALLBACK - Serve index.html for client-side routing
+   ================================= */
+// All requests that don't match static files or API routes
+// should return index.html so React Router can handle them
+app.get("*", (req, res) => {
+  // Don't serve index.html for API routes (this shouldn't happen as they're already defined)
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "API endpoint not found" });
+  }
+  
+  // For all other routes, serve index.html so React Router on the client handles it
+  const indexPath = path.join(frontendBuildPath, "index.html");
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error("❌ Error serving index.html:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
 });
