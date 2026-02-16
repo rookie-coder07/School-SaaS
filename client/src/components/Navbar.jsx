@@ -1,15 +1,59 @@
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
+import axios from "axios";
+import NotificationBell from "./NotificationBell";
+import NotificationDropdown from "./NotificationDropdown";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [token, setToken] = useState(null);
   const menuRef = useRef(null);
+  const notificationsRef = useRef(null);
 
-  // Close when clicking outside
+  // Get token from localStorage on mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem("token");
+    setToken(storedToken);
+  }, []);
+
+  // Fetch unread notification count when token is available
+  useEffect(() => {
+    if (!token) return;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setUnreadCount(response.data.unreadCount || 0);
+      } catch (err) {
+        console.error("Error fetching unread count:", err);
+      }
+    };
+
+    // Fetch immediately
+    fetchUnreadCount();
+
+    // Poll every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  // Close menus when clicking outside
   useEffect(() => {
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setOpen(false);
+      }
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(e.target)
+      ) {
+        setShowNotifications(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -24,6 +68,25 @@ export default function Navbar() {
         </button>
 
         <div style={styles.brand}>EduNest</div>
+
+        {/* Notification Bell - Only show if user is logged in */}
+        {token && (
+          <div
+            ref={notificationsRef}
+            style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}
+          >
+            <NotificationBell
+              onClick={() => setShowNotifications(!showNotifications)}
+              unreadCount={unreadCount}
+              isOpen={showNotifications}
+            />
+            <NotificationDropdown
+              isOpen={showNotifications}
+              onClose={() => setShowNotifications(false)}
+              token={token}
+            />
+          </div>
+        )}
       </div>
 
       {open && (

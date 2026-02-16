@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -19,8 +19,13 @@ import TeacherDashboard from "./pages/TeacherDashboard";
 
 import DeveloperLogin from "./pages/DeveloperLogin";
 import DeveloperDashboard from "./pages/DeveloperDashboard";
+import DevSchoolsList from "./pages/DevSchoolsList";
+import DevSchoolDetails from "./pages/DevSchoolDetails";
 
 export default function App() {
+  console.log("✅ App component mounted - Routes configured");
+  console.log("✅ Available routes: / /admin/login /admin/dashboard /student/login /student/dashboard /teacher/login /teacher/dashboard /dev/login /dev /dev/schools /dev/schools/:schoolId");
+  
   return (
     <>
       <Navbar />
@@ -75,8 +80,44 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/dev/schools"
+          element={
+            <ProtectedRoute role="developer">
+              <DevSchoolsList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dev/schools/:schoolId"
+          element={
+            <ProtectedRoute role="developer">
+              <DevSchoolDetails />
+            </ProtectedRoute>
+          }
+        />
 
-        <Route path="*" element={<h2>404 – Page Not Found</h2>} />
+        {/* Fallback route for 404 - keep on current dashboard if authenticated, otherwise go to home */}
+        <Route path="*" element={
+          (() => {
+            // Check if user has any authentication token
+            const hasAuth = localStorage.getItem("studentToken") || 
+                           localStorage.getItem("teacherToken") || 
+                           localStorage.getItem("adminToken") || 
+                           localStorage.getItem("developerToken");
+            
+            if (hasAuth) {
+              // User is authenticated, show a 404-like page or return to their dashboard
+              // For now, we'll redirect based on role
+              const role = localStorage.getItem("userRole") || "student";
+              console.warn("🔴 Invalid route for authenticated user. Redirecting to dashboard.");
+              return <Navigate to={`/${role === "admin" ? "admin" : role === "teacher" ? "teacher" : role === "developer" ? "dev" : "student"}/dashboard`} replace />;
+            }
+            
+            // Not authenticated, redirect to home
+            return <Navigate to="/" replace />;
+          })()
+        } />
       </Routes>
     </>
   );

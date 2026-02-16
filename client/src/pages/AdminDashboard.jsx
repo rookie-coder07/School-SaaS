@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import axios from "axios";
 import VoiceRecorder from "../components/VoiceRecorder";
+import VoiceAnnouncements from "../components/VoiceAnnouncements";
+import NotificationBell from "../components/NotificationBell";
+import NotificationDropdown from "../components/NotificationDropdown";
+import { useToast } from "../components/ToastProvider";
+import { createNotification } from "../utils/notificationHelper";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -12,7 +18,11 @@ export default function AdminDashboard() {
   const [message, setMessage] = useState("");
   const [schoolId, setSchoolId] = useState("");
   const [schoolName, setSchoolName] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const toast = useToast();
 
   // Dashboard data
   const [admissionCount, setAdmissionCount] = useState(0);
@@ -72,6 +82,9 @@ export default function AdminDashboard() {
   const [voiceLoading, setVoiceLoading] = useState(false);
   const [selectedTeacherIds, setSelectedTeacherIds] = useState([]);
   const [broadcastToAll, setBroadcastToAll] = useState(true);
+  const [voiceAnnouncementTitle, setVoiceAnnouncementTitle] = useState("");
+  const [voiceAnnouncementsRefresh, setVoiceAnnouncementsRefresh] = useState(0);
+  const [voiceBroadcastTarget, setVoiceBroadcastTarget] = useState("all"); // "all", "teachers", "students"
   
   const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
   const token = localStorage.getItem("adminToken");
@@ -107,6 +120,56 @@ export default function AdminDashboard() {
       setSchoolName(storedSchoolName);
     }
   }, []);
+
+  // Handle navigation from notification clicks via query params
+  useEffect(() => {
+    const sectionParam = searchParams.get("section");
+    if (sectionParam) {
+      console.log("📍 Admin Dashboard: Navigating to section from query param:", sectionParam);
+      setActiveTab(sectionParam);
+    }
+  }, [searchParams]);
+
+  // Fetch unread notification count on mount and when notifications panel opens
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setUnreadCount(response.data.unreadCount || 0);
+      } catch (err) {
+        console.error("Error fetching unread count:", err);
+        setUnreadCount(0);
+      }
+    };
+
+    if (token) {
+      fetchUnreadCount();
+      
+      // Poll every 30 seconds to keep count updated
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
+
+  // Fetch unread count when notifications panel opens
+  useEffect(() => {
+    if (showNotifications && token) {
+      const fetchUnreadCount = async () => {
+        try {
+          const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          setUnreadCount(response.data.unreadCount || 0);
+        } catch (err) {
+          console.error("Error fetching unread count:", err);
+        }
+      };
+      
+      fetchUnreadCount();
+    }
+  }, [showNotifications, token]);
 
   // Toggle student selection
   const toggleStudentSelection = (studentId) => {
@@ -158,15 +221,13 @@ export default function AdminDashboard() {
   const deleteSelectedStudents = async () => {
     const selectedIds = Object.keys(selectedStudents).filter(id => selectedStudents[id]);
     if (selectedIds.length === 0) {
-      setError("Please select at least one student to delete");
+      toast.warning("Please select at least one student to delete");
       return;
     }
 
     const confirmed = window.confirm(`Are you sure you want to delete ${selectedIds.length} student(s)? This action cannot be undone.`);
     if (!confirmed) return;
 
-    setError("");
-    setMessage("");
     setDeletingIds(selectedIds);
 
     let successCount = 0;
@@ -198,7 +259,7 @@ export default function AdminDashboard() {
     setSelectedStudents({});
 
     if (failureCount === 0) {
-      setMessage(`✅ Successfully deleted ${successCount} student(s)`);
+      toast.success(`Successfully deleted ${successCount} student(s)`);
       // Refresh student list
       setTimeout(() => {
         const fetchAllUsers = async () => {
@@ -218,7 +279,7 @@ export default function AdminDashboard() {
         fetchAllUsers();
       }, 500);
     } else {
-      setError(`⚠️ Deleted ${successCount}, Failed ${failureCount}: ${failedNames.join(", ")}`);
+      toast.error(`Deleted ${successCount}, Failed ${failureCount}: ${failedNames.join(", ")}`);
     }
   };
 
@@ -226,15 +287,13 @@ export default function AdminDashboard() {
   const deleteSelectedTeachers = async () => {
     const selectedIds = Object.keys(selectedTeachers).filter(id => selectedTeachers[id]);
     if (selectedIds.length === 0) {
-      setError("Please select at least one teacher to delete");
+      toast.warning("Please select at least one teacher to delete");
       return;
     }
 
     const confirmed = window.confirm(`Are you sure you want to delete ${selectedIds.length} teacher(s)? This action cannot be undone.`);
     if (!confirmed) return;
 
-    setError("");
-    setMessage("");
     setDeletingIds(selectedIds);
 
     let successCount = 0;
@@ -266,7 +325,7 @@ export default function AdminDashboard() {
     setSelectedTeachers({});
 
     if (failureCount === 0) {
-      setMessage(`✅ Successfully deleted ${successCount} teacher(s)`);
+      toast.success(`Successfully deleted ${successCount} teacher(s)`);
       // Refresh teacher list
       setTimeout(() => {
         const fetchAllUsers = async () => {
@@ -286,7 +345,7 @@ export default function AdminDashboard() {
         fetchAllUsers();
       }, 500);
     } else {
-      setError(`⚠️ Deleted ${successCount}, Failed ${failureCount}: ${failedNames.join(", ")}`);
+      toast.error(`Deleted ${successCount}, Failed ${failureCount}: ${failedNames.join(", ")}`);
     }
   };
 
@@ -357,10 +416,8 @@ export default function AdminDashboard() {
 
   // Add user
   const addUser = async () => {
-    setError("");
-    setMessage("");
     if (!form.name || !form.email) {
-      setError("Name and email required");
+      toast.warning("Name and email required");
       return;
     }
     setAdding(true);
@@ -376,10 +433,10 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Add failed");
+        toast.error(data.error || "Failed to add user");
         return;
       }
-      setMessage(`${modeAdd.charAt(0).toUpperCase() + modeAdd.slice(1)} added successfully`);
+      toast.success(`${modeAdd.charAt(0).toUpperCase() + modeAdd.slice(1)} added successfully`);
       setForm({
         name: "",
         email: "",
@@ -393,7 +450,7 @@ export default function AdminDashboard() {
       });
     } catch (err) {
       console.error("ADD USER ERROR:", err);
-      setError("Failed to add user");
+      toast.error("Failed to add user");
     } finally {
       setAdding(false);
     }
@@ -401,11 +458,9 @@ export default function AdminDashboard() {
 
   // Upload file (for Add User tab)
   const uploadFile = async () => {
-    setError("");
-    setMessage("");
     const file = modeAdd === "student" ? studentFile : teacherFile;
     if (!file) {
-      setError("Please select a file");
+      toast.warning("Please select a file");
       return;
     }
     setIsUploading(true);
@@ -420,15 +475,15 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Upload failed");
+        toast.error(data.error || "Upload failed");
         return;
       }
-      setMessage("File uploaded successfully");
+      toast.success("File uploaded successfully");
       if (modeAdd === "student") setStudentFile(null);
       else setTeacherFile(null);
     } catch (err) {
       console.error("UPLOAD ERROR:", err);
-      setError("Upload failed");
+      toast.error("Upload failed");
     } finally {
       setIsUploading(false);
     }
@@ -436,10 +491,8 @@ export default function AdminDashboard() {
 
   // Bulk Upload - Student Upload
   const bulkUploadStudents = async () => {
-    setError("");
-    setMessage("");
     if (!studentFile) {
-      setError("Please select a file");
+      toast.warning("Please select a file");
       return;
     }
     setIsUploading(true);
@@ -454,15 +507,14 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) {
         const errorMsg = data.details ? `${data.error}: ${data.details}` : data.error || "Upload failed";
-        setError(errorMsg);
+        toast.error(errorMsg);
         return;
       }
-      const successMsg = `Students uploaded! Success: ${data.successCount}, Errors: ${data.errorCount}`;
-      setMessage(successMsg);
+      toast.success(`Students uploaded! Success: ${data.successCount}, Errors: ${data.errorCount}`);
       if (data.errors && data.errors.length > 0) {
         const errorDetails = data.errors.map(e => `${e.row}: ${e.error}`).join("\n");
         console.warn("Upload Errors:\n", errorDetails);
-        setError(`⚠️ Some rows had errors:\n${data.errors.slice(0, 3).map(e => `• ${e.row}: ${e.error}`).join("\n")}`);
+        toast.warning(`Some rows had errors`);
       }
       setUploadedStudents([]);
       setAssignmentMode(null);
@@ -506,18 +558,17 @@ export default function AdminDashboard() {
       }, 500);
     } catch (err) {
       console.error("BULK UPLOAD STUDENTS ERROR:", err);
-      setError(`Upload failed: ${err.message}`);
+      toast.error(`Upload failed: ${err.message}`);
     } finally {
       setIsUploading(false);
     }
   };
 
   // Bulk Upload - Teacher Upload
+  // Bulk Upload - Teacher Upload
   const bulkUploadTeachers = async () => {
-    setError("");
-    setMessage("");
     if (!teacherFile) {
-      setError("Please select a file");
+      toast.warning("Please select a file");
       return;
     }
     setIsUploading(true);
@@ -532,15 +583,14 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) {
         const errorMsg = data.details ? `${data.error}: ${data.details}` : data.error || "Upload failed";
-        setError(errorMsg);
+        toast.error(errorMsg);
         return;
       }
-      const successMsg = `Teachers uploaded! Success: ${data.successCount}, Errors: ${data.errorCount}`;
-      setMessage(successMsg);
+      toast.success(`Teachers uploaded! Success: ${data.successCount}, Errors: ${data.errorCount}`);
       if (data.errors && data.errors.length > 0) {
         const errorDetails = data.errors.map(e => `${e.row}: ${e.error}`).join("\n");
         console.warn("Upload Errors:\n", errorDetails);
-        setError(`⚠️ Some rows had errors:\n${data.errors.slice(0, 3).map(e => `• ${e.row}: ${e.error}`).join("\n")}`);
+        toast.warning(`Some rows had errors`);
       }
       setUploadedTeachers([]);
       setAssignmentMode(null);
@@ -584,7 +634,7 @@ export default function AdminDashboard() {
       }, 500);
     } catch (err) {
       console.error("BULK UPLOAD TEACHERS ERROR:", err);
-      setError(`Upload failed: ${err.message}`);
+      toast.error(`Upload failed: ${err.message}`);
     } finally {
       setIsUploading(false);
     }
@@ -593,16 +643,15 @@ export default function AdminDashboard() {
   // Assign students to teachers or vice versa
   const handleAssignment = async (studentId, teacherId) => {
     try {
-      setError("");
       if (assignmentMode === "students") {
         setSelectedForAssignment({ ...selectedForAssignment, [studentId]: teacherId });
       } else if (assignmentMode === "teachers") {
         setSelectedForAssignment({ ...selectedForAssignment, [teacherId]: studentId });
       }
-      setMessage("Assignment marked. Continue with other assignments or complete.");
+      toast.success("Assignment marked. Continue with other assignments or complete.");
     } catch (err) {
       console.error("ASSIGNMENT ERROR:", err);
-      setError("Failed to mark assignment");
+      toast.error("Failed to mark assignment");
     }
   };
 
@@ -612,15 +661,13 @@ export default function AdminDashboard() {
     setUploadedStudents([]);
     setUploadedTeachers([]);
     setSelectedForAssignment({});
-    setMessage("Assignments completed successfully!");
+    toast.success("Assignments completed successfully!");
   };
 
   // Add/Edit subject
   const saveSubject = async () => {
-    setError("");
-    setMessage("");
     if (!subjects_form.className || !subjects_form.section || !subjects_form.newSubject) {
-      setError("All fields required");
+      toast.warning("All fields required");
       return;
     }
     try {
@@ -643,10 +690,10 @@ export default function AdminDashboard() {
       });
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Save failed");
+        toast.error(data.error || "Save failed");
         return;
       }
-      setMessage("Subject saved successfully");
+      toast.success("Subject saved successfully");
       setSubjectsForm({ className: "", section: "", newSubject: "" });
       setEditSubject(null);
       const res2 = await fetch(`${API_URL}/api/admin/subjects`, {
@@ -656,7 +703,7 @@ export default function AdminDashboard() {
       setSubjects(Array.isArray(data) ? data : data.subjects || []);
     } catch (err) {
       console.error("SAVE SUBJECT ERROR:", err);
-      setError("Failed to save subject");
+      toast.error("Failed to save subject");
     }
   };
 
@@ -729,7 +776,7 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
+    <div className="h-screen overflow-hidden flex flex-col md:flex-row bg-slate-50 font-sans">
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -740,7 +787,7 @@ export default function AdminDashboard() {
 
       {/* ===== SIDEBAR ===== */}
       <div
-        className={`fixed md:relative inset-y-0 left-0 w-64 bg-gradient-to-b from-slate-900 to-slate-950 text-white p-5 flex flex-col z-30 transition-transform duration-300 transform ${
+        className={`fixed md:relative inset-y-0 left-0 w-64 bg-gradient-to-b from-slate-900 to-slate-950 text-white p-5 flex flex-col z-30 transition-transform duration-300 transform md:overflow-y-auto md:h-screen ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
@@ -778,27 +825,58 @@ export default function AdminDashboard() {
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className="flex-1 w-full md:w-auto">
+      <div className="flex-1 w-full md:w-auto flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 md:py-5 sticky top-0 z-20 flex items-center">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="md:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
-            title="Toggle sidebar"
-          >
-            <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="flex-1">
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900">
-              {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
-            </h1>
+        <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 md:py-5 sticky top-0 z-20 flex items-center justify-between">
+          <div className="flex items-center">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="md:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
+              title="Toggle sidebar"
+            >
+              <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div className="flex-1">
+              <h1 className="text-2xl md:text-3xl font-black text-slate-900">
+                {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
+              </h1>
+            </div>
+          </div>
+          
+          {/* Notification Bell */}
+          <div className="flex items-center gap-3">
+            <NotificationBell
+              onClick={() => setShowNotifications(!showNotifications)}
+              unreadCount={unreadCount}
+              isOpen={showNotifications}
+            />
           </div>
         </div>
 
+        {/* Notification Dropdown */}
+        {showNotifications && (
+          <NotificationDropdown
+            isOpen={showNotifications}
+            onClose={() => setShowNotifications(false)}
+            token={localStorage.getItem("adminToken")}
+            toast={toast}
+            onNotificationsUpdated={async () => {
+              try {
+                const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                setUnreadCount(response.data.unreadCount || 0);
+              } catch (err) {
+                console.error("Error refreshing unread count:", err);
+              }
+            }}
+          />
+        )}
+
         {/* Content */}
-        <div className="p-4 md:p-6 pb-20 md:pb-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
           {/* ===== DASHBOARD ===== */}
           {activeTab === "dashboard" && (
             <div className="space-y-4">
@@ -1401,82 +1479,91 @@ export default function AdminDashboard() {
 
           {/* ===== VOICE BROADCAST ===== */}
           {activeTab === "voice-broadcast" && (
-            <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">📢 Voice Broadcast to Teachers</h2>
+            <div className="space-y-6">
+              <h2 className="text-lg font-bold text-slate-900">🎙️ Voice Announcements</h2>
               {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
               {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
 
+              {/* Recording Section */}
               <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-bold text-slate-900">Send Voice Message to All Teachers</h3>
+                <h3 className="font-bold text-slate-900">📢 Send Voice Message</h3>
                 
-                <div className="flex items-center gap-2 text-slate-600 text-sm">
+                {/* Broadcast Target Selection */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-slate-700">Send To:</label>
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="voiceBroadcastTarget"
+                        value="all"
+                        checked={voiceBroadcastTarget === "all"}
+                        onChange={(e) => setVoiceBroadcastTarget(e.target.value)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-slate-700">All Teachers & Students</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="voiceBroadcastTarget"
+                        value="teachers"
+                        checked={voiceBroadcastTarget === "teachers"}
+                        onChange={(e) => setVoiceBroadcastTarget(e.target.value)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-slate-700">Teachers Only</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="voiceBroadcastTarget"
+                        value="students"
+                        checked={voiceBroadcastTarget === "students"}
+                        onChange={(e) => setVoiceBroadcastTarget(e.target.value)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-slate-700">Students Only</span>
+                    </label>
+                  </div>
+                </div>
+                
+                {/* Title Input */}
+                <div>
+                  <label htmlFor="voiceTitle" className="block text-sm font-semibold text-slate-700 mb-2">
+                    Announcement Title (Optional)
+                  </label>
                   <input
-                    type="checkbox"
-                    id="broadcastToAllTeachers"
-                    checked={broadcastToAll}
-                    onChange={(e) => {
-                      setBroadcastToAll(e.target.checked);
-                      setSelectedTeacherIds([]);
-                    }}
-                    className="w-4 h-4"
+                    type="text"
+                    id="voiceTitle"
+                    placeholder="e.g., Important school event, Assignment update..."
+                    value={voiceAnnouncementTitle}
+                    onChange={(e) => setVoiceAnnouncementTitle(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <label htmlFor="broadcastToAllTeachers" className="font-semibold">Broadcast to all teachers</label>
                 </div>
 
-                {!broadcastToAll && teachers.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-slate-600 font-semibold">Select Teachers:</p>
-                    <div className="max-h-48 overflow-y-auto space-y-2 border border-slate-200 p-3 rounded-lg bg-slate-50">
-                      {teachers.map((teacher) => (
-                        <label key={teacher._id} className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedTeacherIds.includes(teacher._id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedTeacherIds([...selectedTeacherIds, teacher._id]);
-                              } else {
-                                setSelectedTeacherIds(selectedTeacherIds.filter((id) => id !== teacher._id));
-                              }
-                            }}
-                            className="w-4 h-4"
-                          />
-                          <span className="text-sm text-slate-700">{teacher.name} ({teacher.class}-{teacher.section})</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
+                {/* Voice Recorder */}
                 <VoiceRecorder
                   onRecordingComplete={async (audioBlob) => {
-                    if (!broadcastToAll && selectedTeacherIds.length === 0) {
-                      setError("Please select at least one teacher or broadcast to all");
-                      return;
-                    }
-                    
-                    // Log blob size before upload
                     console.log(`✅ ADMIN VOICE: Audio blob ready, size: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
                     
                     if (audioBlob.size === 0) {
-                      setError("Audio recording is empty. Please record again.");
+                      toast.error("Audio recording is empty. Please record again.");
                       return;
                     }
                     
-                    setError("");
-                    setMessage("");
                     setVoiceLoading(true);
                     try {
                       const formData = new FormData();
                       formData.append("audio", audioBlob, "recording.webm");
-                      if (broadcastToAll) {
-                        formData.append("broadcastToAll", "true");
-                      } else {
-                        formData.append("targetTeacherIds", JSON.stringify(selectedTeacherIds));
+                      formData.append("broadcastTo", voiceBroadcastTarget);
+                      if (voiceAnnouncementTitle.trim()) {
+                        formData.append("title", voiceAnnouncementTitle.trim());
                       }
 
-                      console.log("📤 ADMIN VOICE: Uploading to /api/admin/voice-broadcast");
-                      const res = await fetch(`${API_URL}/api/admin/voice-broadcast`, {
+                      console.log(`📤 ADMIN VOICE: Uploading to /api/admin/voice-announce (broadcastTo: ${voiceBroadcastTarget})`);
+                      const res = await fetch(`${API_URL}/api/admin/voice-announce`, {
                         method: "POST",
                         headers: { Authorization: `Bearer ${token}` },
                         body: formData,
@@ -1484,25 +1571,62 @@ export default function AdminDashboard() {
                       const data = await res.json();
                       if (!res.ok) {
                         console.error("❌ UPLOAD FAILED:", data);
-                        setError(data.error || "Failed to broadcast voice message");
+                        toast.error(data.error || "Failed to broadcast voice message");
                         return;
                       }
                       console.log(`✅ UPLOAD SUCCESS: Audio URL = ${data.audioUrl}`);
-                      setMessage(`Voice message sent to ${data.broadcastTo} teacher(s)`);
+                      
+                      // Build success message based on broadcast target
+                      let successMsg = "✅ Voice message sent to";
+                      if (data.broadcastToTeachers > 0) successMsg += ` ${data.broadcastToTeachers} teacher(s)`;
+                      if (data.broadcastToTeachers > 0 && data.broadcastToStudents > 0) successMsg += " and";
+                      if (data.broadcastToStudents > 0) successMsg += ` ${data.broadcastToStudents} student(s)`;
+                      
+                      toast.success(successMsg);
+
+                      // Create notification for this voice message
+                      try {
+                        const notificationTitle = voiceAnnouncementTitle.trim() || "Voice Message from Admin";
+                        const targetRole = voiceBroadcastTarget === "students" ? "student" : voiceBroadcastTarget === "teachers" ? "teacher" : "student";
+                        await createNotification(
+                          "🎤 Voice Message",
+                          notificationTitle,
+                          targetRole,
+                          "voice",
+                          token,
+                          null,
+                          { type: "voice_message", audioUrl: data.audioUrl }
+                        );
+                        console.log("✅ Notification created for voice message");
+                      } catch (notifErr) {
+                        console.warn("⚠️ Failed to create notification (non-critical):", notifErr);
+                      }
+                      
+                      setVoiceAnnouncementTitle("");
                       setAudioFile(null);
-                      setSelectedTeacherIds([]);
+                      setVoiceAnnouncementsRefresh(prev => prev + 1); // Trigger refresh in VoiceAnnouncements component
                     } catch (err) {
                       console.error("❌ VOICE BROADCAST ERROR:", err);
-                      setError("Failed to send voice message");
+                      toast.error("Failed to send voice message");
                     } finally {
                       setVoiceLoading(false);
                     }
                   }}
                   onError={(errMsg) => {
-                    setError(errMsg);
+                    toast.error(errMsg);
                   }}
+                  disabled={voiceLoading}
                 />
               </div>
+
+              {/* Previously Sent Announcements */}
+              <VoiceAnnouncements 
+                key={voiceAnnouncementsRefresh}
+                endpoint="/api/admin/voice-announces"
+                title="📋 Previously Sent Announcements"
+                icon="🎙️"
+                emptyMessage="No announcements sent yet"
+              />
             </div>
           )}
         </div>

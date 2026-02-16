@@ -9,6 +9,7 @@ import { MongoClient, ObjectId } from "mongodb";
 import MockDatabase from "./mockDb.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 dotenv.config();
 
@@ -52,15 +53,18 @@ app.use(cors({
 
 app.use(express.json());
 
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // 🎙️ Serve uploaded files (voice recordings, documents, etc)
 // This makes /uploads/{filename} accessible publicly
-app.use("/uploads", express.static("uploads"));
-console.log("✅ Static file serving enabled at /uploads");
+const uploadsPath = path.join(__dirname, "uploads");
+app.use("/uploads", express.static(uploadsPath));
+console.log(`✅ Static file serving enabled at /uploads (${uploadsPath})`);
 
 // 🔧 Serve built React frontend from /client/dist
 // This allows the backend to serve the production build
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const frontendBuildPath = path.join(__dirname, "../client/dist");
 
 // Serve static assets (CSS, JS, images)
@@ -191,7 +195,21 @@ function requireTenantId(req, res, next) {
 
 // Configure multer to save voice files in /uploads/voice/ directory
 const voiceUpload = multer({
-  dest: "uploads/voice/",
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const dir = "uploads/voice";
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      // Save with timestamp and .webm extension
+      const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.webm`;
+      cb(null, filename);
+    }
+  }),
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
 
@@ -211,6 +229,32 @@ app.get("/", (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
+});
+
+/* ================================
+   DEBUG: Check if uploads are being served
+   ================================= */
+app.get("/api/debug/uploads", (req, res) => {
+  try {
+    const files = fs.readdirSync(uploadsPath);
+    let voiceFiles = [];
+    const voicePath = path.join(uploadsPath, "voice");
+    if (fs.existsSync(voicePath)) {
+      voiceFiles = fs.readdirSync(voicePath);
+    }
+    
+    res.json({
+      uploadsPath,
+      uploadsPathExists: fs.existsSync(uploadsPath),
+      uploadsPathIsDir: fs.existsSync(uploadsPath) && fs.statSync(uploadsPath).isDirectory(),
+      voicePathExists: fs.existsSync(voicePath),
+      allFilesInUploads: files,
+      voiceFiles,
+      exampleUrlToTry: voiceFiles.length > 0 ? `/uploads/voice/${voiceFiles[0]}` : "/uploads/voice/[test-file-here]",
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /* ================================
@@ -1013,6 +1057,118 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
     });
   }
 });
+
+/* ================================
+   GET ATTENDANCE (VIEW LOCK STATUS) - TEACHER
+   ================================= */
+app.get("/api/teacher/attendance", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const { date, className, section } = req.query;
+    if (!date) {
+      return res.json({ date: null, isFinalized: false, presentCount: 0, absentCount: 0, leaveCount: 0, totalStudents: 0, records: [] });
+    }
+
+    const schoolId = req.user.schoolIdObj;
+
+    console.log("📖 [GET] Fetching attendance for DATE ONLY:", date, "class:", className, "section:", section);
+
+    // ✅ ONLY fetch records for this SPECIFIC DATE
+    const query = {
+      date: String(date),
+      class: String(className),
+      section: String(section),
+      ...(schoolId ? { schoolId } : {}),
+    };
+
+    const records = await db.collection("attendance").find(query).toArray();
+    console.log("📖 [GET] Found", records.length, "records for date:", date);
+
+    // ✅ Get total class size
+    const totalStudents = await db.collection("students").countDocuments({
+      class: String(className),
+      section: String(section),
+      ...(schoolId ? { schoolId } : {}),
+    });
+
+    console.log("📖 [GET] Total students in class:", totalStudents);
+
+    // ✅ Count by status from THIS DATE ONLY
+    const presentCount = records.filter(r => r.status === "PRESENT").length;
+    const absentCount = records.filter(r => r.status === "ABSENT").length;
+    const leaveCount = records.filter(r => r.status === "LEAVE").length;
+
+    console.log("📊 [GET] Date:", date, "| Present:", presentCount, "Absent:", absentCount, "Leave:", leaveCount, "Total students:", totalStudents);
+
+    // ✅ Get ALL students in the class
+    const allClassStudents = await db.collection("students").find({
+      class: String(className),
+      section: String(section),
+      ...(schoolId ? { schoolId } : {}),
+    }).toArray();
+
+    // ✅ For EACH student in the class, calculate their overall attendance percentage (lifetime)
+    // This ensures all students show their percentage, even if they don't have a record for this date
+    const enhancedRecords = [];
+    for (const student of allClassStudents) {
+      const studentId = safeObjectId(student._id);  // ✅ Convert to ObjectId to match database storage
+      
+      // Get ALL attendance records for this student (across all dates)
+      const allStudentRecords = await db.collection("attendance").find({
+        studentId: studentId,  // ✅ Query with ObjectId, not string
+        ...(schoolId ? { schoolId } : {}),
+      }).toArray();
+      
+      const studentPresentCount = allStudentRecords.filter(r => r.status === "PRESENT").length;
+      const studentTotalRecords = allStudentRecords.length;
+      const overallPercentage = studentTotalRecords > 0 ? Math.round((studentPresentCount / studentTotalRecords) * 100) : 0;
+      
+      // Find if this student has a record for THIS specific date
+      const dateRecord = records.find(r => String(r.studentId) === String(studentId));
+      
+      if (dateRecord) {
+        console.log("📊 [GET] Student", String(studentId).slice(0, 8) + "... is", dateRecord.status, "on", date, " | Lifetime:", overallPercentage + "%", `(${studentPresentCount}/${studentTotalRecords})`);
+        enhancedRecords.push({
+          ...dateRecord,
+          overallPercentage,  // ✅ Each student's lifetime percentage
+        });
+      } else {
+        // Student has no record for this date - add with default PRESENT and their overall percentage
+        console.log("📊 [GET] Student", String(studentId).slice(0, 8) + "... has NO record on", date, " | Lifetime:", overallPercentage + "%", `(${studentPresentCount}/${studentTotalRecords})`);
+        enhancedRecords.push({
+          studentId: studentId,
+          date: String(date),
+          status: null,  // No status yet
+          class: String(className),
+          section: String(section),
+          overallPercentage,  // ✅ Each student's lifetime percentage
+        });
+      }
+    }
+
+    // ✅ Check finalization status for this date
+    let isFinalized = false;
+    if (records.length > 0) {
+      const finalizedStates = [...new Set(records.map(r => r.isFinalized))];
+      isFinalized = finalizedStates.includes(true);
+    }
+
+    console.log("🔒 [GET] isFinalized:", isFinalized);
+
+    return res.json({
+      date: String(date),
+      isFinalized,
+      presentCount,
+      absentCount,
+      leaveCount,
+      totalStudents,
+      records: enhancedRecords,  // ✅ Records now include overallPercentage for ALL students in class
+    });
+  } catch (err) {
+    console.error("❌ [GET] FETCH ATTENDANCE ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch attendance" });
+  }
+});
+
 /* ================================
    SAVE ATTENDANCE (DRAFT ONLY) - TEACHER
    ================================= */
@@ -1038,10 +1194,30 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
     }
 
     console.log("✅ ATTENDANCE SAVE - schoolId:", schoolId, "class:", className, "section:", section, "date:", date);
+    console.log("📝 [SAVE] Processing", records.length, "student records");
+
+    // 🔒 CRITICAL: Check if ANY record for this date is already finalized
+    const existingFinalized = await db.collection("attendance").findOne({
+      schoolId,
+      date: String(date),
+      class: String(className),
+      section: String(section),
+      isFinalized: true,
+    });
+
+    if (existingFinalized) {
+      console.warn("❌ [SAVE] BLOCKED - Attendance already finalized for", date);
+      return res.status(403).json({
+        error: "Cannot edit finalized attendance. This date is locked.",
+      });
+    }
 
     for (const r of records) {
       const studentId = safeObjectId(r.studentUserId || r.studentId);
-      if (!studentId) continue;
+      if (!studentId) {
+        console.warn("⚠️ [SAVE] Skipping record - invalid studentId:", r.studentUserId, r.studentId);
+        continue;
+      }
 
       // ✅ TENANT & CLASS/SECTION SCOPED: Update filter
       const filter = {
@@ -1067,11 +1243,47 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
         $setOnInsert: { createdAt: new Date() },
       };
 
-      await db.collection("attendance").updateOne(filter, update, { upsert: true });
+      console.log("📝 [SAVE] Upserting record for student:", studentId.toString().slice(0, 8) + "...", "status:", r.status);
+
+      const result = await db.collection("attendance").updateOne(filter, update, { upsert: true });
+      console.log("   Result - matched:", result.matchedCount, "upserted:", result.upsertedCount);
     }
 
-    console.log("✅ ATTENDANCE DRAFT SAVED - count:", records.length);
-    res.json({ success: true, message: "Draft saved", count: records.length });
+    // ✅ After saving, recalculate and return the counts - ONLY for this date
+    const allRecordsAfterSave = await db.collection("attendance").find({
+      schoolId,
+      date: String(date),
+      class: String(className),
+      section: String(section),
+    }).toArray();
+
+    console.log("✅ [SAVE] After upsert - Found", allRecordsAfterSave.length, "records for recalculation");
+
+    const presentCount = allRecordsAfterSave.filter(r => r.status === "PRESENT").length;
+    const absentCount = allRecordsAfterSave.filter(r => r.status === "ABSENT").length;
+    const leaveCount = allRecordsAfterSave.filter(r => r.status === "LEAVE").length;
+    
+    // ✅ Get total class size (not record count)
+    const totalStudents = await db.collection("students").countDocuments({
+      class: String(className),
+      section: String(section),
+      ...(schoolId ? { schoolId } : {}),
+    });
+    
+    // ✅ Percentage = (present / total students in class) * 100
+    const percentageForDate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
+    console.log("✅ ATTENDANCE DRAFT SAVED - records on this date:", allRecordsAfterSave.length, "total students in class:", totalStudents, "present:", presentCount, "absent:", absentCount, "leave:", leaveCount, "percentage:", percentageForDate + "%");
+    res.json({ 
+      success: true, 
+      message: "Draft saved", 
+      recordsSaved: records.length,
+      presentCount,
+      absentCount,
+      leaveCount,
+      percentageForDate,
+      totalStudents,
+    });
   } catch (err) {
     console.error("❌ SAVE ATTENDANCE ERROR:", err);
     res.status(500).json({ error: "Attendance save failed" });
@@ -1098,6 +1310,22 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
 
     console.log("✅ ATTENDANCE SUBMIT - schoolId:", schoolId, "class:", className, "section:", section, "date:", date);
 
+    // 🔒 Check if already finalized
+    const alreadyFinalized = await db.collection("attendance").findOne({
+      schoolId,
+      date: String(date),
+      class: String(className),
+      section: String(section),
+      isFinalized: true,
+    });
+
+    if (alreadyFinalized) {
+      console.warn("⚠️ [SUBMIT] Already finalized for:", date);
+      return res.status(403).json({
+        error: "This attendance is already finalized and cannot be modified",
+      });
+    }
+
     // ✅ TENANT & CLASS/SECTION SCOPED: Only find DRAFT records from this school/class/section
     const filter = {
       schoolId,
@@ -1107,24 +1335,75 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
       submissionStatus: "DRAFT",
     };
 
+    console.log("✅ [SUBMIT] Looking for DRAFT records with filter:", JSON.stringify(filter));
+
     const result = await db.collection("attendance").updateMany(
       filter,
       {
         $set: {
           submissionStatus: "SUBMITTED",
+          isFinalized: true,
+          finalizedAt: new Date(),
           submittedAt: new Date(),
         },
       }
     );
 
+    console.log("✅ [SUBMIT] UpdateMany result - matched:", result.matchedCount, "modified:", result.modifiedCount);
+
     if (result.matchedCount === 0) {
+      console.warn("⚠️ [SUBMIT] No DRAFT records found. Checking what exists...");
+      const allRecords = await db.collection("attendance").find({
+        schoolId,
+        date: String(date),
+        class: String(className),
+        section: String(section),
+      }).toArray();
+      console.warn("   Total records for this date/class/section:", allRecords.length);
+      if (allRecords.length > 0) {
+        console.warn("   Sample record:", JSON.stringify(allRecords[0], (key, value) => {
+          if (key === "_id" || key === "schoolId" || key === "studentId") return String(value);
+          return value;
+        }));
+      }
       return res.status(400).json({
         error: "No draft attendance found for this date. Please save attendance first.",
       });
     }
 
-    console.log("✅ ATTENDANCE SUBMITTED - count:", result.modifiedCount);
-    res.json({ success: true, message: "Attendance submitted", submitted: result.modifiedCount });
+    // ✅ After finalization, recalculate and return the counts - ONLY for this date
+    const finalizedRecords = await db.collection("attendance").find({
+      schoolId,
+      date: String(date),
+      class: String(className),
+      section: String(section),
+    }).toArray();
+
+    const presentCount = finalizedRecords.filter(r => r.status === "PRESENT").length;
+    const absentCount = finalizedRecords.filter(r => r.status === "ABSENT").length;
+    const leaveCount = finalizedRecords.filter(r => r.status === "LEAVE").length;
+    
+    // ✅ Get total class size (not record count)
+    const totalStudents = await db.collection("students").countDocuments({
+      class: String(className),
+      section: String(section),
+      ...(schoolId ? { schoolId } : {}),
+    });
+    
+    // ✅ Percentage = (present / total students in class) * 100
+    const percentageForDate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
+    console.log("✅ ATTENDANCE SUBMITTED - records finalized:", result.modifiedCount, "total students in class:", totalStudents, "present:", presentCount, "absent:", absentCount, "leave:", leaveCount, "percentage:", percentageForDate + "%");
+    res.json({ 
+      success: true, 
+      message: "Attendance submitted",
+      recordsFinalized: result.modifiedCount,
+      presentCount,
+      absentCount,
+      leaveCount,
+      percentageForDate,
+      totalStudents,
+    });
   } catch (err) {
     console.error("❌ SUBMIT ATTENDANCE ERROR:", err);
     res.status(500).json({ error: "Attendance submit failed" });
@@ -2139,8 +2418,40 @@ app.post(
         createdAt: new Date(),
       };
 
-      await db.collection("homework").insertOne(homework);
-      res.json({ success: true, homeworkId: homework._id });
+      const result = await db.collection("homework").insertOne(homework);
+      const homeworkId = result.insertedId;
+
+      // ✅ CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
+      const students = await db.collection("students").find({
+        schoolId: req.user.schoolIdObj,
+        class: teacher.class,
+        section: teacher.section,
+      }).toArray();
+
+      if (students.length > 0) {
+        const notifications = students.map((student) => ({
+          title: `New Homework: ${title}`,
+          message: `Your teacher assigned new homework in ${subject}`,
+          type: "homework",
+          targetRole: "STUDENT",
+          targetUser: student.userId,
+          schoolId: req.user.schoolIdObj,
+          referenceId: homeworkId,
+          targetRoute: `/student/dashboard?section=homework&id=${homeworkId.toString()}`,
+          metadata: {
+            homeworkId: homeworkId.toString(),
+            subject,
+            dueDate,
+          },
+          isRead: false,
+          createdAt: new Date(),
+        }));
+
+        await db.collection("notifications").insertMany(notifications);
+        console.log("✅ HOMEWORK NOTIFICATIONS CREATED:", notifications.length, "for homework:", homeworkId);
+      }
+
+      res.json({ success: true, homeworkId: homeworkId });
     } catch (err) {
       console.error("ADD HOMEWORK ERROR:", err);
       res.status(500).json({ error: "Failed to add homework" });
@@ -2247,6 +2558,38 @@ app.post(
 
       const result = await db.collection("events").insertOne(newEvent);
       newEvent._id = result.insertedId;
+
+      // ✅ CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
+      if (!isHoliday) {
+        const students = await db.collection("students").find({
+          schoolId: schoolId,
+          class: cls || (teacher ? teacher.class : null),
+          section: section || (teacher ? teacher.section : null),
+        }).toArray();
+
+        if (students.length > 0) {
+          const notifications = students.map((student) => ({
+            title: `New Event: ${eventName}`,
+            message: `A new event has been scheduled: ${eventName}`,
+            type: "event",
+            targetRole: "STUDENT",
+            targetUser: student.userId,
+            schoolId: schoolId,
+            referenceId: result.insertedId,
+            targetRoute: `/student/dashboard?section=events&id=${result.insertedId.toString()}`,
+            metadata: {
+              eventId: result.insertedId.toString(),
+              eventDate,
+              eventName,
+            },
+            isRead: false,
+            createdAt: new Date(),
+          }));
+
+          await db.collection("notifications").insertMany(notifications);
+          console.log("✅ EVENT NOTIFICATIONS CREATED:", notifications.length, "for event:", result.insertedId);
+        }
+      }
 
       res.json({ success: true, event: newEvent });
     } catch (err) {
@@ -2474,7 +2817,7 @@ app.post("/api/dev/users", requireAuth, async (req, res) => {
   }
 });
 
-/* List All Schools */
+/* List All Schools with Stats */
 app.get("/api/dev/schools", requireAuth, async (req, res) => {
   try {
     if (req.user?.role !== "DEVELOPER") {
@@ -2482,16 +2825,220 @@ app.get("/api/dev/schools", requireAuth, async (req, res) => {
     }
 
     const schools = await db.collection("schools").find({}).sort({ createdAt: -1 }).toArray();
-    const result = schools.map((s) => ({
-      _id: s._id.toString(),
-      name: s.name,
-      createdAt: s.createdAt,
+    const result = await Promise.all(schools.map(async (s) => {
+      const schoolId = safeObjectId(s._id);
+      const studentCount = await db.collection("users").countDocuments({ schoolId, role: "STUDENT" });
+      const teacherCount = await db.collection("users").countDocuments({ schoolId, role: "TEACHER" });
+      const adminCount = await db.collection("users").countDocuments({ schoolId, role: "ADMIN" });
+      
+      return {
+        _id: s._id.toString(),
+        name: s.name,
+        code: s.code || "N/A",
+        totalStudents: studentCount,
+        totalTeachers: teacherCount,
+        totalAdmins: adminCount,
+        createdAt: s.createdAt,
+      };
     }));
 
     res.json(result);
   } catch (err) {
     console.error("❌ DEV LIST SCHOOLS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch schools" });
+  }
+});
+
+/* Get School Details */
+app.get("/api/dev/schools/:schoolId/details", requireAuth, requireRole("DEVELOPER"), async (req, res) => {
+  try {
+    const { schoolId } = req.params;
+    const schoolObjId = safeObjectId(schoolId);
+    
+    if (!schoolObjId) {
+      return res.status(400).json({ error: "Invalid school ID" });
+    }
+
+    const school = await db.collection("schools").findOne({ _id: schoolObjId });
+    if (!school) {
+      return res.status(404).json({ error: "School not found" });
+    }
+
+    // Count users by role
+    const admins = await db.collection("users").find({ schoolId: schoolObjId, role: "ADMIN" }).toArray();
+    const teachers = await db.collection("users").find({ schoolId: schoolObjId, role: "TEACHER" }).toArray();
+    const students = await db.collection("users").find({ schoolId: schoolObjId, role: "STUDENT" }).toArray();
+
+    // Count data records
+    const attendanceCount = await db.collection("attendance").countDocuments({ schoolId: schoolObjId });
+    const homeworkCount = await db.collection("homework").countDocuments({ schoolId: schoolObjId });
+    const announcementCount = await db.collection("announcements").countDocuments({ schoolId: schoolObjId });
+    const marksCount = await db.collection("marks").countDocuments({ schoolId: schoolObjId });
+
+    res.json({
+      school: {
+        _id: school._id.toString(),
+        name: school.name,
+        code: school.code,
+        createdAt: school.createdAt,
+      },
+      stats: {
+        totalStudents: students.length,
+        totalTeachers: teachers.length,
+        totalAdmins: admins.length,
+        totalAttendance: attendanceCount,
+        totalHomework: homeworkCount,
+        totalAnnouncements: announcementCount,
+        totalMarks: marksCount,
+      },
+      admins: admins.map(u => ({
+        _id: u._id.toString(),
+        name: u.name || u.email,
+        email: u.email,
+        createdAt: u.createdAt,
+      })),
+      teachers: teachers.map(u => ({
+        _id: u._id.toString(),
+        name: u.name || u.email,
+        email: u.email,
+        class: u.class,
+        section: u.section,
+        subject: u.subject,
+        createdAt: u.createdAt,
+      })),
+      students: students.map(u => ({
+        _id: u._id.toString(),
+        name: u.name || u.email,
+        email: u.email,
+        class: u.class,
+        section: u.section,
+        rollNo: u.rollNo,
+        createdAt: u.createdAt,
+      })),
+    });
+  } catch (err) {
+    console.error("❌ DEV SCHOOL DETAILS ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch school details" });
+  }
+});
+
+/* Delete User by ID */
+app.delete("/api/dev/users/:userId", requireAuth, requireRole("DEVELOPER"), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const userObjId = safeObjectId(userId);
+    
+    if (!userObjId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    const user = await db.collection("users").findOne({ _id: userObjId });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const result = await db.collection("users").deleteOne({ _id: userObjId });
+    
+    if (result.deletedCount > 0) {
+      console.log(`✅ User deleted: ${user.email} (${user.role})`);
+      return res.json({ success: true, message: `User ${user.email} deleted` });
+    } else {
+      return res.status(404).json({ error: "Failed to delete user" });
+    }
+  } catch (err) {
+    console.error("❌ DELETE USER ERROR:", err);
+    res.status(500).json({ error: "Delete failed" });
+  }
+});
+
+/* Delete Entire School - Cascading Delete */
+app.delete("/api/dev/schools/:schoolId", requireAuth, requireRole("DEVELOPER"), async (req, res) => {
+  try {
+    const { schoolId } = req.params;
+    const schoolObjId = safeObjectId(schoolId);
+    
+    if (!schoolObjId) {
+      return res.status(400).json({ error: "Invalid school ID" });
+    }
+
+    const school = await db.collection("schools").findOne({ _id: schoolObjId });
+    if (!school) {
+      return res.status(404).json({ error: "School not found" });
+    }
+
+    // Delete all related data for this school
+    await db.collection("users").deleteMany({ schoolId: schoolObjId });
+    await db.collection("attendance").deleteMany({ schoolId: schoolObjId });
+    await db.collection("homework").deleteMany({ schoolId: schoolObjId });
+    await db.collection("announcements").deleteMany({ schoolId: schoolObjId });
+    await db.collection("marks").deleteMany({ schoolId: schoolObjId });
+    await db.collection("timetables").deleteMany({ schoolId: schoolObjId });
+    await db.collection("events").deleteMany({ schoolId: schoolObjId });
+    await db.collection("subjects").deleteMany({ schoolId: schoolObjId });
+    await db.collection("notifications").deleteMany({ schoolId: schoolObjId });
+    await db.collection("admissions").deleteMany({ schoolId: schoolObjId });
+    await db.collection("voiceMessages").deleteMany({ schoolId: schoolObjId });
+
+    // Delete the school itself
+    const deleteResult = await db.collection("schools").deleteOne({ _id: schoolObjId });
+
+    if (deleteResult.deletedCount > 0) {
+      console.log(`✅ School deleted: ${school.name} - All related data removed`);
+      return res.json({ 
+        success: true, 
+        message: `School "${school.name}" and all related data deleted successfully` 
+      });
+    } else {
+      return res.status(500).json({ error: "Failed to delete school" });
+    }
+  } catch (err) {
+    console.error("❌ DELETE SCHOOL ERROR:", err);
+    res.status(500).json({ error: "Delete failed" });
+  }
+});
+
+/* Delete School Data by Type */
+app.delete("/api/dev/schools/:schoolId/data", requireAuth, requireRole("DEVELOPER"), async (req, res) => {
+  try {
+    const { schoolId } = req.params;
+    const { type } = req.query; // attendance, homework, announcements, marks, timetables, etc.
+    
+    const schoolObjId = safeObjectId(schoolId);
+    if (!schoolObjId) {
+      return res.status(400).json({ error: "Invalid school ID" });
+    }
+
+    if (!type) {
+      return res.status(400).json({ error: "Data type required (attendance, homework, announcements, marks, timetables, events, subjects)" });
+    }
+
+    const collectionMap = {
+      attendance: "attendance",
+      homework: "homework",
+      announcements: "announcements",
+      marks: "marks",
+      timetables: "timetables",
+      events: "events",
+      subjects: "subjects",
+      voiceMessages: "voiceMessages",
+    };
+
+    const collection = collectionMap[type];
+    if (!collection) {
+      return res.status(400).json({ error: "Invalid data type" });
+    }
+
+    const result = await db.collection(collection).deleteMany({ schoolId: schoolObjId });
+    console.log(`✅ Deleted ${result.deletedCount} ${type} records for school ${schoolId}`);
+
+    res.json({
+      success: true,
+      message: `Deleted ${result.deletedCount} ${type} records`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (err) {
+    console.error("❌ DELETE DATA ERROR:", err);
+    res.status(500).json({ error: "Delete failed" });
   }
 });
 
@@ -2643,11 +3190,34 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
     };
 
     const result = await db.collection("voiceMessages").insertOne(voiceMessage);
+    const voiceMessageId = result.insertedId;
+
+    // ✅ CREATE NOTIFICATIONS FOR ALL TARGET TEACHERS
+    const notifications = targetUserIds.map((teacherUserId) => ({
+      userId: teacherUserId,
+      role: "TEACHER",
+      schoolId,
+      title: "New Voice Message from Admin",
+      message: "Admin sent a new voice message",
+      type: "voice",
+      targetRole: "TEACHER",
+      targetUser: teacherUserId,
+      referenceId: voiceMessageId,
+      audioUrl: audioUrl,
+      targetRoute: `/teacher/dashboard?section=announcements&id=${voiceMessageId.toString()}`,
+      isRead: false,
+      createdAt: new Date(),
+    }));
+
+    if (notifications.length > 0) {
+      await db.collection("notifications").insertMany(notifications);
+      console.log("✅ NOTIFICATIONS CREATED:", notifications.length, "for admin voice message");
+    }
 
     console.log("✅ ADMIN VOICE BROADCAST - Recipients:", targetUserIds.length, "Audio URL:", audioUrl);
     res.json({
       success: true,
-      messageId: result.insertedId.toString(),
+      messageId: voiceMessageId.toString(),
       broadcastTo: targetUserIds.length,
       audioUrl,
     });
@@ -2721,11 +3291,34 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
     };
 
     const result = await db.collection("voiceMessages").insertOne(voiceMessage);
+    const voiceMessageId = result.insertedId;
+
+    // ✅ CREATE NOTIFICATIONS FOR ALL TARGET STUDENTS
+    const notifications = targetUserIds.map((studentUserId) => ({
+      userId: studentUserId,
+      role: "STUDENT",
+      schoolId,
+      title: "New Voice Message",
+      message: `Your teacher sent a new voice message for class ${className}-${section}`,
+      type: "voice",
+      targetRole: "STUDENT",
+      targetUser: studentUserId,
+      referenceId: voiceMessageId,
+      audioUrl: audioUrl,
+      targetRoute: `/student/dashboard?section=voice&id=${voiceMessageId.toString()}`,
+      isRead: false,
+      createdAt: new Date(),
+    }));
+
+    if (notifications.length > 0) {
+      await db.collection("notifications").insertMany(notifications);
+      console.log("✅ NOTIFICATIONS CREATED:", notifications.length, "for voice message");
+    }
 
     console.log("✅ TEACHER VOICE BROADCAST - Recipients:", targetUserIds.length, "Class:", className, "Section:", section, "Audio URL:", audioUrl);
     res.json({
       success: true,
-      messageId: result.insertedId.toString(),
+      messageId: voiceMessageId.toString(),
       broadcastTo: targetUserIds.length,
       audioUrl,
     });
@@ -2873,6 +3466,39 @@ app.post("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireT
       const insertResult = await db.collection("timetables").insertOne(timetableEntry);
       console.log("✅ TIMETABLE CREATED - ID:", insertResult.insertedId, "Day:", day, "Period:", period);
       result = { value: { ...timetableEntry, _id: insertResult.insertedId } };
+
+      // ✅ CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
+      const students = await db.collection("students").find({
+        schoolId,
+        class: className,
+        section,
+      }).toArray();
+
+      if (students.length > 0) {
+        const notifications = students.map((student) => ({
+          title: `Timetable Updated: ${subject}`,
+          message: `New class schedule added - ${subject} on ${day}`,
+          type: "timetable",
+          targetRole: "STUDENT",
+          targetUser: student.userId,
+          schoolId,
+          referenceId: insertResult.insertedId,
+          targetRoute: `/student/dashboard?section=timetable`,
+          metadata: {
+            timetableId: insertResult.insertedId.toString(),
+            day,
+            period,
+            subject,
+            startTime,
+            endTime,
+          },
+          isRead: false,
+          createdAt: new Date(),
+        }));
+
+        await db.collection("notifications").insertMany(notifications);
+        console.log("✅ TIMETABLE NOTIFICATIONS CREATED:", notifications.length, "for timetable:", insertResult.insertedId);
+      }
     }
 
     res.json({
@@ -2997,14 +3623,14 @@ app.delete("/api/teacher/timetable/:id", requireAuth, requireRole("TEACHER"), re
  */
 app.post("/api/teacher/syllabus", requireAuth, requireRole("TEACHER"), requireTenantId, upload.single("file"), async (req, res) => {
   try {
-    const { subject, title, description } = req.body;
+    const { subject, title, description, examName } = req.body;
     const schoolId = req.user.schoolIdObj;
     const teacherId = safeObjectId(req.user.userId);
     const className = req.user.class;
     const section = req.user.section;
 
-    if (!subject || !title) {
-      return res.status(400).json({ error: "Missing required fields: subject, title" });
+    if (!subject || !title || !examName) {
+      return res.status(400).json({ error: "Missing required fields: subject, title, examName" });
     }
 
     let fileUrl = null;
@@ -3019,6 +3645,7 @@ app.post("/api/teacher/syllabus", requireAuth, requireRole("TEACHER"), requireTe
       subject,
       title,
       description: description || "",
+      examName,
       fileUrl,
       createdBy: teacherId,
       createdAt: new Date(),
@@ -3026,7 +3653,39 @@ app.post("/api/teacher/syllabus", requireAuth, requireRole("TEACHER"), requireTe
 
     const result = await db.collection("syllabus").insertOne(syllabus);
 
-    console.log("✅ SYLLABUS CREATED - ID:", result.insertedId, "Subject:", subject, "Title:", title);
+    // ✅ CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
+    const students = await db.collection("students").find({
+      schoolId,
+      class: className,
+      section,
+    }).toArray();
+
+    if (students.length > 0) {
+      const notifications = students.map((student) => ({
+        title: `New Syllabus: ${title}`,
+        message: `Your teacher shared the syllabus for ${subject}`,
+        type: "syllabus",
+        targetRole: "STUDENT",
+        targetUser: student.userId,
+        schoolId,
+        referenceId: result.insertedId,
+        targetRoute: `/student/dashboard?section=syllabus&id=${result.insertedId.toString()}`,
+        metadata: {
+          syllabusId: result.insertedId.toString(),
+          subject,
+          title,
+          examName,
+          fileUrl,
+        },
+        isRead: false,
+        createdAt: new Date(),
+      }));
+
+      await db.collection("notifications").insertMany(notifications);
+      console.log("✅ SYLLABUS NOTIFICATIONS CREATED:", notifications.length, "for syllabus:", result.insertedId);
+    }
+
+    console.log("✅ SYLLABUS CREATED - ID:", result.insertedId, "Subject:", subject, "Title:", title, "Exam:", examName);
     res.json({
       success: true,
       syllabusId: result.insertedId.toString(),
@@ -3097,8 +3756,461 @@ app.delete("/api/teacher/syllabus/:id", requireAuth, requireRole("TEACHER"), req
   }
 });
 
+/* ====================================================================
+   🎓 EXAM-LEVEL SYLLABUS MANAGEMENT (New System)
+   Supports multiple subjects per exam
+   ==================================================================== */
+
+/**
+ * TEACHER: POST /api/teacher/exam-syllabus
+ * Create new exam with initial subjects only
+ * Does NOT append to existing exams - use POST /subject for that
+ */
+app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const { examName, subjects } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+    const teacherId = safeObjectId(req.user.userId);
+
+    // Validate inputs
+    if (!examName || !Array.isArray(subjects) || subjects.length === 0) {
+      return res.status(400).json({ error: "Exam name and at least one subject are required" });
+    }
+
+    // Validate subjects
+    for (const subj of subjects) {
+      if (!subj.subjectName || !subj.syllabusText) {
+        return res.status(400).json({ error: "Subject name and syllabus text are required for all subjects" });
+      }
+    }
+
+    // Check if exam already exists for this class/section
+    const existingExam = await db.collection("examSyllabus").findOne({
+      schoolId,
+      class: className,
+      section,
+      examName: examName.trim(),
+    });
+
+    if (existingExam) {
+      return res.status(400).json({ error: "Exam with this name already exists. Use the add subject endpoint to add more subjects." });
+    }
+
+    // Create new exam with subjects that have _id
+    const newExam = {
+      schoolId,
+      class: className,
+      section,
+      examName: examName.trim(),
+      subjects: subjects.map((s) => ({
+        _id: new ObjectId(),
+        subjectName: s.subjectName.trim(),
+        syllabusText: s.syllabusText.trim(),
+      })),
+      createdBy: teacherId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const insertResult = await db.collection("examSyllabus").insertOne(newExam);
+    let isNew = true;
+
+    // ✅ CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
+    const students = await db.collection("students")
+      .find({
+        schoolId,
+        class: className,
+        section,
+      })
+      .toArray();
+
+    if (students.length > 0) {
+      const subjectList = newExam.subjects.map((s) => s.subjectName).join(", ");
+      const notifications = students.map((student) => ({
+        title: `📖 ${examName} Syllabus Available`,
+        message: `Syllabus for ${examName} (${subjectList}) has been shared`,
+        type: "syllabus",
+        targetRole: "STUDENT",
+        targetUser: student.userId,
+        schoolId,
+        referenceId: insertResult.insertedId,
+        targetRoute: `/student/dashboard?section=syllabus&examId=${insertResult.insertedId.toString()}`,
+        metadata: {
+          examId: insertResult.insertedId.toString(),
+          examName,
+          subjects: subjectList,
+        },
+        isRead: false,
+        createdAt: new Date(),
+      }));
+
+      await db.collection("notifications").insertMany(notifications);
+      console.log("✅ EXAM SYLLABUS NOTIFICATIONS CREATED:", notifications.length, "for exam:", examName);
+    }
+
+    console.log("✅ EXAM SYLLABUS CREATED - ID:", insertResult.insertedId, "Exam:", examName, "Subjects:", subjects.length);
+
+    res.json({
+      success: true,
+      examId: insertResult.insertedId.toString(),
+      isNew: true,
+      message: "Exam syllabus created successfully!",
+    });
+  } catch (err) {
+    console.error("❌ EXAM SYLLABUS CREATE/UPDATE ERROR:", err);
+    res.status(500).json({ error: "Failed to create or update exam syllabus" });
+  }
+});
+
+/**
+ * TEACHER: GET /api/teacher/exam-syllabus
+ * Get all exam syllabuses for teacher's class/section
+ */
+app.get("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    const exams = await db.collection("examSyllabus")
+      .find({
+        schoolId,
+        class: className,
+        section: section,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    console.log("✅ TEACHER EXAM SYLLABUSES - Count:", exams.length);
+    res.json(exams.map((e) => ({ ...e, _id: e._id.toString() })));
+  } catch (err) {
+    console.error("❌ TEACHER EXAM SYLLABUSES FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch exam syllabuses" });
+  }
+});
+
+/**
+ * TEACHER: PUT /api/teacher/exam-syllabus/:id
+ * Update exam name only - does NOT touch subjects
+ */
+app.put("/api/teacher/exam-syllabus/:id", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const examId = safeObjectId(req.params.id);
+    const { examName } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    if (!examId) {
+      return res.status(400).json({ error: "Invalid exam ID" });
+    }
+
+    if (!examName || !examName.trim()) {
+      return res.status(400).json({ error: "Exam name is required" });
+    }
+
+    const result = await db.collection("examSyllabus").updateOne(
+      {
+        _id: examId,
+        schoolId,
+        class: className,
+        section: section,
+      },
+      { $set: { examName: examName.trim(), updatedAt: new Date() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Exam syllabus not found" });
+    }
+
+    console.log("✅ EXAM NAME UPDATED - ID:", examId);
+    res.json({ success: true, message: "Exam name updated successfully" });
+  } catch (err) {
+    console.error("❌ EXAM UPDATE ERROR:", err);
+    res.status(500).json({ error: "Failed to update exam" });
+  }
+});
+
+/**
+ * TEACHER: POST /api/teacher/exam-syllabus/:examId/subject
+ * Add a new subject to an existing exam (APPEND, not replace)
+ */
+app.post("/api/teacher/exam-syllabus/:examId/subject", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const examId = safeObjectId(req.params.examId);
+    const { subjectName, syllabusText } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    if (!examId) {
+      return res.status(400).json({ error: "Invalid exam ID" });
+    }
+
+    if (!subjectName || !syllabusText) {
+      return res.status(400).json({ error: "Subject name and syllabus text are required" });
+    }
+
+    // Check if subject already exists in this exam
+    const existingExam = await db.collection("examSyllabus").findOne({
+      _id: examId,
+      schoolId,
+      class: className,
+      section,
+    });
+
+    if (!existingExam) {
+      return res.status(404).json({ error: "Exam not found" });
+    }
+
+    // Check if subject name already exists
+    if (existingExam.subjects?.some((s) => s.subjectName.toLowerCase() === subjectName.toLowerCase())) {
+      return res.status(400).json({ error: "Subject with this name already exists in this exam" });
+    }
+
+    // APPEND new subject using $push (does NOT replace array)
+    const result = await db.collection("examSyllabus").updateOne(
+      {
+        _id: examId,
+        schoolId,
+        class: className,
+        section,
+      },
+      {
+        $push: {
+          subjects: {
+            _id: new ObjectId(),
+            subjectName: subjectName.trim(),
+            syllabusText: syllabusText.trim(),
+          },
+        },
+        $set: { updatedAt: new Date() },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Exam not found" });
+    }
+
+    console.log("✅ SUBJECT ADDED TO EXAM - Exam ID:", examId, "Subject:", subjectName);
+    res.json({ success: true, message: "Subject added successfully!" });
+  } catch (err) {
+    console.error("❌ ADD SUBJECT ERROR:", err);
+    res.status(500).json({ error: "Failed to add subject" });
+  }
+});
+
+/**
+ * TEACHER: PUT /api/teacher/exam-syllabus/:examId/subject/:subjectId
+ * Update a specific subject's name and/or syllabus text
+ */
+app.put("/api/teacher/exam-syllabus/:examId/subject/:subjectId", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const examId = safeObjectId(req.params.examId);
+    const subjectId = safeObjectId(req.params.subjectId);
+    const { subjectName, syllabusText } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    if (!examId || !subjectId) {
+      return res.status(400).json({ error: "Invalid exam ID or subject ID" });
+    }
+
+    if (!subjectName && !syllabusText) {
+      return res.status(400).json({ error: "At least subject name or syllabus text is required" });
+    }
+
+    // Prepare update for this specific subject in array
+    const updateData = {};
+
+    if (subjectName) {
+      updateData["subjects.$.subjectName"] = subjectName.trim();
+    }
+    if (syllabusText) {
+      updateData["subjects.$.syllabusText"] = syllabusText.trim();
+    }
+
+    const result = await db.collection("examSyllabus").updateOne(
+      {
+        _id: examId,
+        schoolId,
+        class: className,
+        section,
+        "subjects._id": subjectId,
+      },
+      {
+        $set: { ...updateData, updatedAt: new Date() },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Exam or subject not found" });
+    }
+
+    console.log("✅ SUBJECT UPDATED - Exam ID:", examId, "Subject ID:", subjectId);
+    res.json({ success: true, message: "Subject updated successfully!" });
+  } catch (err) {
+    console.error("❌ UPDATE SUBJECT ERROR:", err);
+    res.status(500).json({ error: "Failed to update subject" });
+  }
+});
+
+/**
+ * TEACHER: DELETE /api/teacher/exam-syllabus/:examId/subject/:subjectId
+ * Remove a specific subject by ID (does not delete other subjects)
+ */
+app.delete("/api/teacher/exam-syllabus/:examId/subject/:subjectId", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const examId = safeObjectId(req.params.examId);
+    const subjectId = safeObjectId(req.params.subjectId);
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    if (!examId || !subjectId) {
+      return res.status(400).json({ error: "Invalid exam ID or subject ID" });
+    }
+
+    const result = await db.collection("examSyllabus").updateOne(
+      {
+        _id: examId,
+        schoolId,
+        class: className,
+        section,
+      },
+      {
+        $pull: { subjects: { _id: subjectId } },
+        $set: { updatedAt: new Date() },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Exam not found" });
+    }
+
+    console.log("✅ SUBJECT DELETED - Exam ID:", examId, "Subject ID:", subjectId);
+    res.json({ success: true, message: "Subject deleted successfully!" });
+  } catch (err) {
+    console.error("❌ DELETE SUBJECT ERROR:", err);
+    res.status(500).json({ error: "Failed to delete subject" });
+  }
+});
+
+/**
+ * TEACHER: DELETE /api/teacher/exam-syllabus/:id
+ * Delete entire exam syllabus
+ */
+app.delete("/api/teacher/exam-syllabus/:id", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const examId = safeObjectId(req.params.id);
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    if (!examId) {
+      return res.status(400).json({ error: "Invalid exam ID" });
+    }
+
+    const result = await db.collection("examSyllabus").deleteOne({
+      _id: examId,
+      schoolId,
+      class: className,
+      section: section,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Exam syllabus not found" });
+    }
+
+    console.log("✅ EXAM SYLLABUS DELETED - ID:", examId);
+    res.json({ success: true, message: "Exam syllabus deleted successfully" });
+  } catch (err) {
+    console.error("❌ EXAM SYLLABUS DELETE ERROR:", err);
+    res.status(500).json({ error: "Failed to delete exam syllabus" });
+  }
+});
+
+/**
+ * TEACHER: DELETE /api/teacher/exam-syllabus/:id/subject/:subjectName
+ * Remove a specific subject from an exam
+ */
+app.delete(
+  "/api/teacher/exam-syllabus/:id/subject/:subjectName",
+  requireAuth,
+  requireRole("TEACHER"),
+  requireTenantId,
+  async (req, res) => {
+    try {
+      const examId = safeObjectId(req.params.id);
+      const subjectName = decodeURIComponent(req.params.subjectName);
+      const schoolId = req.user.schoolIdObj;
+      const className = req.user.class;
+      const section = req.user.section;
+
+      if (!examId) {
+        return res.status(400).json({ error: "Invalid exam ID" });
+      }
+
+      const result = await db.collection("examSyllabus").updateOne(
+        {
+          _id: examId,
+          schoolId,
+          class: className,
+          section: section,
+        },
+        {
+          $pull: {
+            subjects: { subjectName: subjectName },
+          },
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ error: "Exam syllabus not found" });
+      }
+
+      console.log("✅ SUBJECT REMOVED FROM EXAM - Exam ID:", examId, "Subject:", subjectName);
+      res.json({ success: true, message: "Subject removed successfully" });
+    } catch (err) {
+      console.error("❌ SUBJECT REMOVE ERROR:", err);
+      res.status(500).json({ error: "Failed to remove subject" });
+    }
+  }
+);
+
+/**
+ * STUDENT: GET /api/student/exam-syllabus
+ * Get all exam syllabuses for student's class/section
+ */
+app.get("/api/student/exam-syllabus", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const className = req.user.class;
+    const section = req.user.section;
+
+    const exams = await db.collection("examSyllabus")
+      .find({
+        schoolId,
+        class: className,
+        section: section,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    console.log("✅ STUDENT EXAM SYLLABUSES - Count:", exams.length);
+    res.json(exams.map((e) => ({ ...e, _id: e._id.toString() })));
+  } catch (err) {
+    console.error("❌ STUDENT EXAM SYLLABUSES FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch exam syllabuses" });
+  }
+});
+
 /**
  * STUDENT: GET /api/student/syllabus
+
  * Get syllabus for student's class/section
  */
 app.get("/api/student/syllabus", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
@@ -3278,12 +4390,686 @@ app.get("/api/student/exams", requireAuth, requireRole("STUDENT"), requireTenant
 });
 
 /* ================================
+   SIMPLIFIED VOICE ANNOUNCE API (for all teachers and students)
+   ================================= */
+
+/**
+ * ADMIN: POST /api/admin/voice-announce
+ * Broadcast voice to teachers and/or students of the school
+ * 
+ * Body:
+ * - audio: audio file (multipart)
+ * - title: optional announcement title
+ * - broadcastTo: "all" (default), "teachers", or "students"
+ */
+app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), requireTenantId, voiceUpload.single("audio"), async (req, res) => {
+  try {
+    const { title, broadcastTo = "all" } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const senderId = safeObjectId(req.user.userId);
+
+    console.log(`🎙️ VOICE ANNOUNCE: Starting upload, file info:`, req.file ? {
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+      path: req.file.path
+    } : "NO FILE");
+
+    if (!req.file) {
+      console.error("❌ VOICE ANNOUNCE: No file uploaded");
+      return res.status(400).json({ error: "No audio file uploaded" });
+    }
+
+    if (req.file.size === 0) {
+      console.error("❌ VOICE ANNOUNCE: Uploaded file is empty");
+      return res.status(400).json({ error: "Audio file is empty. Please record audio and try again." });
+    }
+
+    if (!senderId) {
+      console.error("❌ VOICE ANNOUNCE: Invalid admin ID");
+      return res.status(400).json({ error: "Invalid admin ID" });
+    }
+
+    // Validate broadcastTo parameter
+    if (!["all", "teachers", "students"].includes(broadcastTo)) {
+      return res.status(400).json({ error: "Invalid broadcastTo value. Must be 'all', 'teachers', or 'students'" });
+    }
+
+    // Use the filename that multer already saved with our custom storage
+    const audioUrl = `/uploads/voice/${req.file.filename}`;
+    const filePath = req.file.path;
+
+    console.log(`✅ VOICE ANNOUNCE: File uploaded successfully`);
+    console.log(`   📁 File path on disk: ${filePath}`);
+    console.log(`   🌐 Public URL: ${audioUrl}`);
+    console.log(`   📝 Title: ${title || "School Announcement"}`);
+    console.log(`   👥 Broadcast to: ${broadcastTo}`);
+
+    // Get all teachers and students for this school
+    const [teachers, students] = await Promise.all([
+      db.collection("teachers").find({ schoolId }).toArray(),
+      db.collection("students").find({ schoolId }).toArray(),
+    ]);
+
+    // Extract user IDs
+    const teacherUserIds = teachers.map((t) => t.userId);
+    const studentUserIds = students.map((s) => s.userId);
+
+    let broadcastToTeachers = 0;
+    let broadcastToStudents = 0;
+
+    // Create announcements for teachers if broadcastTo is "all" or "teachers"
+    if ((broadcastTo === "all" || broadcastTo === "teachers") && teacherUserIds.length > 0) {
+      const teacherAnnouncement = {
+        schoolId,
+        senderRole: "ADMIN",
+        senderId,
+        title: title || "School Announcement",
+        audioUrl,
+        targetRole: "TEACHER",
+        targetUserIds: teacherUserIds,
+        createdAt: new Date(),
+      };
+      await db.collection("voice_messages").insertOne(teacherAnnouncement);
+      broadcastToTeachers = teacherUserIds.length;
+      console.log(`✅ Voice announcement sent to ${broadcastToTeachers} teachers`);
+    }
+
+    // Create announcements for students if broadcastTo is "all" or "students"
+    if ((broadcastTo === "all" || broadcastTo === "students") && studentUserIds.length > 0) {
+      const studentAnnouncement = {
+        schoolId,
+        senderRole: "ADMIN",
+        senderId,
+        title: title || "School Announcement",
+        audioUrl,
+        targetRole: "STUDENT",
+        targetUserIds: studentUserIds,
+        createdAt: new Date(),
+      };
+      await db.collection("voice_messages").insertOne(studentAnnouncement);
+      broadcastToStudents = studentUserIds.length;
+      console.log(`✅ Voice announcement sent to ${broadcastToStudents} students`);
+    }
+
+    res.json({
+      success: true,
+      title: title || "School Announcement",
+      audioUrl,
+      broadcastToTeachers,
+      broadcastToStudents,
+      totalRecipients: broadcastToTeachers + broadcastToStudents,
+    });
+  } catch (err) {
+    console.error("❌ VOICE ANNOUNCE ERROR:", err);
+    res.status(500).json({ error: "Failed to broadcast voice announcement" });
+  }
+});
+
+/**
+ * ADMIN: GET /api/admin/voice-announces
+ * Get all voice announcements sent by this admin
+ */
+app.get("/api/admin/voice-announces", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    console.log(`🔍 GET /api/admin/voice-announces - Admin ID: ${req.user.userId}`);
+    
+    const schoolId = req.user.schoolIdObj;
+    const senderId = safeObjectId(req.user.userId);
+
+    if (!senderId) {
+      console.error("❌ Invalid admin ID");
+      return res.status(400).json({ error: "Invalid admin ID" });
+    }
+
+    console.log(`🔍 Fetching announcements for schoolId: ${schoolId}, senderId: ${senderId}`);
+
+    // Get all unique announcements (we store them twice - once for teachers, once for students)
+    // So we need to deduplicate by audioUrl
+    const announcements = await db.collection("voice_messages")
+      .find({
+        schoolId,
+        senderId,
+        senderRole: "ADMIN",
+        targetRole: "TEACHER", // Only get the teacher version to avoid duplicates
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // Format for frontend
+    const formatted = announcements.map((a) => ({
+      _id: a._id.toString(),
+      title: a.title || "School Announcement",
+      audioUrl: a.audioUrl,
+      createdAt: a.createdAt,
+      createdAtFormatted: new Date(a.createdAt).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }));
+
+    console.log(`✅ ADMIN VOICE ANNOUNCES: ${formatted.length} announcements found`);
+    formatted.forEach((a, idx) => {
+      console.log(`   [${idx + 1}] "${a.title}" - audioUrl: ${a.audioUrl}`);
+    });
+    res.json(formatted);
+  } catch (err) {
+    console.error("❌ GET VOICE ANNOUNCES ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch announcements" });
+  }
+});
+
+/**
+ * ADMIN: POST /api/admin/announcements
+ * Create a text announcement for all teachers and students
+ */
+app.post("/api/admin/announcements", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const { title, message, recipientRole } = req.body;
+    const schoolId = req.user.schoolIdObj;
+    const senderId = safeObjectId(req.user.userId);
+
+    if (!title || !message || !recipientRole) {
+      return res.status(400).json({ error: "title, message, and recipientRole are required" });
+    }
+
+    // Create announcement document
+    const announcement = {
+      schoolId,
+      senderId,
+      senderRole: "ADMIN",
+      title,
+      message,
+      recipientRole, // 'TEACHER', 'STUDENT', or 'ALL'
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("announcements").insertOne(announcement);
+    const announcementId = result.insertedId;
+
+    // ✅ CREATE NOTIFICATIONS FOR ALL TEACHERS OR STUDENTS
+    let targetRole = [];
+    let query = { schoolId };
+
+    if (recipientRole === "TEACHER" || recipientRole === "ALL") {
+      targetRole.push("TEACHER");
+    }
+    if (recipientRole === "STUDENT" || recipientRole === "ALL") {
+      targetRole.push("STUDENT");
+    }
+
+    // Create notifications for each recipient role
+    for (const role of targetRole) {
+      let recipients = [];
+      
+      if (role === "TEACHER") {
+        recipients = await db.collection("teachers").find(query).toArray();
+      } else if (role === "STUDENT") {
+        recipients = await db.collection("students").find(query).toArray();
+      }
+
+      if (recipients.length > 0) {
+        const targetPath = role === "TEACHER" ? "/teacher/dashboard?section=announcements" : "/student/dashboard?section=announcements";
+        const notifications = recipients.map((recipient) => ({
+          title: `Announcement: ${title}`,
+          message,
+          type: "announcement",
+          targetRole: role,
+          targetUser: recipient.userId,
+          schoolId,
+          referenceId: announcementId,
+          targetRoute: targetPath,
+          metadata: {
+            announcementId: announcementId.toString(),
+            title,
+          },
+          isRead: false,
+          createdAt: new Date(),
+        }));
+
+        await db.collection("notifications").insertMany(notifications);
+        console.log("✅ ANNOUNCEMENT NOTIFICATIONS CREATED:", notifications.length, `for ${role}s`);
+      }
+    }
+
+    console.log("✅ ANNOUNCEMENT CREATED - ID:", announcementId, "Title:", title, "Recipients:", recipientRole);
+    res.json({
+      success: true,
+      announcementId: announcementId.toString(),
+      announcement: { ...announcement, _id: announcementId.toString() },
+    });
+  } catch (err) {
+    console.error("❌ ANNOUNCEMENT CREATE ERROR:", err);
+    res.status(500).json({ error: "Failed to create announcement" });
+  }
+});
+
+/**
+ * TEACHER: GET /api/teacher/voice-announces
+ * Get all voice announcements for this teacher (from admin and personal)
+ */
+app.get("/api/teacher/voice-announces", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const userId = safeObjectId(req.user.userId);
+
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    // Get announcements where this teacher is in the target list
+    const announcements = await db.collection("voice_messages")
+      .find({
+        schoolId,
+        targetRole: "TEACHER",
+        targetUserIds: { $in: [userId] },
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // Enrich with sender info
+    const enriched = await Promise.all(
+      announcements.map(async (a) => {
+        let senderName = "School";
+        if (a.senderId) {
+          const user = await db.collection("users").findOne({ _id: a.senderId });
+          senderName = user?.email?.split("@")[0] || "Admin";
+        }
+        return {
+          _id: a._id.toString(),
+          title: a.title || "School Announcement",
+          audioUrl: a.audioUrl,
+          senderName,
+          createdAt: a.createdAt,
+          createdAtFormatted: new Date(a.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+      })
+    );
+
+    console.log(`✅ TEACHER VOICE ANNOUNCES: ${enriched.length} announcements found`);
+    enriched.forEach((a, idx) => {
+      console.log(`   [${idx + 1}] "${a.title}" - audioUrl: ${a.audioUrl}`);
+    });
+    res.json(enriched);
+  } catch (err) {
+    console.error("❌ TEACHER VOICE ANNOUNCES ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch announcements" });
+  }
+});
+
+/**
+ * STUDENT: GET /api/student/voice-announces
+ * Get all voice announcements for this student (from admin and teacher)
+ */
+app.get("/api/student/voice-announces", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const userId = safeObjectId(req.user.userId);
+
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    // Get announcements where this student is in the target list
+    const announcements = await db.collection("voice_messages")
+      .find({
+        schoolId,
+        targetRole: "STUDENT",
+        targetUserIds: { $in: [userId] },
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // Enrich with sender info
+    const enriched = await Promise.all(
+      announcements.map(async (a) => {
+        let senderName = "School";
+        let senderType = "Admin";
+
+        if (a.senderId) {
+          if (a.senderRole === "TEACHER") {
+            const teacher = await db.collection("teachers").findOne({ userId: a.senderId });
+            senderName = teacher?.name || "Teacher";
+            senderType = "Teacher";
+          } else {
+            const user = await db.collection("users").findOne({ _id: a.senderId });
+            senderName = user?.email?.split("@")[0] || "Admin";
+            senderType = "Admin";
+          }
+        }
+
+        return {
+          _id: a._id.toString(),
+          title: a.title || "School Announcement",
+          audioUrl: a.audioUrl,
+          senderName,
+          senderType,
+          createdAt: a.createdAt,
+          createdAtFormatted: new Date(a.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+      })
+    );
+
+    console.log(`✅ STUDENT VOICE ANNOUNCES: ${enriched.length} announcements found`);
+    enriched.forEach((a, idx) => {
+      console.log(`   [${idx + 1}] "${a.title}" from ${a.senderName} (${a.senderType}) - audioUrl: ${a.audioUrl}`);
+    });
+    res.json(enriched);
+  } catch (err) {
+    console.error("❌ STUDENT VOICE ANNOUNCES ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch announcements" });
+  }
+});
+
+/* ================================
+   NOTIFICATION SYSTEM ROUTES
+   ================================= */
+
+// ✅ GET /api/notifications - Get notifications for current user
+app.get("/api/notifications", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const role = req.user.role;
+    const schoolId = req.user.schoolId;
+
+    // Get all notifications for this user (role-based filtering)
+    // Support both old schema (userId/role) and new schema (targetRole/targetUser)
+    const notifications = await db.collection("notifications")
+      .find({
+        $and: [
+          {
+            $or: [
+              // New schema
+              { targetRole: role },
+              { targetRole: null },
+              // Old schema
+              { role: role },
+            ],
+          },
+          {
+            $or: [
+              // New schema
+              { targetUser: safeObjectId(userId) },
+              { targetUser: null },
+              // Old schema
+              { userId: safeObjectId(userId) },
+            ],
+          },
+          schoolId ? {
+            $or: [
+              { schoolId: safeObjectId(schoolId) },
+              { schoolId: null },
+            ]
+          } : {},
+        ].filter(q => Object.keys(q).length > 0),
+      })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .toArray();
+
+    // Get unread count (support both old and new schema)
+    const unreadCount = await db.collection("notifications")
+      .countDocuments({
+        $and: [
+          {
+            $or: [
+              // New schema
+              { targetRole: role },
+              { targetRole: null },
+              // Old schema
+              { role: role },
+            ],
+          },
+          {
+            $or: [
+              // New schema
+              { targetUser: safeObjectId(userId) },
+              { targetUser: null },
+              // Old schema
+              { userId: safeObjectId(userId) },
+            ],
+          },
+          { isRead: false },
+          schoolId ? {
+            $or: [
+              { schoolId: safeObjectId(schoolId) },
+              { schoolId: null },
+            ]
+          } : {},
+        ].filter(q => Object.keys(q).length > 0),
+      });
+
+    // Convert ObjectId to string for JSON response
+    const formattedNotifications = notifications.map((n) => ({
+      ...n,
+      _id: n._id.toString(),
+      targetUser: n.targetUser?.toString() || null,
+      createdBy: n.createdBy?.toString() || null,
+      schoolId: n.schoolId?.toString() || null,
+    }));
+
+    res.json({
+      notifications: formattedNotifications,
+      unreadCount,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching notifications:", error);
+    res.status(500).json({ error: "Failed to fetch notifications" });
+  }
+});
+
+// ✅ POST /api/notifications - Create a new notification
+app.post("/api/notifications", requireAuth, async (req, res) => {
+  try {
+    const { title, message, type, targetRole, targetUser, metadata } = req.body;
+
+    // Validate required fields
+    if (!title || !message || !targetRole) {
+      return res.status(400).json({
+        error: "title, message, and targetRole are required",
+      });
+    }
+
+    // Create notification
+    const notification = {
+      title,
+      message,
+      type: type || "info",
+      targetRole,
+      targetUser: targetUser ? safeObjectId(targetUser) : null,
+      schoolId: req.user.schoolId ? safeObjectId(req.user.schoolId) : null,
+      createdBy: safeObjectId(req.user.userId),
+      metadata: metadata || {},
+      isRead: false,
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("notifications").insertOne(notification);
+    notification._id = result.insertedId;
+
+    res.json({
+      success: true,
+      notification: {
+        ...notification,
+        _id: notification._id.toString(),
+        targetUser: notification.targetUser?.toString() || null,
+        createdBy: notification.createdBy?.toString() || null,
+        schoolId: notification.schoolId?.toString() || null,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error creating notification:", error);
+    res.status(500).json({ error: "Failed to create notification" });
+  }
+});
+
+// ✅ PUT /api/notifications/:id/read - Mark notification as read
+app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notificationId = safeObjectId(id);
+
+    if (!notificationId) {
+      return res.status(400).json({ error: "Invalid notification ID" });
+    }
+
+    const result = await db.collection("notifications").updateOne(
+      { _id: notificationId },
+      { $set: { isRead: true, readAt: new Date() } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({ error: "Notification not found" });
+    }
+
+    res.json({ success: true, message: "Notification marked as read" });
+  } catch (error) {
+    console.error("❌ Error marking notification as read:", error);
+    res.status(500).json({ error: "Failed to mark notification as read" });
+  }
+});
+
+// ✅ PUT /api/notifications/mark-all-read - Mark all notifications as read
+app.put("/api/notifications/mark-all-read", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const role = req.user.role;
+    const schoolId = req.user.schoolId;
+
+    const filter = {
+      $and: [
+        {
+          $or: [
+            { targetRole: role },
+            { targetRole: null },
+            { role: role },
+          ],
+        },
+        {
+          $or: [
+            { targetUser: safeObjectId(userId) },
+            { targetUser: null },
+            { userId: safeObjectId(userId) },
+          ],
+        },
+        { isRead: false },
+        schoolId ? {
+          $or: [
+            { schoolId: safeObjectId(schoolId) },
+            { schoolId: null },
+          ]
+        } : {},
+      ].filter(q => Object.keys(q).length > 0),
+    };
+
+    const result = await db.collection("notifications").updateMany(filter, {
+      $set: { isRead: true, readAt: new Date() },
+    });
+
+    res.json({
+      success: true,
+      message: `${result.modifiedCount} notifications marked as read`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.error("❌ Error marking all as read:", error);
+    res.status(500).json({ error: "Failed to mark all as read" });
+  }
+});
+
+// ✅ GET /api/notifications/unread-count - Get unread notification count
+app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const role = req.user.role;
+    const schoolId = req.user.schoolId;
+
+    // Support both old schema (userId/role) and new schema (targetRole/targetUser)
+    const unreadCount = await db.collection("notifications")
+      .countDocuments({
+        $and: [
+          {
+            $or: [
+              // New schema
+              { targetRole: role },
+              { targetRole: null },
+              // Old schema
+              { role: role },
+            ],
+          },
+          {
+            $or: [
+              // New schema
+              { targetUser: safeObjectId(userId) },
+              { targetUser: null },
+              // Old schema
+              { userId: safeObjectId(userId) },
+            ],
+          },
+          { isRead: false },
+          schoolId ? {
+            $or: [
+              { schoolId: safeObjectId(schoolId) },
+              { schoolId: null },
+            ]
+          } : {},
+        ].filter(q => Object.keys(q).length > 0),
+      });
+
+    res.json({ unreadCount });
+  } catch (error) {
+    console.error("❌ Error getting unread count:", error);
+    res.status(500).json({ error: "Failed to get unread count" });
+  }
+});
+
+// ✅ DELETE /api/notifications/:id - Delete a notification
+app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notificationId = safeObjectId(id);
+
+    if (!notificationId) {
+      return res.status(400).json({ error: "Invalid notification ID" });
+    }
+
+    const result = await db.collection("notifications").deleteOne({
+      _id: notificationId,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Notification not found" });
+    }
+
+    res.json({ success: true, message: "Notification deleted" });
+  } catch (error) {
+    console.error("❌ Error deleting notification:", error);
+    res.status(500).json({ error: "Failed to delete notification" });
+  }
+});
+
+/* ================================
    SPA FALLBACK - Serve index.html for client-side routing
    ================================= */
 // All requests that don't match static files or API routes
 // should return index.html so React Router can handle them
 app.get("*", (req, res) => {
-  // Don't serve index.html for API routes (this shouldn't happen as they're already defined)
+  // Don't serve API routes (this shouldn't happen as they're already defined)
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "API endpoint not found" });
   }

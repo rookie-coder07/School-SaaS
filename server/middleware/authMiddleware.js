@@ -16,6 +16,7 @@ export function requireAuth(req, res, next) {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.warn("❌ AUTH FAILED: No bearer token in header");
       return res.status(401).json({ error: "No token provided" });
     }
 
@@ -26,10 +27,14 @@ export function requireAuth(req, res, next) {
       userId: decoded.userId,
       schoolId: decoded.schoolId,
       role: decoded.role,
+      teacherId: decoded.teacherId,
+      studentId: decoded.studentId,
     };
 
+    console.log(`✅ AUTH PASSED: role=${decoded.role}, userId=${decoded.userId}, schoolId=${decoded.schoolId}`);
     next();
   } catch (err) {
+    console.warn("❌ AUTH FAILED:", err.message);
     return res.status(401).json({ error: "Invalid token" });
   }
 }
@@ -37,8 +42,10 @@ export function requireAuth(req, res, next) {
 export function requireRole(role) {
   return (req, res, next) => {
     if (!req.user || req.user.role !== role) {
+      console.warn(`❌ ROLE CHECK FAILED: Expected ${role}, got ${req.user?.role || "none"}`);
       return res.status(403).json({ error: "Access denied" });
     }
+    console.log(`✅ ROLE CHECK PASSED: ${role}`);
     next();
   };
 }
@@ -68,14 +75,15 @@ export function requireDeveloper(req, res, next) {
 export function requireTenantId(req, res, next) {
   const schoolId = req.user?.schoolId;
   if (!schoolId) {
-    console.error("❌ TENANT CHECK FAILED: Missing schoolId in token");
+    console.error("❌ TENANT CHECK FAILED: Missing schoolId in token for role:", req.user?.role);
     return res.status(400).json({ error: "Missing schoolId in authentication token" });
   }
   try {
     req.user.schoolIdObj = new ObjectId(String(schoolId));
+    console.log(`✅ TENANT CHECK PASSED: schoolId=${schoolId}`);
     next();
   } catch (e) {
-    console.error("❌ TENANT CHECK FAILED: Invalid schoolId format:", schoolId);
+    console.error("❌ TENANT CHECK FAILED: Invalid schoolId format:", schoolId, "error:", e.message);
     return res.status(400).json({ error: "Invalid schoolId format" });
   }
 }

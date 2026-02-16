@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function DeveloperLogin() {
+  console.log("✅ DeveloperLogin component mounted");
+  
   const [email, setEmail] = useState("developer@example.com");
   const [password, setPassword] = useState("developer123");
   const [loading, setLoading] = useState(false);

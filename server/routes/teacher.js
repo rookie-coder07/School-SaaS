@@ -65,7 +65,7 @@ export default function teacherRoutes(db) {
   /* ================================
      SAVE ATTENDANCE (DRAFT)
      ================================= */
-  router.post("/attendance/save", teacherAuth, requireTenantId, async (req, res) => {
+  router.post("/attendance/save", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
   try {
     const { date, className, section, records } = req.body;
 
@@ -73,47 +73,110 @@ export default function teacherRoutes(db) {
       return res.status(400).json({ error: "Invalid payload" });
     }
 
+    // ✅ Date validation: Only allow today or past dates (not future)
+    const today = new Date().toISOString().slice(0, 10);
+    if (date > today) {
+      console.warn("⚠️ [SAVE] Attempt to mark future attendance:", date);
+      return res.status(400).json({ error: "Cannot mark future attendance" });
+    }
+
+    console.log("💾 [SAVE] Attempting to save attendance for", date, "class:", className, "section:", section);
+
+    // ✅ CRITICAL: Check if ANY record for this date/class/section is finalized
+    const anyFinalized = await db.collection("attendance").findOne({
+      date: String(date),
+      class: String(className),
+      section: String(section),
+      schoolId: req.user.schoolIdObj,
+      isFinalized: true,
+    });
+
+    if (anyFinalized) {
+      console.warn("❌ [SAVE] BLOCKED: Attendance already finalized for", date);
+      return res.status(403).json({ error: "Cannot edit finalized attendance. This date is locked." });
+    }
+
+    // ✅ Save each student record - WITH PROTECTION against updating finalized records
+    let savedCount = 0;
     for (const record of records) {
-      await db.collection("attendance").updateOne(
-        {
-          studentUserId: new ObjectId(record.studentUserId),
+      const studentId = safeObjectId(record.studentUserId);
+      if (!studentId) {
+        console.warn("⚠️ [SAVE] Invalid student ID:", record.studentUserId);
+        continue;
+      }
+
+      try {
+        // 🔒 CRITICAL: Check if THIS specific student's record is finalized
+        const individualRecord = await db.collection("attendance").findOne({
+          studentUserId: studentId,
           date: String(date),
           class: String(className),
           section: String(section),
           schoolId: req.user.schoolIdObj,
-        },
-        {
-          $set: {
-            studentUserId: new ObjectId(record.studentUserId),
-            teacherUserId: new ObjectId(req.user.userId),
-            schoolId: req.user.schoolIdObj,
+        });
+
+        if (individualRecord && individualRecord.isFinalized === true) {
+          console.warn("❌ [SAVE] Individual record is FINALIZED - cannot update:", record.studentUserId);
+          continue;
+        }
+
+        // Safe to update or insert
+        const updateResult = await db.collection("attendance").updateOne(
+          {
+            studentUserId: studentId,
+            date: String(date),
             class: String(className),
             section: String(section),
-            date: String(date),
-            status: record.status,
-            submissionStatus: "DRAFT",
-            updatedAt: new Date(),
+            schoolId: req.user.schoolIdObj,
           },
-        },
-        { upsert: true }
-      );
+          {
+            $set: {
+              studentUserId: studentId,
+              teacherUserId: safeObjectId(req.user.userId),
+              schoolId: req.user.schoolIdObj,
+              class: String(className),
+              section: String(section),
+              date: String(date),
+              status: record.status,
+              submissionStatus: "DRAFT",
+              isFinalized: false,
+              updatedAt: new Date(),
+            },
+          },
+          { upsert: true }
+        );
+
+        if (updateResult.modifiedCount > 0 || updateResult.upsertedCount > 0) {
+          savedCount++;
+          console.log("✅ [SAVE] Saved record for student:", record.studentUserId);
+        }
+      } catch (err) {
+        console.error("❌ [SAVE] Error saving individual record:", err);
+      }
     }
 
-    res.json({ success: true });
+    console.log("✅ [SAVE] Saved/upserted", savedCount, "attendance records for", date);
+    res.json({ success: true, recordsSaved: savedCount });
   } catch (err) {
-    console.error("ATTENDANCE SAVE ERROR:", err);
+    console.error("❌ [SAVE] ATTENDANCE SAVE ERROR:", err);
     res.status(500).json({ error: "Attendance save failed" });
   }
 });
   /* ================================
      SUBMIT ATTENDANCE (FINALIZE)
      ================================= */
-  router.post("/attendance/submit", teacherAuth, requireTenantId, async (req, res) => {
+  router.post("/attendance/submit", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
   try {
     const { date, className, section } = req.body;
 
     if (!date || !className || !section) {
       return res.status(400).json({ error: "Missing date/class/section" });
+    }
+
+    // ✅ Date validation: Only allow today or past dates
+    const today = new Date().toISOString().slice(0, 10);
+    if (date > today) {
+      return res.status(400).json({ error: "Cannot finalize future attendance" });
     }
 
     // 🔥 IMPORTANT: Normalize everything to STRING
@@ -125,29 +188,68 @@ export default function teacherRoutes(db) {
       submissionStatus: "DRAFT",
     };
 
-    console.log("SUBMIT FILTER:", filter);
+    console.log("🔒 [FINALIZE] SUBMIT FILTER:", filter);
 
+    // ✅ First, check if all records are NOT already finalized
+    const alreadyFinalized = await db.collection("attendance").findOne({
+      date: String(date),
+      class: String(className),
+      section: String(section),
+      schoolId: req.user.schoolIdObj,
+      isFinalized: true,
+    });
+
+    if (alreadyFinalized) {
+      console.warn("⚠️ [FINALIZE] Attempt to finalize already-finalized attendance:", date);
+      return res.status(403).json({
+        error: "This attendance is already finalized and cannot be modified",
+      });
+    }
+
+    // ✅ Set isFinalized and finalizedAt for ALL records of this date/class/section
     const result = await db.collection("attendance").updateMany(
       filter,
       {
         $set: {
           submissionStatus: "SUBMITTED",
+          isFinalized: true,
+          finalizedAt: new Date(),
           submittedAt: new Date(),
         },
       }
     );
 
-    console.log("SUBMIT RESULT:", result);
+    console.log("✅ [FINALIZE] SUBMIT RESULT - matched:", result.matchedCount, "modified:", result.modifiedCount);
 
     if (result.matchedCount === 0) {
+      console.warn("⚠️ [FINALIZE] No draft attendance found for date:", date);
       return res.status(400).json({
         error: "No draft attendance found. Please save first.",
       });
     }
 
-    res.json({ success: true });
+    // ✅ Verify all records are now finalized
+    const verifyFinalized = await db.collection("attendance")
+      .find({
+        date: String(date),
+        class: String(className),
+        section: String(section),
+        schoolId: req.user.schoolIdObj,
+      })
+      .toArray();
+
+    const allFinalized = verifyFinalized.every(r => r.isFinalized === true);
+    if (!allFinalized) {
+      console.error("❌ [FINALIZE] VERIFICATION FAILED - not all records finalized!");
+      return res.status(500).json({
+        error: "Finalization verification failed. Please try again.",
+      });
+    }
+
+    console.log("🔒 [FINALIZE] SUCCESS - All", verifyFinalized.length, "records finalized for", date);
+    res.json({ success: true, recordsFinalized: verifyFinalized.length });
   } catch (err) {
-    console.error("ATTENDANCE SUBMIT ERROR:", err);
+    console.error("❌ [FINALIZE] ATTENDANCE SUBMIT ERROR:", err);
     res.status(500).json({ error: "Attendance submit failed" });
   }
 });
@@ -157,7 +259,10 @@ export default function teacherRoutes(db) {
   router.get("/attendance", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
     try {
       const { date, className, section } = req.query;
-      if (!date) return res.json([]);
+      if (!date) {
+        return res.json({ date: null, isFinalized: false, presentCount: 0, absentCount: 0, records: [] });
+      }
+
       const schoolId = req.user.schoolIdObj;
 
       const query = {
@@ -167,10 +272,47 @@ export default function teacherRoutes(db) {
         ...(schoolId ? { schoolId } : {}),
       };
 
+      console.log("📖 [GET] Fetching attendance for", date, "class:", className, "section:", section);
+
       const records = await attendance.find(query).toArray();
-      res.json(records);
+      
+      console.log("📖 [GET] Found", records.length, "records for", date);
+
+      // ✅ Calculate counts
+      const presentCount = records.filter(r => r.status === "PRESENT").length;
+      const absentCount = records.filter(r => r.status === "ABSENT").length;
+      
+      // ✅ Check finalized status - ALL records should have the same status
+      let isFinalized = false;
+      if (records.length > 0) {
+        // Get unique finalized values
+        const finalizedStates = [...new Set(records.map(r => r.isFinalized))];
+        
+        if (finalizedStates.length > 1) {
+          console.error("❌ [GET] INCONSISTENT STATE - Some records are finalized, others are not!");
+          console.error("   Finalized states:", finalizedStates);
+          // If mixed, treat as finalized for safety (can't edit if ANY records are finalized)
+          isFinalized = finalizedStates.includes(true);
+        } else {
+          isFinalized = records[0].isFinalized || false;
+        }
+
+        if (isFinalized) {
+          console.log("🔒 [GET] Attendance is LOCKED (isFinalized=true) for", date);
+        } else {
+          console.log("✏️ [GET] Attendance is EDITABLE (isFinalized=false) for", date);
+        }
+      }
+
+      res.json({
+        date: String(date),
+        isFinalized,
+        presentCount,
+        absentCount,
+        records,
+      });
     } catch (err) {
-      console.error("FETCH ATTENDANCE ERROR:", err);
+      console.error("❌ [GET] FETCH ATTENDANCE ERROR:", err);
       res.status(500).json({ error: "Failed to fetch attendance" });
     }
   });

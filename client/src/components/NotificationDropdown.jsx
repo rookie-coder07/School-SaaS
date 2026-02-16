@@ -1,0 +1,317 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+/**
+ * NotificationDropdown Component
+ * Displays a list of notifications with ability to mark as read and navigate
+ */
+export default function NotificationDropdown({ isOpen, onClose, token, toast, onNotificationsUpdated }) {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(0);
+  const navigate = useNavigate();
+
+  // Fetch notifications when dropdown opens
+  useEffect(() => {
+    if (isOpen && token) {
+      fetchNotifications();
+      
+      // Auto-refresh every 10 seconds while dropdown is open
+      const interval = setInterval(fetchNotifications, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [isOpen, token]);
+
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await axios.get(`${API_URL}/api/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      console.log("📬 Notifications fetched:", response.data);
+      console.log("   Total notifications:", response.data.notifications?.length || 0);
+      console.log("   Unread count from API:", response.data.unreadCount || 0);
+      console.log("   Sample notification fields:", response.data.notifications?.[0] ? Object.keys(response.data.notifications[0]) : "No notifications");
+      
+      setNotifications(response.data.notifications || []);
+      setLastRefresh(Date.now());
+      
+      // Immediately notify parent about the unread count
+      if (onNotificationsUpdated) {
+        onNotificationsUpdated();
+      }
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+      setError("Failed to load notifications");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkAsRead = async (notificationId) => {
+    try {
+      await axios.put(`${API_URL}/api/notifications/${notificationId}/read`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Update local state
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n._id === notificationId ? { ...n, isRead: true } : n
+        )
+      );
+      
+      // Notify parent component to refresh unread count
+      if (onNotificationsUpdated) {
+        onNotificationsUpdated();
+      }
+    } catch (err) {
+      console.error("Error marking notification as read:", err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await axios.put(`${API_URL}/api/notifications/mark-all-read`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Mark all as read in local state
+      setNotifications((prev) =>
+        prev.map((n) => ({ ...n, isRead: true }))
+      );
+      
+      // Notify parent component to refresh unread count
+      if (onNotificationsUpdated) {
+        onNotificationsUpdated();
+      }
+    } catch (err) {
+      console.error("Error marking all as read:", err);
+    }
+  };
+
+  const handleDelete = async (notificationId) => {
+    try {
+      await axios.delete(`${API_URL}/api/notifications/${notificationId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Remove from local state
+      setNotifications((prev) =>
+        prev.filter((n) => n._id !== notificationId)
+      );
+      
+      // Notify parent component to refresh unread count
+      if (onNotificationsUpdated) {
+        onNotificationsUpdated();
+      }
+    } catch (err) {
+      console.error("Error deleting notification:", err);
+    }
+  };
+
+  const handleNotificationClick = (notification) => {
+    // Log navigation details for debugging
+    console.log("🔔 NOTIFICATION CLICKED");
+    console.log("  Notification ID:", notification._id);
+    console.log("  Type:", notification.type);
+    console.log("  Target Route:", notification.targetRoute);
+    
+    // Mark as read before navigating
+    if (!notification.isRead) {
+      handleMarkAsRead(notification._id);
+    }
+
+    // Use targetRoute from notification, fallback to type-based mapping if not available
+    let targetPath = notification.targetRoute;
+
+    if (!targetPath) {
+      console.warn("⚠️ No targetRoute in notification, using type mapping (fallback)");
+      const navigationMap = {
+        "homework": "/student/dashboard?section=homework",
+        "event": "/student/dashboard?section=events",
+        "announcement": "/student/dashboard?section=announcements",
+        "timetable": "/student/dashboard?section=timetable",
+        "syllabus": "/student/dashboard?section=syllabus",
+        "voice": "/student/dashboard?section=voice",
+      };
+      targetPath = navigationMap[notification.type];
+    }
+    
+    if (targetPath) {
+      console.log("✅ Navigating to:", targetPath);
+      onClose();
+      navigate(targetPath);
+    } else {
+      console.error("❌ Could not determine target path for notification type:", notification.type);
+      toast?.error("Could not open notification - invalid type");
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-40 overflow-hidden">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black bg-opacity-50"
+        onClick={onClose}
+      />
+
+      {/* Dropdown Panel */}
+      <div className="absolute top-12 right-4 w-96 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center">
+          <h3 className="text-lg font-bold text-white">Notifications</h3>
+          {notifications.some((n) => !n.isRead) && (
+            <button
+              onClick={handleMarkAllAsRead}
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              Mark all as read
+            </button>
+          )}
+        </div>
+
+        {/* Content */}
+        {loading ? (
+          <div className="p-4 text-center text-gray-400">Loading...</div>
+        ) : error ? (
+          <div className="p-4 text-center text-red-400">{error}</div>
+        ) : notifications.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">
+            <p className="text-sm">No notifications yet</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-700">
+            {notifications.map((notification) => (
+              <div
+                key={notification._id}
+                onClick={() => handleNotificationClick(notification)}
+                className={`p-4 transition-colors cursor-pointer hover:opacity-80 ${
+                  notification.isRead
+                    ? "bg-slate-800"
+                    : "bg-blue-900 bg-opacity-30"
+                }`}
+              >
+                {/* Notification Header */}
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1">
+                    <p className="font-semibold text-white">
+                      {notification.title}
+                    </p>
+                    <p className="text-sm text-gray-300 mt-1">
+                      {notification.message}
+                    </p>
+                  </div>
+                  {!notification.isRead && (
+                    <div className="ml-2 w-2 h-2 bg-blue-500 rounded-full mt-1 flex-shrink-0" />
+                  )}
+                </div>
+
+                {/* Notification Meta */}
+                <div className="flex justify-between items-center mt-3 text-xs text-gray-400">
+                  <span>
+                    {new Date(notification.createdAt).toLocaleDateString(
+                      "en-US",
+                      {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }
+                    )}
+                  </span>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 items-center">
+                    {/* Play button for voice notifications */}
+                    {notification.type === "voice" && notification.audioUrl && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const audioUrl = notification.audioUrl.startsWith("http") 
+                            ? notification.audioUrl 
+                            : `${import.meta.env.VITE_API_URL || "http://localhost:5000"}${notification.audioUrl}`;
+                          const audio = new Audio(audioUrl);
+                          audio.play().catch(err => console.error("Error playing audio:", err));
+                        }}
+                        className="text-purple-400 hover:text-purple-300 transition-colors"
+                        title="Play voice message"
+                      >
+                        ♫ Play
+                      </button>
+                    )}
+                    {!notification.isRead && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMarkAsRead(notification._id);
+                        }}
+                        className="text-blue-400 hover:text-blue-300 transition-colors"
+                        title="Mark as read"
+                      >
+                        ✓
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(notification._id);
+                      }}
+                      className="text-red-400 hover:text-red-300 transition-colors"
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* Type Badge */}
+                {notification.type && (
+                  <div className="mt-2">
+                    <span
+                      className={`inline-block text-xs px-2 py-1 rounded-full ${
+                        notification.type === "voice"
+                          ? "bg-purple-900 text-purple-300"
+                          : notification.type === "homework"
+                          ? "bg-orange-900 text-orange-300"
+                          : notification.type === "event"
+                          ? "bg-pink-900 text-pink-300"
+                          : notification.type === "announcement"
+                          ? "bg-cyan-900 text-cyan-300"
+                          : notification.type === "timetable"
+                          ? "bg-green-900 text-green-300"
+                          : notification.type === "syllabus"
+                          ? "bg-indigo-900 text-indigo-300"
+                          : notification.type === "success"
+                          ? "bg-green-900 text-green-300"
+                          : notification.type === "warning"
+                          ? "bg-yellow-900 text-yellow-300"
+                          : "bg-blue-900 text-blue-300"
+                      }`}
+                    >
+                      {notification.type === "voice" ? "🔊 Voice" : 
+                       notification.type === "homework" ? "📝 Homework" : 
+                       notification.type === "event" ? "📅 Event" : 
+                       notification.type === "announcement" ? "📢 Announcement" : 
+                       notification.type === "timetable" ? "⏰ Timetable" :
+                       notification.type === "syllabus" ? "📖 Syllabus" :
+                       notification.type}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

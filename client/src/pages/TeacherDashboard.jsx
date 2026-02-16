@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import axios from "axios";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
 import VoiceRecorder from "../components/VoiceRecorder";
+import VoiceAnnouncements from "../components/VoiceAnnouncements";
+import NotificationBell from "../components/NotificationBell";
+import NotificationDropdown from "../components/NotificationDropdown";
 import SyllabusManager from "../components/SyllabusManager";
+import ExamSyllabusManager from "../components/ExamSyllabusManager";
 import ExamTimetableManager from "../components/ExamTimetableManager";
+import TimetableGrid from "../components/TimetableGrid";
+import { useToast } from "../components/ToastProvider";
+import { createNotification } from "../utils/notificationHelper";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -19,19 +27,29 @@ export default function TeacherDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [schoolId, setSchoolId] = useState("");
   const [schoolName, setSchoolName] = useState("");
-  
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [date, setDate] = useState("");
   const [search, setSearch] = useState("");
   const [locked, setLocked] = useState(false);
+  const [isFinalized, setIsFinalized] = useState(false);
+  const [isFutureDate, setIsFutureDate] = useState(false);
+  const [presentCount, setApiPresentCount] = useState(0);
+  const [absentCount, setApiAbsentCount] = useState(0);
+  const [datePercentage, setDatePercentage] = useState(0);
+  const [studentOverallPercentages, setStudentOverallPercentages] = useState({});
+  const [lockMessage, setLockMessage] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const teacher = JSON.parse(localStorage.getItem("teacherData") || "{}");
   const className = teacher?.class;
   const section = teacher?.section;
   const token = localStorage.getItem("teacherToken");
+  const toast = useToast();
 
   // ===== HOMEWORK FORM STATE =====
   const [hwTitle, setHwTitle] = useState("");
@@ -120,6 +138,56 @@ export default function TeacherDashboard() {
       setSchoolName(storedSchoolName);
     }
   }, []);
+
+  // Handle navigation from notification clicks via query params
+  useEffect(() => {
+    const sectionParam = searchParams.get("section");
+    if (sectionParam) {
+      console.log("📍 Teacher Dashboard: Navigating to section from query param:", sectionParam);
+      setActiveTab(sectionParam);
+    }
+  }, [searchParams]);
+
+  // Fetch unread notification count on mount and periodically
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setUnreadCount(response.data.unreadCount || 0);
+      } catch (err) {
+        console.error("Error fetching unread count:", err);
+        setUnreadCount(0);
+      }
+    };
+
+    if (token) {
+      fetchUnreadCount();
+      
+      // Poll every 30 seconds to keep count updated
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
+
+  // Fetch unread count when notifications panel opens
+  useEffect(() => {
+    if (showNotifications && token) {
+      const fetchUnreadCount = async () => {
+        try {
+          const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          setUnreadCount(response.data.unreadCount || 0);
+        } catch (err) {
+          console.error("Error fetching unread count:", err);
+        }
+      };
+      
+      fetchUnreadCount();
+    }
+  }, [showNotifications, token]);
 
   /* ===== FETCH CLASS SUMMARY ===== */
   useEffect(() => {
@@ -253,16 +321,131 @@ export default function TeacherDashboard() {
       .then((data) => {
         const normalized = (data || []).map((s) => ({ ...s, _id: String(s._id) }));
         setStudents(normalized);
+        // ✅ Initialize attendance map ONLY for new students
         const init = {};
         normalized.forEach((s) => (init[s._id] = "PRESENT"));
         setAttendance(init);
-        setLocked(false);
+        // ⚠️ DON'T reset locked here - let the lock check effect handle it
+        // This prevents overriding finalized status
       })
       .catch((err) => {
         console.error("STUDENTS FETCH ERROR:", err);
         setStudents([]);
       });
   }, [className, section, token]);
+
+  /* ===== FETCH ATTENDANCE STATUS & LOCK STATE ===== */
+  useEffect(() => {
+    if (!date || !className || !section || !token) {
+      console.log("⏭️ [LOCK CHECK] Skipping - missing:", date, className, section);
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const isFuture = date > today;
+
+    // Set UI state for future dates
+    setIsFutureDate(isFuture);
+    if (isFuture) {
+      console.warn("⚠️ [LOCK CHECK] Future date selected:", date);
+      setLockMessage("🚫 You cannot mark future attendance");
+      setLocked(true);
+      setIsFinalized(false);
+      setApiPresentCount(0);
+      setApiAbsentCount(0);
+      // Clear attendance state when date is invalid
+      const init = {};
+      students.forEach((s) => (init[s._id] = "PRESENT"));
+      setAttendance(init);
+      return;
+    }
+
+    // 🔥 Fetch actual lock status from API
+    const fetchLockStatus = async () => {
+      console.log("📖 [LOCK CHECK] Fetching lock status for", date);
+      console.log("📖 [LOCK CHECK] Parameters - className:", className, "section:", section, "token exists:", !!token);
+      try {
+        const url = `${API_URL}/api/teacher/attendance?date=${date}&className=${encodeURIComponent(className)}&section=${encodeURIComponent(section || "")}`;
+        console.log("📖 [LOCK CHECK] URL:", url);
+        const res = await fetch(
+          url,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (!res.ok) {
+          console.warn("⚠️ [LOCK CHECK] API returned error:", res.status);
+          setIsFinalized(false);
+          setApiPresentCount(0);
+          setApiAbsentCount(0);
+          setLocked(false);
+          setLockMessage("");
+          // Initialize empty attendance
+          const init = {};
+          students.forEach((s) => (init[s._id] = "PRESENT"));
+          setAttendance(init);
+          return;
+        }
+
+        const data = await res.json();
+        const finalized = data.isFinalized || false;
+
+        console.log("🔍 [LOCK CHECK] Date:", date, "| Present:", data.presentCount, "| Absent:", data.absentCount, "| Total Students:", data.totalStudents, "| Locked:", finalized);
+
+        setIsFinalized(finalized);
+        // ✅ Store date-specific counts from API
+        setApiPresentCount(data.presentCount ?? 0);
+        setApiAbsentCount(data.absentCount ?? 0);
+        
+        console.log("📊 [COUNTS] Date:", date, "| Present:", data.presentCount ?? 0, "| Absent:", data.absentCount ?? 0, "| Total Students:", data.totalStudents ?? 0);
+
+        // ✅ Load existing attendance records for this specific date
+        if (data.records && Array.isArray(data.records) && data.records.length > 0) {
+          console.log("📝 [LOCK CHECK] Loading", data.records.length, "attendance records with per-student overall percentages");
+          const attendanceMap = {};
+          const overallPercentagesMap = {};
+          data.records.forEach((record) => {
+            const studentId = record.studentId || record.studentUserId;
+            if (studentId) {
+              // Only set attendance if student has a status for this date
+              if (record.status) {
+                attendanceMap[String(studentId)] = record.status;
+              }
+              // Always set the overall percentage (even if no status for this date)
+              overallPercentagesMap[String(studentId)] = record.overallPercentage ?? 0;
+              console.log("📊 [STUDENT]", String(studentId).slice(0, 8) + "... is", record.status || "not marked", "on", date, "| Lifetime:", record.overallPercentage + "%");
+            }
+          });
+          setAttendance(attendanceMap);
+          setStudentOverallPercentages(overallPercentagesMap);
+          console.log("💾 [LOCK CHECK] Attendance map loaded, entries:", Object.keys(attendanceMap).length, "with percentages for:", Object.keys(overallPercentagesMap).length);
+        } else {
+          // No records for this date - initialize all as PRESENT for fresh marking
+          console.log("📝 [LOCK CHECK] No attendance for this date - initializing blank for marking");
+          const init = {};
+          students.forEach((s) => (init[s._id] = "PRESENT"));
+          setAttendance(init);
+        }
+
+        // ✅ Update lock message
+        if (finalized) {
+          console.log("🔒 [LOCK CHECK] Date is FINALIZED - locked");
+          setLockMessage("🔒 Attendance locked for this date");
+          setLocked(true);
+        } else {
+          console.log("✏️ [LOCK CHECK] Date is EDITABLE");
+          setLockMessage("✏️ Editable - Mark attendance");
+          setLocked(false);
+        }
+      } catch (err) {
+        console.error("❌ [LOCK CHECK] FETCH ERROR:", err);
+        setIsFinalized(false);
+        setLocked(false);
+        setLockMessage("");
+      }
+    };
+
+    fetchLockStatus();
+  }, [date, className, section, token, students]);
 
   /* ===== FETCH ATTENDANCE SUMMARY ===== */
   useEffect(() => {
@@ -445,54 +628,95 @@ useEffect(() => {
 
   /* ===== SAVE ATTENDANCE ===== */
   const saveAttendance = async () => {
-    setError("");
-    setMessage("");
-
     if (!date) {
-      setError("Select a date first");
+      toast.warning("Select a date first");
       return;
     }
+
+    if (locked) {
+      toast.error("Cannot save: Attendance is locked for this date");
+      return;
+    }
+
+    console.log("💾 [SAVE] Saving attendance for", date, "- locked:", locked, "isFinalized:", isFinalized);
 
     const records = students.map((s) => ({
       studentUserId: s._id,
       status: attendance[s._id],
     }));
 
-    const res = await fetch(`${API_URL}/api/teacher/attendance/save`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        date,
-        className,
-        section,
-        records,
-      }),
+    console.log("💾 [SAVE] Request payload:", {
+      date,
+      className,
+      section,
+      recordCount: records.length,
+      statusBreakdown: {
+        PRESENT: records.filter(r => r.status === "PRESENT").length,
+        ABSENT: records.filter(r => r.status === "ABSENT").length,
+        LEAVE: records.filter(r => r.status === "LEAVE").length,
+      }
     });
 
-    const data = await res.json();
+    try {
+      const res = await fetch(`${API_URL}/api/teacher/attendance/save`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          date,
+          className,
+          section,
+          records,
+        }),
+      });
 
-    if (!res.ok) {
-      setError(data.error || "Save failed");
-      return;
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("❌ [SAVE] Error:", res.status, data.error);
+        if (res.status === 403) {
+          toast.error("Cannot save: This attendance is already finalized and locked");
+          // ✅ Force re-fetch to ensure lock status is correct
+          setTimeout(() => {
+            setLocked(true);
+            setIsFinalized(true);
+            setLockMessage("🔒 Attendance locked for this date");
+          }, 100);
+        } else {
+          toast.error(data.error || "Failed to save attendance");
+        }
+        return;
+      }
+
+      console.log("✅ [SAVE] Saved", data.recordsSaved, "records - Present:", data.presentCount, "Absent:", data.absentCount);
+      
+      // ✅ Update date-specific counts from API response
+      if (data.presentCount !== undefined && data.presentCount !== null) {
+        setApiPresentCount(data.presentCount);
+        console.log("✅ [SAVE] Updated presentCount to:", data.presentCount);
+      }
+      if (data.absentCount !== undefined && data.absentCount !== null) {
+        setApiAbsentCount(data.absentCount);
+        console.log("✅ [SAVE] Updated absentCount to:", data.absentCount);
+      }
+      toast.success("Attendance draft saved");
+    } catch (err) {
+      console.error("❌ [SAVE] Exception:", err);
+      toast.error("Failed to save attendance");
     }
-
-    setMessage("Draft saved");
   };
 
   /* ===== SUBMIT ATTENDANCE ===== */
   const submitAttendance = async () => {
-    setError("");
-    setMessage("");
-
     if (!date) {
-      setError("Please select a date");
+      toast.warning("Please select a date");
       return;
     }
 
     try {
+      console.log("🔒 [SUBMIT] Finalizing attendance for", date);
       const res = await fetch(`${API_URL}/api/teacher/attendance/submit`, {
         method: "POST",
         headers: {
@@ -505,24 +729,63 @@ useEffect(() => {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Submit failed");
+        console.error("❌ [SUBMIT] Error:", data.error);
+        toast.error(data.error || "Failed to submit attendance");
         return;
       }
 
+      console.log("✅ [SUBMIT] Successfully finalized. Records finalized:", data.recordsFinalized, "present:", data.presentCount, "absent:", data.absentCount);
       setLocked(true);
-      setMessage("Attendance finalized");
+      setIsFinalized(true);
+      setLockMessage("🔒 Attendance locked for this date");
+      
+      // ✅ Update date-specific counts from API response
+      if (data.presentCount !== undefined && data.presentCount !== null) {
+        setApiPresentCount(data.presentCount);
+        console.log("✅ [SUBMIT] Updated presentCount to:", data.presentCount);
+      }
+      if (data.absentCount !== undefined && data.absentCount !== null) {
+        setApiAbsentCount(data.absentCount);
+        console.log("✅ [SUBMIT] Updated absentCount to:", data.absentCount);
+      }
+      toast.success("Attendance finalized");
+      console.log("📊 [COUNTS] Finalized - Present:", data.presentCount, "Absent:", data.absentCount);
+      
+      // ✅ Re-fetch lock status to ensure UI is in sync
+      setTimeout(() => {
+        const fetchToVerify = async () => {
+          try {
+            const verifyRes = await fetch(
+              `${API_URL}/api/teacher/attendance?date=${date}&className=${encodeURIComponent(className)}&section=${encodeURIComponent(section || "")}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (verifyRes.ok) {
+              const verifyData = await verifyRes.json();
+              console.log("🔍 [SUBMIT] Verification - isFinalized:", verifyData.isFinalized, "present:", verifyData.presentCount, "absent:", verifyData.absentCount, "percentage:", verifyData.percentageForDate + "%");
+              setIsFinalized(verifyData.isFinalized);
+              setLocked(verifyData.isFinalized);
+              // ✅ Verify counts and percentage from API with null guards
+              setApiPresentCount(verifyData.presentCount ?? 0);
+              setApiAbsentCount(verifyData.absentCount ?? 0);
+              setDatePercentage(verifyData.percentageForDate ?? 0);
+              console.log("✅ [SUBMIT] Verified and synced - Present:", verifyData.presentCount ?? 0, "Absent:", verifyData.absentCount ?? 0, "Percentage:", verifyData.percentageForDate ?? 0, "%");
+            }
+          } catch (err) {
+            console.error("❌ [SUBMIT] Verification error:", err);
+          }
+        };
+        fetchToVerify();
+      }, 500);
     } catch (e) {
-      setError("Server not reachable");
+      console.error("❌ [SUBMIT] Exception:", e);
+      toast.error("Server not reachable");
     }
   };
 
   /* ===== SAVE HOMEWORK ===== */
   const saveHomework = async () => {
-    setError("");
-    setMessage("");
-
     if (!hwTitle || !hwSubject || !hwDueDate) {
-      setError("Fill all required fields");
+      toast.warning("Fill all required fields");
       return;
     }
 
@@ -544,7 +807,24 @@ useEffect(() => {
 
       if (!res.ok) throw new Error();
 
-      setMessage("Homework added successfully");
+      toast.success("Homework added successfully");
+
+      // Create notification for homework
+      try {
+        await createNotification(
+          "📝 New Homework: " + hwTitle,
+          `${hwTitle} (${hwSubject}) - Due: ${hwDueDate}`,
+          "student",
+          "homework",
+          token,
+          null,
+          { type: "homework", subject: hwSubject, dueDate: hwDueDate }
+        );
+        console.log("✅ Notification created for homework");
+      } catch (notifErr) {
+        console.warn("⚠️ Failed to create notification (non-critical):", notifErr);
+      }
+
       setHwTitle("");
       setHwDesc("");
       setHwSubject("");
@@ -556,7 +836,7 @@ useEffect(() => {
       const data = await res2.json();
       setHomework(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError("Failed to add homework");
+      toast.error("Failed to add homework");
     } finally {
       setHwLoading(false);
     }
@@ -564,11 +844,8 @@ useEffect(() => {
 
   /* ===== SAVE MARKS ===== */
   const saveMarks = async () => {
-    setError("");
-    setMessage("");
-
     if (!subject || !exam) {
-      setError("Enter subject and exam");
+      toast.warning("Enter subject and exam");
       return;
     }
 
@@ -593,11 +870,11 @@ useEffect(() => {
     });
 
     if (!res.ok) {
-      setError("Failed to save marks");
+      toast.error("Failed to save marks");
       return;
     }
 
-    setMessage("Marks saved successfully");
+    toast.success("Marks saved successfully");
     setSubject("");
     setExam("");
     setMarksData({});
@@ -615,16 +892,13 @@ useEffect(() => {
   };
 
   const uploadMarksFromExcel = async () => {
-    setError("");
-    setMessage("");
-
     if (!excelFile) {
-      setError("Please select an Excel file");
+      toast.warning("Please select an Excel file");
       return;
     }
 
     if (!excelSubject || !excelExam) {
-      setError("Please select subject and exam name");
+      toast.warning("Please select subject and exam name");
       return;
     }
 
@@ -638,7 +912,7 @@ useEffect(() => {
       const data = XLSX.utils.sheet_to_json(worksheet);
 
       if (!data || data.length === 0) {
-        setError("Excel file is empty or invalid");
+        toast.error("Excel file is empty or invalid");
         return;
       }
 
@@ -700,7 +974,7 @@ useEffect(() => {
         throw new Error(errData.error || "Failed to save marks");
       }
 
-      setMessage(`✅ Successfully imported ${matchedRecords.length} student marks from Excel!`);
+      toast.success(`Successfully imported ${matchedRecords.length} student marks from Excel!`);
       setExcelFile(null);
       setExcelSubject("");
       setExcelExam("");
@@ -708,7 +982,7 @@ useEffect(() => {
       // Trigger analytics refresh
       setMarksRefreshTrigger(prev => prev + 1);
     } catch (err) {
-      setError(err.message || "Error processing Excel file");
+      toast.error(err.message || "Error processing Excel file");
       console.error("Excel upload error:", err);
     } finally {
       setExcelLoading(false);
@@ -716,8 +990,13 @@ useEffect(() => {
   };
 
   const totalStudents = students.length;
-  const presentCount = Object.values(attendance || {}).filter((v) => v === "PRESENT").length;
-  const absentCount = Object.values(attendance || {}).filter((v) => v === "ABSENT").length;
+  // ✅ Use API-returned counts (from backend) instead of local state
+  // This ensures counts persist across page reloads and date changes
+  // presentCount and absentCount are set from API response in lock check effect
+  const uiPresentCount = presentCount; // ✅ From API
+  const uiAbsentCount = absentCount;   // ✅ From API
+  
+  console.log("📊 [COUNTS] Display - Total:", totalStudents, "Present (API):", presentCount, "Absent (API):", absentCount);
 
   const navItems = [
     { id: "dashboard", label: "Dashboard" },
@@ -726,15 +1005,17 @@ useEffect(() => {
     { id: "summary", label: "Students" },
     { id: "timetable", label: "Timetable" },
     { id: "syllabus", label: "Syllabus" },
+    { id: "exam-syllabus", label: "Exam Syllabus" },
     { id: "exams", label: "Exam Timetable" },
     { id: "homework", label: "Homework" },
+    { id: "announcements", label: "Announcements" },
     { id: "voice", label: "Voice Messages" },
     { id: "events", label: "Events" },
     { id: "attendance", label: "Attendance" },
   ];
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
+    <div className="h-screen overflow-hidden flex flex-col md:flex-row bg-slate-50 font-sans">
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -745,7 +1026,7 @@ useEffect(() => {
 
       {/* ===== SIDEBAR ===== */}
       <div
-        className={`fixed md:relative inset-y-0 left-0 w-64 bg-gradient-to-b from-slate-900 to-slate-950 text-white p-5 flex flex-col z-30 transition-transform duration-300 transform ${
+        className={`fixed md:relative inset-y-0 left-0 w-64 bg-gradient-to-b from-slate-900 to-slate-950 text-white p-5 flex flex-col z-30 transition-transform duration-300 transform md:overflow-y-auto md:h-screen ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
@@ -792,28 +1073,59 @@ useEffect(() => {
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className="flex-1 w-full md:w-auto">
+      <div className="flex-1 w-full md:w-auto flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 md:py-5 sticky top-0 z-20 flex items-center">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="md:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
-            title="Toggle sidebar"
-          >
-            <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="flex-1">
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900">
-              {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
-            </h1>
-            <p className="text-xs md:text-sm text-slate-500 mt-1">Class {className} • Section {section}</p>
+        <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 md:py-5 sticky top-0 z-20 flex items-center justify-between">
+          <div className="flex items-center">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="md:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
+              title="Toggle sidebar"
+            >
+              <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div className="flex-1">
+              <h1 className="text-2xl md:text-3xl font-black text-slate-900">
+                {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
+              </h1>
+              <p className="text-xs md:text-sm text-slate-500 mt-1">Class {className} • Section {section}</p>
+            </div>
+          </div>
+          
+          {/* Notification Bell */}
+          <div className="flex items-center gap-3">
+            <NotificationBell
+              onClick={() => setShowNotifications(!showNotifications)}
+              unreadCount={unreadCount}
+              isOpen={showNotifications}
+            />
           </div>
         </div>
 
+        {/* Notification Dropdown */}
+        {showNotifications && (
+          <NotificationDropdown
+            isOpen={showNotifications}
+            onClose={() => setShowNotifications(false)}
+            token={localStorage.getItem("teacherToken")}
+            toast={toast}
+            onNotificationsUpdated={async () => {
+              try {
+                const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                setUnreadCount(response.data.unreadCount || 0);
+              } catch (err) {
+                console.error("Error refreshing unread count:", err);
+              }
+            }}
+          />
+        )}
+
         {/* Content */}
-        <div className="p-4 md:p-6 pb-20 md:pb-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
           {/* ===== DASHBOARD ===== */}
           {activeTab === "dashboard" && (
             <div className="space-y-4">
@@ -1117,8 +1429,6 @@ useEffect(() => {
           {activeTab === "academics" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Academics / Exams</h2>
-              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
-              {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
 
               {/* ===== EXCEL IMPORT SECTION ===== */}
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 md:p-6 rounded-xl border border-blue-200 shadow-sm space-y-4">
@@ -1251,8 +1561,6 @@ useEffect(() => {
           {activeTab === "homework" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Homework / Assignments</h2>
-              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
-              {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
 
               <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <h3 className="font-bold text-slate-900">Add New Homework</h3>
@@ -1349,11 +1657,9 @@ useEffect(() => {
                 <button
                   onClick={async () => {
                     if (!eventName || !eventDateVal) {
-                      setError("Event name and date are required");
+                      toast.warning("Event name and date are required");
                       return;
                     }
-                    setError("");
-                    setMessage("");
                     setEventLoading(true);
                     try {
                       const res = await fetch(`${API_URL}/api/teacher/events`, {
@@ -1371,7 +1677,7 @@ useEffect(() => {
                       });
                       if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
-                        setError(err.error || "Failed to create event");
+                        toast.error(err.error || "Failed to create event");
                         setEventLoading(false);
                         return;
                       }
@@ -1381,10 +1687,10 @@ useEffect(() => {
                       setEventDesc("");
                       setEventDateVal("");
                       setIsHoliday(false);
-                      setMessage("Event created");
+                      toast.success("Event created successfully");
                     } catch (err) {
                       console.error("CREATE EVENT ERROR:", err);
-                      setError("Failed to create event");
+                      toast.error("Failed to create event");
                     } finally {
                       setEventLoading(false);
                     }
@@ -1428,26 +1734,36 @@ useEffect(() => {
                     <h2 className="text-lg font-bold text-slate-900">Attendance</h2>
                     <p className="text-xs text-slate-500">Mark students — Present / Absent</p>
                   </div>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={date}
+                      max={new Date().toISOString().split('T')[0]}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {lockMessage && (
+                      <span className={`text-xs px-2 py-1 rounded font-medium whitespace-nowrap ${
+                        isFinalized ? 'bg-red-100 text-red-700' : isFutureDate ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-700'
+                      }`}>
+                        {lockMessage}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mt-4 text-center">
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <div className="text-xs text-slate-500">Total Students</div>
+                    <div className="text-2xl font-black text-blue-600">{students.length ?? 0}</div>
+                  </div>
                   <div className="bg-green-50 p-3 rounded-lg">
                     <div className="text-xs text-slate-500">Present</div>
-                    <div className="text-2xl font-black text-green-600">{presentCount}</div>
+                    <div className="text-2xl font-black text-green-600">{uiPresentCount ?? 0}</div>
                   </div>
                   <div className="bg-red-50 p-3 rounded-lg">
                     <div className="text-xs text-slate-500">Absent</div>
-                    <div className="text-2xl font-black text-red-600">{absentCount}</div>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg">
-                    <div className="text-xs text-slate-500">Total</div>
-                    <div className="text-2xl font-black text-slate-900">{totalStudents}</div>
+                    <div className="text-2xl font-black text-red-600">{uiAbsentCount ?? 0}</div>
                   </div>
                 </div>
               </div>
@@ -1464,12 +1780,14 @@ useEffect(() => {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="px-3 py-1 bg-slate-50 rounded-md text-sm font-bold text-slate-600">
-                        {percentages[s._id] !== undefined && percentages[s._id] !== null ? `${percentages[s._id]}%` : "—"}
+                        {studentOverallPercentages[s._id] !== undefined && studentOverallPercentages[s._id] !== null ? `${studentOverallPercentages[s._id]}%` : "—"}
                       </span>
                       <button
                         onClick={() => setStatus(s._id, "PRESENT")}
-                        disabled={locked}
+                        disabled={locked || !date}
                         className={`px-4 py-2 rounded-full text-sm font-bold transition ${
+                          locked || !date ? 'opacity-50 cursor-not-allowed' : ''
+                        } ${
                           attendance[s._id] === "PRESENT"
                             ? "bg-green-600 text-white"
                             : "border border-slate-200 bg-white text-slate-800 hover:border-green-300"
@@ -1479,8 +1797,10 @@ useEffect(() => {
                       </button>
                       <button
                         onClick={() => setStatus(s._id, "ABSENT")}
-                        disabled={locked}
+                        disabled={locked || !date}
                         className={`px-4 py-2 rounded-full text-sm font-bold transition ${
+                          locked || !date ? 'opacity-50 cursor-not-allowed' : ''
+                        } ${
                           attendance[s._id] === "ABSENT"
                             ? "bg-red-600 text-white"
                             : "border border-slate-200 bg-white text-slate-800 hover:border-red-300"
@@ -1496,15 +1816,15 @@ useEffect(() => {
               <div className="fixed bottom-0 left-0 right-0 bg-white/95 border-t border-slate-200 p-4 flex gap-3 sm:relative sm:mt-4 sm:bg-transparent sm:border-0">
                 <button
                   onClick={saveAttendance}
-                  disabled={locked}
-                  className="flex-1 py-3 bg-slate-100 text-slate-900 font-bold rounded-lg hover:bg-slate-200 transition text-sm disabled:opacity-50"
+                  disabled={locked || !date}
+                  className="flex-1 py-3 bg-slate-100 text-slate-900 font-bold rounded-lg hover:bg-slate-200 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Save
                 </button>
                 <button
                   onClick={submitAttendance}
-                  disabled={locked}
-                  className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition text-sm disabled:opacity-50"
+                  disabled={locked || !date}
+                  className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Submit
                 </button>
@@ -1516,185 +1836,23 @@ useEffect(() => {
           {activeTab === "timetable" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Class Timetable</h2>
-              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
-              {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
-
-              {/* Add Timetable Entry Form */}
-              <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-bold text-slate-900">Add/Edit Timetable Entry</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <select
-                    value={timetableForm.day}
-                    onChange={(e) => setTimetableForm({ ...timetableForm, day: e.target.value })}
-                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select Day</option>
-                    {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    placeholder="Period"
-                    value={timetableForm.period}
-                    onChange={(e) => setTimetableForm({ ...timetableForm, period: e.target.value })}
-                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <input
-                    placeholder="Subject"
-                    value={timetableForm.subject}
-                    onChange={(e) => setTimetableForm({ ...timetableForm, subject: e.target.value })}
-                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <input
-                    type="time"
-                    value={timetableForm.startTime}
-                    onChange={(e) => setTimetableForm({ ...timetableForm, startTime: e.target.value })}
-                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <input
-                    type="time"
-                    value={timetableForm.endTime}
-                    onChange={(e) => setTimetableForm({ ...timetableForm, endTime: e.target.value })}
-                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    onClick={async () => {
-                      if (!timetableForm.day || !timetableForm.period || !timetableForm.subject || !timetableForm.startTime || !timetableForm.endTime) {
-                        setError("All fields are required");
-                        return;
-                      }
-                      setError("");
-                      setMessage("");
-                      setTimetableLoading(true);
-                      try {
-                        const res = await fetch(`${API_URL}/api/teacher/timetable`, {
-                          method: "POST",
-                          headers: {
-                            "Content-Type": "application/json",
-                            Authorization: `Bearer ${token}`,
-                          },
-                          body: JSON.stringify({
-                            day: timetableForm.day,
-                            period: Number(timetableForm.period),
-                            subject: timetableForm.subject,
-                            startTime: timetableForm.startTime,
-                            endTime: timetableForm.endTime,
-                            timetableId: timetableForm.timetableId || null,
-                          }),
-                        });
-                        const data = await res.json();
-                        if (!res.ok) {
-                          setError(data.error || "Failed to save timetable");
-                          return;
-                        }
-                        setMessage(timetableForm.timetableId ? "Timetable updated" : "Timetable entry added");
-                        setTimetableForm({ day: "", period: "", subject: "", startTime: "", endTime: "", timetableId: null });
-                        // Fetch updated timetable
-                        const getRes = await fetch(`${API_URL}/api/teacher/timetable`, {
-                          headers: { Authorization: `Bearer ${token}` },
-                        });
-                        const timetableData = await getRes.json();
-                        setTimetable(Array.isArray(timetableData) ? timetableData : []);
-                      } catch (err) {
-                        console.error("TIMETABLE ERROR:", err);
-                        setError("Failed to save timetable");
-                      } finally {
-                        setTimetableLoading(false);
-                      }
-                    }}
-                    disabled={timetableLoading}
-                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition text-sm disabled:opacity-50 col-span-1 sm:col-span-2 lg:col-span-1"
-                  >
-                    {timetableLoading ? "Saving..." : timetableForm.timetableId ? "Update" : "Add"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Timetable Display */}
-              {timetable.length === 0 ? (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
-                  No timetable entries yet
-                </div>
-              ) : (
-                <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50">
-                        <th className="px-4 py-3 text-left font-bold text-slate-900">Day</th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-900">Period</th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-900">Subject</th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-900">Time</th>
-                        <th className="px-4 py-3 text-center font-bold text-slate-900">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {timetable.map((entry) => (
-                        <tr key={entry._id} className="border-b border-slate-100 hover:bg-slate-50">
-                          <td className="px-4 py-3 font-semibold text-slate-900">{entry.day}</td>
-                          <td className="px-4 py-3 text-slate-700">{entry.period}</td>
-                          <td className="px-4 py-3 text-slate-700">{entry.subject}</td>
-                          <td className="px-4 py-3 text-slate-600 text-xs">{entry.startTime} - {entry.endTime}</td>
-                          <td className="px-4 py-3 text-center space-x-2">
-                            <button
-                              onClick={() => {
-                                setTimetableForm({
-                                  day: entry.day,
-                                  period: String(entry.period),
-                                  subject: entry.subject,
-                                  startTime: entry.startTime,
-                                  endTime: entry.endTime,
-                                  timetableId: entry._id,
-                                });
-                              }}
-                              className="text-blue-600 hover:text-blue-800 text-xs font-semibold"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={async () => {
-                                setTimetableLoading(true);
-                                try {
-                                  const res = await fetch(`${API_URL}/api/teacher/timetable/${entry._id}`, {
-                                    method: "DELETE",
-                                    headers: { Authorization: `Bearer ${token}` },
-                                  });
-                                  if (res.ok) {
-                                    setMessage("Entry deleted");
-                                    const getRes = await fetch(`${API_URL}/api/teacher/timetable`, {
-                                      headers: { Authorization: `Bearer ${token}` },
-                                    });
-                                    const data = await getRes.json();
-                                    setTimetable(Array.isArray(data) ? data : []);
-                                  }
-                                } catch (err) {
-                                  setError("Failed to delete");
-                                } finally {
-                                  setTimetableLoading(false);
-                                }
-                              }}
-                              className="text-red-600 hover:text-red-800 text-xs font-semibold"
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <TimetableGrid token={token} isTeacher={true} readOnly={false} />
             </div>
+          )}
+
+          {/* ===== ANNOUNCEMENTS ===== */}
+          {activeTab === "announcements" && (
+            <VoiceAnnouncements 
+              endpoint="/api/teacher/voice-announces"
+              title="📢 School Announcements"
+              emptyMessage="No announcements yet"
+            />
           )}
 
           {/* ===== VOICE MESSAGES ===== */}
           {activeTab === "voice" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Voice Messages</h2>
-              {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
-              {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
 
               {/* Send Voice Message Form */}
               <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
@@ -1742,7 +1900,7 @@ useEffect(() => {
                 <VoiceRecorder
                   onRecordingComplete={async (audioBlob) => {
                     if (!broadcastToClass && selectedStudents.length === 0) {
-                      setError("Please select at least one student");
+                      toast.warning("Please select at least one student");
                       return;
                     }
                     
@@ -1750,12 +1908,10 @@ useEffect(() => {
                     console.log(`✅ TEACHER VOICE: Audio blob ready, size: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
                     
                     if (audioBlob.size === 0) {
-                      setError("Audio recording is empty. Please record again.");
+                      toast.error("Audio recording is empty. Please record again.");
                       return;
                     }
                     
-                    setError("");
-                    setMessage("");
                     setVoiceLoading(true);
                     try {
                       const formData = new FormData();
@@ -1775,22 +1931,22 @@ useEffect(() => {
                       const data = await res.json();
                       if (!res.ok) {
                         console.error("❌ UPLOAD FAILED:", data);
-                        setError(data.error || "Failed to send voice message");
+                        toast.error(data.error || "Failed to send voice message");
                         return;
                       }
                       console.log(`✅ UPLOAD SUCCESS: Audio URL = ${data.audioUrl}`);
-                      setMessage(`Voice message sent to ${data.broadcastTo} student(s)`);
+                      toast.success(`Voice message sent to ${data.broadcastTo} student(s)`);
                       setAudioFile(null);
                       setSelectedStudents([]);
                     } catch (err) {
                       console.error("❌ VOICE BROADCAST ERROR:", err);
-                      setError("Failed to send voice message");
+                      toast.error("Failed to send voice message");
                     } finally {
                       setVoiceLoading(false);
                     }
                   }}
                   onError={(errMsg) => {
-                    setError(errMsg);
+                    toast.error(errMsg);
                   }}
                 />
               </div>
@@ -1831,6 +1987,14 @@ useEffect(() => {
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Syllabus Management</h2>
               <SyllabusManager token={token} teacher={teacher} />
+            </div>
+          )}
+
+          {/* ===== EXAM SYLLABUS ===== */}
+          {activeTab === "exam-syllabus" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Exam Syllabus Management</h2>
+              <ExamSyllabusManager token={token} teacher={teacher} />
             </div>
           )}
 

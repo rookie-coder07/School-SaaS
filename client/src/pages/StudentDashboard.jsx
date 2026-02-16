@@ -1,15 +1,23 @@
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import axios from "axios";
 import AttendanceCalendar from "../components/AttendanceCalendar";
 import StudentSyllabus from "../components/StudentSyllabus";
 import StudentExams from "../components/StudentExams";
+import VoiceAnnouncements from "../components/VoiceAnnouncements";
+import NotificationBell from "../components/NotificationBell";
+import NotificationDropdown from "../components/NotificationDropdown";
+import TimetableGrid from "../components/TimetableGrid";
+import { useToast } from "../components/ToastProvider";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [schoolId, setSchoolId] = useState("");
@@ -26,7 +34,18 @@ export default function StudentDashboard() {
   const [timetable, setTimetable] = useState([]);
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const token = localStorage.getItem("studentToken");
+  const toast = useToast();
+
+  // Handle navigation from notification clicks via query params
+  useEffect(() => {
+    const sectionParam = searchParams.get("section");
+    if (sectionParam) {
+      console.log("📍 Student Dashboard: Navigating to section from query param:", sectionParam);
+      setActiveTab(sectionParam);
+    }
+  }, [searchParams]);
 
   // Fetch complete dashboard data (student, attendance, marks, teacher)
   useEffect(() => {
@@ -36,8 +55,12 @@ export default function StudentDashboard() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
-          console.warn("Dashboard fetch failed, redirecting to login");
-          navigate("/", { replace: true });
+          if (res.status === 401 || res.status === 403) {
+            console.warn("🔴 Authentication failed, redirecting to login");
+            navigate("/student/login", { replace: true });
+            return;
+          }
+          console.warn("⚠️ Dashboard fetch returned status:", res.status);
           return;
         }
         const data = await res.json();
@@ -46,12 +69,55 @@ export default function StudentDashboard() {
         setMarks(data.marks || []);
         setTeacher(data.teacher || null);
       } catch (err) {
-        console.error("STUDENT DASHBOARD FETCH ERROR:", err);
-        navigate("/", { replace: true });
+        console.error("❌ STUDENT DASHBOARD FETCH ERROR:", err);
+        if (!token) {
+          navigate("/student/login", { replace: true });
+        }
       }
     };
     if (token) fetchDashboard();
   }, [token, navigate]);
+
+  // Fetch unread notification count on mount and periodically
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setUnreadCount(response.data.unreadCount || 0);
+      } catch (err) {
+        console.error("Error fetching unread count:", err);
+        setUnreadCount(0);
+      }
+    };
+
+    if (token) {
+      fetchUnreadCount();
+      
+      // Poll every 30 seconds to keep count updated
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
+
+  // Fetch unread count when notifications panel opens
+  useEffect(() => {
+    if (showNotifications && token) {
+      const fetchUnreadCount = async () => {
+        try {
+          const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          setUnreadCount(response.data.unreadCount || 0);
+        } catch (err) {
+          console.error("Error fetching unread count:", err);
+        }
+      };
+      
+      fetchUnreadCount();
+    }
+  }, [showNotifications, token]);
 
   // Marks and attendance are already loaded from the dashboard fetch above
   // No need for additional fetches
@@ -194,13 +260,14 @@ export default function StudentDashboard() {
     { id: "exams", label: "Exams" },
     { id: "timetable", label: "Timetable" },
     { id: "homework", label: "Homework" },
+    { id: "announcements", label: "Announcements" },
     { id: "voice", label: "Voice Messages" },
     { id: "events", label: "Events" },
     { id: "profile", label: "Profile" },
   ];
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
+    <div className="h-screen overflow-hidden flex flex-col md:flex-row bg-slate-50 font-sans">
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -211,7 +278,7 @@ export default function StudentDashboard() {
 
       {/* ===== SIDEBAR ===== */}
       <div
-        className={`fixed md:relative inset-y-0 left-0 w-64 bg-gradient-to-b from-slate-900 to-slate-950 text-white p-5 flex flex-col z-30 transition-transform duration-300 transform ${
+        className={`fixed md:relative inset-y-0 left-0 w-64 bg-gradient-to-b from-slate-900 to-slate-950 text-white p-5 flex flex-col z-30 transition-transform duration-300 transform md:overflow-y-auto md:h-screen ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
@@ -249,28 +316,59 @@ export default function StudentDashboard() {
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className="flex-1 w-full md:w-auto">
+      <div className="flex-1 w-full md:w-auto flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 md:py-5 sticky top-0 z-20 flex items-center">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="md:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
-            title="Toggle sidebar"
-          >
-            <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div className="flex-1">
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900">
-              {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
-            </h1>
-            <p className="text-xs md:text-sm text-slate-500 mt-1">{student?.name ?? "Student"}</p>
+        <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 md:py-5 sticky top-0 z-20 flex items-center justify-between">
+          <div className="flex items-center">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="md:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
+              title="Toggle sidebar"
+            >
+              <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div className="flex-1">
+              <h1 className="text-2xl md:text-3xl font-black text-slate-900">
+                {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
+              </h1>
+              <p className="text-xs md:text-sm text-slate-500 mt-1">{student?.name ?? "Student"}</p>
+            </div>
+          </div>
+          
+          {/* Notification Bell */}
+          <div className="flex items-center gap-3">
+            <NotificationBell
+              onClick={() => setShowNotifications(!showNotifications)}
+              unreadCount={unreadCount}
+              isOpen={showNotifications}
+            />
           </div>
         </div>
 
+        {/* Notification Dropdown */}
+        {showNotifications && (
+          <NotificationDropdown
+            isOpen={showNotifications}
+            onClose={() => setShowNotifications(false)}
+            token={localStorage.getItem("studentToken")}
+            toast={toast}
+            onNotificationsUpdated={async () => {
+              try {
+                const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                setUnreadCount(response.data.unreadCount || 0);
+              } catch (err) {
+                console.error("Error refreshing unread count:", err);
+              }
+            }}
+          />
+        )}
+
         {/* Content */}
-        <div className="p-4 md:p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
           {loading && <div className="text-center text-slate-500 py-8">Loading...</div>}
 
           {/* ===== DASHBOARD ===== */}
@@ -466,35 +564,17 @@ export default function StudentDashboard() {
           {activeTab === "timetable" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Class Timetable</h2>
-              {timetable.length === 0 ? (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
-                  No timetable available
-                </div>
-              ) : (
-                <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50">
-                        <th className="px-4 py-3 text-left font-bold text-slate-900">Day</th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-900">Period</th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-900">Subject</th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-900">Time</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {timetable.map((entry) => (
-                        <tr key={entry._id} className="border-b border-slate-100 hover:bg-slate-50">
-                          <td className="px-4 py-3 font-semibold text-slate-900">{entry.day}</td>
-                          <td className="px-4 py-3 text-slate-700">{entry.period}</td>
-                          <td className="px-4 py-3 text-slate-700">{entry.subject}</td>
-                          <td className="px-4 py-3 text-slate-600 text-xs">{entry.startTime} - {entry.endTime}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <TimetableGrid token={token} isTeacher={false} readOnly={true} />
             </div>
+          )}
+
+          {/* ===== ANNOUNCEMENTS ===== */}
+          {activeTab === "announcements" && (
+            <VoiceAnnouncements 
+              endpoint="/api/student/voice-announces"
+              title="📢 School Announcements"
+              emptyMessage="No announcements yet"
+            />
           )}
 
           {/* ===== VOICE MESSAGES ===== */}

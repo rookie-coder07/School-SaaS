@@ -66,6 +66,7 @@ export default function authRoutes(db) {
       {
         userId: user._id.toString(),
         role: "TEACHER",
+        schoolId: teacher.schoolId.toString(),
         class: teacher.class,
         section: teacher.section,
       },

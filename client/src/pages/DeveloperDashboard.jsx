@@ -1,14 +1,19 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import NotificationBell from "../components/NotificationBell";
+import NotificationDropdown from "../components/NotificationDropdown";
 
-// Use Vite proxy during development, or environment variable for production
-const API_URL = import.meta.env.VITE_API_URL || "";
+// ✅ FIXED: Now has proper fallback to localhost:5000
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function DeveloperDashboard() {
   const navigate = useNavigate();
   const [token, setToken] = useState(null);
   const [isReady, setIsReady] = useState(false);
   const [activeTab, setActiveTab] = useState("analytics");
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   // ✅ Check token on mount and when it changes
   useEffect(() => {
@@ -21,6 +26,47 @@ export default function DeveloperDashboard() {
     setToken(devToken);
     setIsReady(true);
   }, [navigate]);
+
+  // Fetch unread notification count on mount and periodically
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setUnreadCount(response.data.unreadCount || 0);
+      } catch (err) {
+        console.error("Error fetching unread count:", err);
+        setUnreadCount(0);
+      }
+    };
+
+    if (token) {
+      fetchUnreadCount();
+      
+      // Poll every 30 seconds to keep count updated
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
+
+  // Fetch unread count when notifications panel opens
+  useEffect(() => {
+    if (showNotifications && token) {
+      const fetchUnreadCount = async () => {
+        try {
+          const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          setUnreadCount(response.data.unreadCount || 0);
+        } catch (err) {
+          console.error("Error fetching unread count:", err);
+        }
+      };
+      
+      fetchUnreadCount();
+    }
+  }, [showNotifications, token]);
 
   // Analytics state
   const [analytics, setAnalytics] = useState(null);
@@ -506,11 +552,63 @@ export default function DeveloperDashboard() {
       </div>
 
       <div style={styles.pageMain}>
+        {/* Header with Notification Bell */}
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <NotificationBell
+              onClick={() => setShowNotifications(!showNotifications)}
+              unreadCount={unreadCount}
+              isOpen={showNotifications}
+            />
+          </div>
+        </div>
+
+        {/* Notification Dropdown */}
+        {showNotifications && (
+          <NotificationDropdown
+            isOpen={showNotifications}
+            onClose={() => setShowNotifications(false)}
+            token={token}
+            onNotificationsUpdated={async () => {
+              try {
+                const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                setUnreadCount(response.data.unreadCount || 0);
+              } catch (err) {
+                console.error("Error refreshing unread count:", err);
+              }
+            }}
+          />
+        )}
+
         {/* Analytics Tab */}
         {activeTab === "analytics" && (
           <div>
-            <h1 style={styles.title}>Platform Analytics</h1>
-            <p style={styles.subtitle}>System-wide statistics</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <h1 style={styles.title}>Platform Analytics</h1>
+                <p style={styles.subtitle}>System-wide statistics</p>
+              </div>
+              <button
+                onClick={() => navigate("/dev/schools")}
+                style={{
+                  padding: "10px 20px",
+                  backgroundColor: "#3b82f6",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  transition: "background-color 0.2s",
+                }}
+                onMouseEnter={(e) => (e.target.style.backgroundColor = "#2563eb")}
+                onMouseLeave={(e) => (e.target.style.backgroundColor = "#3b82f6")}
+              >
+                Manage Schools →
+              </button>
+            </div>
 
             {analyticsLoading ? (
               <p>Loading...</p>

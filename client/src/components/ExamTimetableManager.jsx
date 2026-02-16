@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
+import { useToast } from "./ToastProvider";
 
 export default function ExamTimetableManager({ token, teacher }) {
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const toast = useToast();
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   // Form state
   const [subject, setSubject] = useState("");
@@ -22,7 +22,6 @@ export default function ExamTimetableManager({ token, teacher }) {
 
   const fetchExams = async () => {
     setLoading(true);
-    setError("");
     try {
       const res = await fetch(`${API_URL}/api/teacher/exams`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -32,7 +31,7 @@ export default function ExamTimetableManager({ token, teacher }) {
       setExams(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
-      setError("Failed to load exams");
+      toast.error("Failed to load exams");
     } finally {
       setLoading(false);
     }
@@ -41,13 +40,11 @@ export default function ExamTimetableManager({ token, teacher }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!subject || !examName || !examDate || !startTime || !endTime) {
-      setError("All fields are required");
+      toast.warning("All fields are required");
       return;
     }
 
     setSubmitting(true);
-    setError("");
-    setSuccess("");
 
     try {
       const res = await fetch(`${API_URL}/api/teacher/exams`, {
@@ -65,9 +62,12 @@ export default function ExamTimetableManager({ token, teacher }) {
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to add exam");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to add exam");
+      }
 
-      setSuccess("Exam added successfully!");
+      toast.success("Exam added successfully!");
       setSubject("");
       setExamName("");
       setExamDate("");
@@ -78,7 +78,7 @@ export default function ExamTimetableManager({ token, teacher }) {
       fetchExams();
     } catch (err) {
       console.error(err);
-      setError(err.message || "Failed to add exam");
+      toast.error(err.message || "Failed to add exam");
     } finally {
       setSubmitting(false);
     }
@@ -94,11 +94,11 @@ export default function ExamTimetableManager({ token, teacher }) {
       });
 
       if (!res.ok) throw new Error("Failed to delete exam");
-      setSuccess("Exam deleted successfully!");
+      toast.success("Exam deleted successfully!");
       fetchExams();
     } catch (err) {
       console.error(err);
-      setError("Failed to delete exam");
+      toast.error("Failed to delete exam");
     }
   };
 
@@ -111,17 +111,6 @@ export default function ExamTimetableManager({ token, teacher }) {
       {/* Add Exam Form */}
       <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm p-6">
         <h3 className="text-lg font-bold text-slate-900 mb-5">Add New Exam</h3>
-
-        {error && (
-          <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="mb-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
-            {success}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
