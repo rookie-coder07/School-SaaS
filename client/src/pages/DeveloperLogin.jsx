@@ -20,24 +20,44 @@ export default function DeveloperLogin() {
       const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
       const endpoint = `${API_URL}/api/auth/developer/login`;
       
+      console.log("📤 Attempting developer login...");
+      console.log("   API_URL:", API_URL);
+      console.log("   Endpoint:", endpoint);
+      console.log("   Email:", email);
+      
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
+      console.log("📥 Server response - Status:", res.status);
+      
       const data = await res.json();
+      console.log("📦 Response data:", data);
+      
       if (!res.ok) {
-        setError(data.error || "Login failed");
+        const errorMsg = data.error || "Login failed";
+        console.error("❌ LOGIN FAILED:", errorMsg);
+        setError(errorMsg);
         setLoading(false);
         return;
       }
 
+      if (!data.token) {
+        console.error("❌ NO TOKEN IN RESPONSE");
+        setError("Server error: No token received");
+        setLoading(false);
+        return;
+      }
+
+      console.log("✅ Token received, saving to localStorage...");
       localStorage.setItem("developerToken", data.token);
+      console.log("✅ Token saved. Navigating to /dev...");
       navigate("/dev");
     } catch (err) {
-      console.error("LOGIN ERROR:", err);
-      setError("Connection error");
+      console.error("❌ LOGIN ERROR:", err);
+      setError(err.message || "Connection error");
       setLoading(false);
     }
   };

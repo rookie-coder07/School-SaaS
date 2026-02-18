@@ -3,18 +3,20 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import AttendanceCalendar from "../components/AttendanceCalendar";
-import StudentSyllabus from "../components/StudentSyllabus";
+import StudentExamSyllabus from "../components/StudentExamSyllabus";
 import StudentExams from "../components/StudentExams";
 import VoiceAnnouncements from "../components/VoiceAnnouncements";
 import NotificationBell from "../components/NotificationBell";
 import NotificationDropdown from "../components/NotificationDropdown";
 import TimetableGrid from "../components/TimetableGrid";
+import StudentAnalyticsContent from "../components/StudentAnalyticsContent";
 import { useToast } from "../components/ToastProvider";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [selectedExamId, setSelectedExamId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -32,6 +34,9 @@ export default function StudentDashboard() {
   const [teacher, setTeacher] = useState(null);
   const [voiceMessages, setVoiceMessages] = useState([]);
   const [timetable, setTimetable] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState(null);
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -41,9 +46,25 @@ export default function StudentDashboard() {
   // Handle navigation from notification clicks via query params
   useEffect(() => {
     const sectionParam = searchParams.get("section");
+    const examIdParam = searchParams.get("examId");
+    
     if (sectionParam) {
-      console.log("📍 Student Dashboard: Navigating to section from query param:", sectionParam);
-      setActiveTab(sectionParam);
+      // Redirect old "syllabus" section to new "exam-syllabus"
+      const targetSection = sectionParam === "syllabus" ? "exam-syllabus" : sectionParam;
+      if (sectionParam === "syllabus") {
+        console.log("📍 Student Dashboard: Redirecting old 'syllabus' section to 'exam-syllabus'");
+      } else {
+        console.log("📍 Student Dashboard: Navigating to section from query param:", sectionParam);
+      }
+      setActiveTab(targetSection);
+    }
+    
+    // Handle examId for specific exam syllabus viewing
+    if (examIdParam) {
+      console.log("📍 Student Dashboard: Exam ID from notification:", examIdParam);
+      setSelectedExamId(examIdParam);
+    } else {
+      setSelectedExamId(null);
     }
   }, [searchParams]);
 
@@ -218,6 +239,34 @@ export default function StudentDashboard() {
     if (token) fetchTimetable();
   }, [activeTab, token]);
 
+  // Fetch analytics
+  useEffect(() => {
+    if (activeTab !== "analytics") return;
+    const fetchAnalytics = async () => {
+      try {
+        setAnalyticsLoading(true);
+        setAnalyticsError(null);
+        const res = await fetch(`${API_URL}/api/student/analytics`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || "Failed to fetch analytics");
+        }
+        const data = await res.json();
+        setAnalytics(data);
+        setAnalyticsError(null);
+      } catch (err) {
+        console.error("ANALYTICS FETCH ERROR:", err);
+        setAnalyticsError(err.message || "Failed to load analytics");
+        setAnalytics(null);
+      } finally {
+        setAnalyticsLoading(false);
+      }
+    };
+    if (token) fetchAnalytics();
+  }, [activeTab, token]);
+
   // Teacher info is already loaded from the dashboard fetch above
   // No need for additional fetch
 
@@ -256,7 +305,8 @@ export default function StudentDashboard() {
     { id: "dashboard", label: "Dashboard" },
     { id: "marks", label: "Marks" },
     { id: "attendance", label: "Attendance" },
-    { id: "syllabus", label: "Syllabus" },
+    { id: "analytics", label: "Analytics" },
+    { id: "exam-syllabus", label: "Exam Syllabus" },
     { id: "exams", label: "Exams" },
     { id: "timetable", label: "Timetable" },
     { id: "homework", label: "Homework" },
@@ -407,7 +457,7 @@ export default function StudentDashboard() {
                     const subjects = Array.from(new Set(marks.map((m) => m.subject ?? "Other"))).sort();
                     const rowMap = {};
                     marks.forEach((m) => {
-                      const key = `${m.exam ?? "Exam"}|${m.date ?? ""}`;
+                      const key = `${m.exam ?? "Exam"}`;
                       if (!rowMap[key]) rowMap[key] = { exam: m.exam ?? "Exam", date: m.date ?? null, marks: {} };
                       rowMap[key].marks[m.subject ?? "Other"] = m.score ?? null;
                     });
@@ -461,11 +511,23 @@ export default function StudentDashboard() {
             </div>
           )}
 
-          {/* ===== SYLLABUS ===== */}
-          {activeTab === "syllabus" && (
+          {/* ===== ANALYTICS ===== */}
+          {activeTab === "analytics" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Syllabus</h2>
-              <StudentSyllabus token={token} />
+              <h2 className="text-lg font-bold text-slate-900">Your Analytics Dashboard</h2>
+              <StudentAnalyticsContent 
+                analytics={analytics}
+                loading={analyticsLoading}
+                error={analyticsError}
+              />
+            </div>
+          )}
+
+          {/* ===== EXAM SYLLABUS ===== */}
+          {activeTab === "exam-syllabus" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">Exam Syllabus</h2>
+              <StudentExamSyllabus token={token} selectedExamId={selectedExamId} />
             </div>
           )}
 

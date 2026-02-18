@@ -7,14 +7,17 @@ import VoiceRecorder from "../components/VoiceRecorder";
 import VoiceAnnouncements from "../components/VoiceAnnouncements";
 import NotificationBell from "../components/NotificationBell";
 import NotificationDropdown from "../components/NotificationDropdown";
-import SyllabusManager from "../components/SyllabusManager";
 import ExamSyllabusManager from "../components/ExamSyllabusManager";
 import ExamTimetableManager from "../components/ExamTimetableManager";
+import MarksViewer from "../components/MarksViewer";
 import TimetableGrid from "../components/TimetableGrid";
 import { useToast } from "../components/ToastProvider";
 import { createNotification } from "../utils/notificationHelper";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+// Excel template download link
+const MARKS_TEMPLATE_URL = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEsDBBQABgAIAAAAIQDfpq/8FwEAABMFAAATAAAAeGwvd29ya3NoZWV0MS54bWykU0tugzAM/RVLT1WVpk0n7bRpN500TetFm0kxIFJiEJsCqvj7HKZp0nQnbMt+fu/t9xvM15sTYGJWCZDCGwRBKB7sRi2QuKVg3DkLUIh6FoxFy0mBrWGeMy0d3V3DEo/KPuUVplSYHvALM4sVlyxE8RN+c8n4QRYsxN0ECkN9G1cY8XvPYv8Rx1QwKBRKhSNhR3TBhMa8oGgWHW4nVIEXNyOKLZdApSb4fYmRupWKFR1N2bFmwSmwddFNCNXZMTGxD5Eev4OhXxw8Cr2/MUmZrfVZApAIqx3T1YKLdNQqwb9K0bwGGFNVTi6l0Y5E7M8KoVVFzn6MZqvJ0p6u0bfqfWoOj+ub3cqCRpP3NPCn6GFvz7v7UqpQvAAY2RnYy8X7V8bzpGfj90Y7+Bl1BLBwgHzXI+MQEAABMFAAAAAAAAAAAAAAAAAAATAAAAeGwvd29ya3NoZWV0MS54bWxQSwECLQAUAAYACAAAACEAB81yPjEBAAATBQATAAAAAAAAAAAAAAAAAAATAAAAeGwvd29ya3NoZWV0MS54bWxQSwUGAAAAAAEAAQA7AAAALgEAAAAA";
 
 export default function TeacherDashboard() {
   const [students, setStudents] = useState([]);
@@ -1002,9 +1005,9 @@ useEffect(() => {
     { id: "dashboard", label: "Dashboard" },
     { id: "analytics", label: "Analytics" },
     { id: "academics", label: "Academics" },
+    { id: "marks", label: "View Marks" },
     { id: "summary", label: "Students" },
     { id: "timetable", label: "Timetable" },
-    { id: "syllabus", label: "Syllabus" },
     { id: "exam-syllabus", label: "Exam Syllabus" },
     { id: "exams", label: "Exam Timetable" },
     { id: "homework", label: "Homework" },
@@ -1237,7 +1240,10 @@ useEffect(() => {
           {/* ===== STUDENTS SUMMARY (TABLE) ===== */}
           {activeTab === "summary" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Students Summary</h2>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Students Summary</h2>
+                <p className="text-sm text-slate-600 mt-1">👉 Click any student to view detailed analytics & performance insights</p>
+              </div>
               {students.length === 0 ? (
                 <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
                   No students in this class
@@ -1256,7 +1262,11 @@ useEffect(() => {
                     </thead>
                     <tbody>
                       {students.map((s) => (
-                        <tr key={s._id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <tr 
+                          key={s._id} 
+                          className="border-b border-slate-100 hover:bg-blue-50 cursor-pointer transition"
+                          onClick={() => navigate(`/teacher/student-analytics/${s._id}`)}
+                        >
                           <td className="px-4 py-3 text-slate-700">{s.rollNo}</td>
                           <td className="px-4 py-3 font-semibold text-slate-900">{s.name}</td>
                           <td className="px-4 py-3 text-slate-600 hidden sm:table-cell text-xs">{s.parentName || "—"}</td>
@@ -1274,153 +1284,83 @@ useEffect(() => {
           {/* ===== ANALYTICS ===== */}
           {activeTab === "analytics" && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-slate-900">Student Analytics & Insights</h2>
-
-              {/* KPI Section */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border border-blue-200 shadow-sm">
-                  <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Class Average</div>
-                  <div className="text-3xl font-black text-blue-900 mt-2">{analyticsData.classAverage}%</div>
-                  <p className="text-xs text-blue-700 mt-2">Overall class performance</p>
-                </div>
-
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border border-green-200 shadow-sm">
-                  <div className="text-xs font-semibold text-green-600 uppercase tracking-wide">Avg Attendance</div>
-                  <div className="text-3xl font-black text-green-900 mt-2">{analyticsData.averageAttendance}%</div>
-                  <p className="text-xs text-green-700 mt-2">Class attendance rate</p>
-                </div>
-
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border border-purple-200 shadow-sm">
-                  <div className="text-xs font-semibold text-purple-600 uppercase tracking-wide">Total Students</div>
-                  <div className="text-3xl font-black text-purple-900 mt-2">{students.length}</div>
-                  <p className="text-xs text-purple-700 mt-2">Class strength</p>
-                </div>
-
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl border border-orange-200 shadow-sm">
-                  <div className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Performance</div>
-                  <div className="text-3xl font-black text-orange-900 mt-2">{analyticsData.classAverage >= 75 ? "Good" : analyticsData.classAverage >= 60 ? "Okay" : "Need Help"}</div>
-                  <p className="text-xs text-orange-700 mt-2">Class status</p>
-                </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Student Analytics</h2>
+                <p className="text-sm text-slate-600 mt-1">Advanced insights for individual student performance</p>
               </div>
 
-              {/* Top & Low Scorers */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Welcome Card */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-8 text-center">
+                <div className="text-5xl mb-4">📊</div>
+                <h3 className="text-xl font-bold text-blue-900 mb-2">Advanced Student Analytics System</h3>
+                <p className="text-blue-800 mb-6">Get comprehensive performance insights for each student including attendance trends, subject-wise performance, and actionable recommendations.</p>
+                <button
+                  onClick={() => {
+                    const studentsTab = document.querySelector('[data-tab="summary"]');
+                    if (studentsTab) studentsTab.click();
+                  }}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition inline-block"
+                >
+                  Go to Students List →
+                </button>
+              </div>
+
+              {/* Features Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-900 mb-4">🏆 Topper Student</h3>
-                  {analyticsData.topper ? (
-                    <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-lg border border-yellow-200">
-                      <div className="font-bold text-yellow-900">{analyticsData.topper.name}</div>
-                      <div className="text-sm text-yellow-700 mt-1">Subject: {analyticsData.topper.subject}</div>
-                      <div className="text-lg font-black text-yellow-900 mt-2">{analyticsData.topper.marks}/100</div>
-                      <div className="text-xs text-yellow-600 mt-1">{analyticsData.topper.exam}</div>
-                    </div>
-                  ) : (
-                    <p className="text-slate-500 text-sm">No marks data yet</p>
-                  )}
+                  <div className="text-3xl mb-3">📈</div>
+                  <h4 className="font-bold text-slate-900 mb-2">Performance Trends</h4>
+                  <p className="text-sm text-slate-600">Track marks across exams and identify improvement patterns</p>
                 </div>
 
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-900 mb-4">📉 Needs Improvement</h3>
-                  {analyticsData.lowScorer ? (
-                    <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg border border-red-200">
-                      <div className="font-bold text-red-900">{analyticsData.lowScorer.name}</div>
-                      <div className="text-sm text-red-700 mt-1">Subject: {analyticsData.lowScorer.subject}</div>
-                      <div className="text-lg font-black text-red-900 mt-2">{analyticsData.lowScorer.marks}/100</div>
-                      <div className="text-xs text-red-600 mt-1">Recommendation: Extra coaching needed in {analyticsData.lowScorer.subject}</div>
-                    </div>
-                  ) : (
-                    <p className="text-slate-500 text-sm">No marks data yet</p>
-                  )}
+                  <div className="text-3xl mb-3">📚</div>
+                  <h4 className="font-bold text-slate-900 mb-2">Subject Analysis</h4>
+                  <p className="text-sm text-slate-600">Compare subject-wise performance and identify weak areas</p>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <div className="text-3xl mb-3">📅</div>
+                  <h4 className="font-bold text-slate-900 mb-2">Attendance Tracking</h4>
+                  <p className="text-sm text-slate-600">Monitor attendance patterns and identify risks early</p>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <div className="text-3xl mb-3">⚠️</div>
+                  <h4 className="font-bold text-slate-900 mb-2">Risk Indicators</h4>
+                  <p className="text-sm text-slate-600">Auto-detect students needing academic support</p>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <div className="text-3xl mb-3">💡</div>
+                  <h4 className="font-bold text-slate-900 mb-2">AI Insights</h4>
+                  <p className="text-sm text-slate-600">Get auto-generated suggestions based on data</p>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <div className="text-3xl mb-3">📊</div>
+                  <h4 className="font-bold text-slate-900 mb-2">Visual Charts</h4>
+                  <p className="text-sm text-slate-600">Beautiful interactive charts for easy analysis</p>
                 </div>
               </div>
 
-              {/* Charts Section */}
-              {analyticsData.attendanceData.length > 0 && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Attendance Bar Chart */}
-                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <h3 className="text-sm font-bold text-slate-900 mb-4">📊 Attendance by Student</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={analyticsData.attendanceData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="name" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={80} />
-                        <YAxis />
-                        <Tooltip formatter={(value) => `${value}%`} />
-                        <Bar dataKey="attendance" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Attendance Distribution Pie Chart */}
-                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <h3 className="text-sm font-bold text-slate-900 mb-4">🔄 Attendance Distribution</h3>
-                    {(() => {
-                      const highAtt = analyticsData.attendanceData.filter(d => d.attendance >= 80).length;
-                      const medAtt = analyticsData.attendanceData.filter(d => d.attendance >= 60 && d.attendance < 80).length;
-                      const lowAtt = analyticsData.attendanceData.filter(d => d.attendance < 60).length;
-                      const pieData = [
-                        { name: "Excellent (≥80%)", value: highAtt, color: "#10b981" },
-                        { name: "Good (60-79%)", value: medAtt, color: "#f59e0b" },
-                        { name: "Low (<60%)", value: lowAtt, color: "#ef4444" },
-                      ];
-                      return (
-                        <ResponsiveContainer width="100%" height={300}>
-                          <PieChart>
-                            <Pie data={pieData} cx="50%" cy="50%" labelLine={false} label={({ name, value }) => `${name}: ${value}`} outerRadius={80} fill="#8884d8" dataKey="value">
-                              {pieData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
-                              ))}
-                            </Pie>
-                            <Tooltip />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      );
-                    })()}
-                  </div>
-                </div>
-              )}
-
-              {/* Remarks & Insights */}
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="text-sm font-bold text-slate-900 mb-4">💡 Insights & Remarks</h3>
-                <div className="space-y-3">
-                  {analyticsData.classAverage >= 80 && (
-                    <div className="bg-green-50 border border-green-200 p-4 rounded-lg text-sm text-green-700">
-                      ✅ <strong>Excellent Performance:</strong> Your class is performing exceptionally well with an average of {analyticsData.classAverage}%. Keep up the great teaching!
-                    </div>
-                  )}
-                  {analyticsData.classAverage >= 60 && analyticsData.classAverage < 80 && (
-                    <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-sm text-yellow-700">
-                      ⚠️ <strong>Good Performance:</strong> Class average is {analyticsData.classAverage}%. Focus on helping weaker students improve.
-                    </div>
-                  )}
-                  {analyticsData.classAverage < 60 && (
-                    <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-sm text-red-700">
-                      ❌ <strong>Needs Attention:</strong> Class average is only {analyticsData.classAverage}%. Consider reviewing teaching methods and providing additional support.
-                    </div>
-                  )}
-
-                  {analyticsData.averageAttendance >= 90 && (
-                    <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg text-sm text-blue-700">
-                      ✅ <strong>Excellent Attendance:</strong> Average attendance is {analyticsData.averageAttendance}%. This is excellent!
-                    </div>
-                  )}
-                  {analyticsData.averageAttendance < 75 && (
-                    <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg text-sm text-orange-700">
-                      ⚠️ <strong>Low Attendance Alert:</strong> Average attendance is {analyticsData.averageAttendance}%. Follow up with absent students.
-                    </div>
-                  )}
-
-                  <div className="bg-slate-100 border border-slate-300 p-4 rounded-lg text-sm text-slate-700">
-                    📈 <strong>Action Items:</strong>
-                    <ul className="list-disc list-inside mt-2 space-y-1">
-                      <li>Review {analyticsData.lowScorer ? `${analyticsData.lowScorer.name}'s` : "weaker"} performance and provide extra support</li>
-                      <li>Maintain regular follow-ups with low-attendance students</li>
-                      <li>Celebrate achievements of high-performing students</li>
-                      <li>Schedule individual meetings with struggling students</li>
-                    </ul>
-                  </div>
-                </div>
+              {/* How to Use */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+                <h4 className="font-bold text-amber-900 mb-4">How to Use:</h4>
+                <ol className="space-y-3 text-amber-900 text-sm">
+                  <li className="flex gap-3">
+                    <span className="font-bold min-w-fit">1. Go to Students Tab</span>
+                    <span>Click the "Summary" tab to see your class students</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="font-bold min-w-fit">2. Click Any Student</span>
+                    <span>Click on any student row to open their analytics dashboard</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="font-bold min-w-fit">3. View Insights</span>
+                    <span>Explore performance trends, marks, attendance, and get actionable recommendations</span>
+                  </li>
+                </ol>
               </div>
             </div>
           )}
@@ -1445,7 +1385,7 @@ useEffect(() => {
                     <strong>Excel Format:</strong> Your file should have columns: <code className="bg-slate-100 px-2 py-1 rounded">StudentName</code>, <code className="bg-slate-100 px-2 py-1 rounded">Marks</code> (optional: <code className="bg-slate-100 px-2 py-1 rounded">RollNo</code>)
                   </p>
                   <a
-                    href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEsDBBQABgAIAAAAIQDfpq/8FwEAABMFAAATAAAAeGwvd29ya3NoZWV0MS54bWykU0tugzAM/RVLT1WVpk0n7bRpN500TetFm0kxIFJiEJsCqvj7HKZp0nQnbMt+fu/t9xvM15sTYGJWCZDCGwRBKB7sRi2QuKVg3DkLUIh6FoxFy0mBrWGeMy0d3V3DEo/KPuUVplSYHvALM4sVlyxE8RN+c8n4QRYsxN0ECkN9G1cY8XvPYv8Rx1QwKBRKhSNhR3TBhMa8oGgWHW4nVIEXNyOKLZdApSb4fYmRupWKFR1N2bFmwSmwddFNCNXZMTGxD5Eev4OhXxw8Cr2/MUmZrfVZApAIqx3T1YKLdNQqwb9K0bwGGFNVTi6l0Y5E7M8KoVVFzn6MZqvJ0p6u0bfqfWoOj+ub3cqCRpP3NPCn6GFvz7v7UqpQvAAY2RnYy8X7V8bzpGfj90Y7+Bl1BLBwgHzXI+MQEAABMFAAAAAAAAAAAAAAAAAAATAAAAeGwvd29ya3NoZWV0MS54bWxQSwECLQAUAAYACAAAACEAB81yPjEBAAATBQATAAAAAAAAAAAAAAAAAAATAAAAeGwvd29ya3NoZWV0MS54bWxQSwUGAAAAAAEAAQA7AAAALgEAAAAA"
+                    href={MARKS_TEMPLATE_URL}
                     download="marks_template.xlsx"
                     className="text-blue-600 hover:text-blue-800 text-xs font-semibold underline"
                   >
@@ -1554,6 +1494,14 @@ useEffect(() => {
                   Save Marks
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ===== VIEW MARKS ===== */}
+          {activeTab === "marks" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">📊 View & Manage Marks</h2>
+              <MarksViewer token={token} teacher={teacher} />
             </div>
           )}
 
@@ -1979,14 +1927,6 @@ useEffect(() => {
                   </div>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* ===== SYLLABUS ===== */}
-          {activeTab === "syllabus" && (
-            <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Syllabus Management</h2>
-              <SyllabusManager token={token} teacher={teacher} />
             </div>
           )}
 

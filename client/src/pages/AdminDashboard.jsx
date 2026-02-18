@@ -86,6 +86,12 @@ export default function AdminDashboard() {
   const [voiceAnnouncementsRefresh, setVoiceAnnouncementsRefresh] = useState(0);
   const [voiceBroadcastTarget, setVoiceBroadcastTarget] = useState("all"); // "all", "teachers", "students"
   
+  // Teacher Migration
+  const [selectedTeacherForMigration, setSelectedTeacherForMigration] = useState(null);
+  const [migrationToClass, setMigrationToClass] = useState("");
+  const [migrationToSection, setMigrationToSection] = useState("");
+  const [migratingTeacherId, setMigratingTeacherId] = useState(null);
+  
   const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
   const token = localStorage.getItem("adminToken");
 
@@ -346,6 +352,96 @@ export default function AdminDashboard() {
       }, 500);
     } else {
       toast.error(`Deleted ${successCount}, Failed ${failureCount}: ${failedNames.join(", ")}`);
+    }
+  };
+
+  // Migrate/Reassign Teacher to new class/section
+  const handleTeacherMigration = async () => {
+    if (!selectedTeacherForMigration) {
+      toast.warning("Please select a teacher to migrate");
+      return;
+    }
+    if (!migrationToClass || !migrationToSection) {
+      toast.warning("Please select target class and section");
+      return;
+    }
+
+    const teacher = teachers.find(t => t._id === selectedTeacherForMigration);
+    if (!teacher) {
+      toast.error("Teacher not found");
+      return;
+    }
+
+    // Trim whitespace from values
+    const cleanToClass = String(migrationToClass).trim();
+    const cleanToSection = String(migrationToSection).trim();
+
+    // Validate trimmed values
+    if (!cleanToClass || !cleanToSection) {
+      toast.error("Class and section cannot be empty");
+      console.error("❌ Validation failed: empty values after trim", { cleanToClass, cleanToSection });
+      return;
+    }
+
+    // Prevent same assignment
+    if (teacher.class === cleanToClass && teacher.section === cleanToSection) {
+      toast.warning("Teacher is already assigned to this class/section");
+      return;
+    }
+
+    setMigratingTeacherId(selectedTeacherForMigration);
+
+    try {
+      const payload = {
+        fromClass: String(teacher.class || "").trim(),
+        fromSection: String(teacher.section || "").trim(),
+        toClass: cleanToClass,
+        toSection: cleanToSection,
+      };
+
+      console.log("📤 Sending teacher reassignment request:", {
+        teacherId: selectedTeacherForMigration,
+        teacherName: teacher.name,
+        payload
+      });
+
+      const res = await fetch(`${API_URL}/api/admin/teachers/${selectedTeacherForMigration}/reassign`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const responseData = await res.json();
+      console.log("📥 Server response:", { status: res.status, data: responseData });
+
+      if (res.ok) {
+        toast.success(`${teacher.name} migrated from ${teacher.class}-${teacher.section} to ${cleanToClass}-${cleanToSection}`);
+        
+        // Reset form
+        setSelectedTeacherForMigration(null);
+        setMigrationToClass("");
+        setMigrationToSection("");
+        
+        // Refresh teacher list
+        const refreshRes = await fetch(`${API_URL}/api/admin/users`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          setTeachers(Array.isArray(refreshData.teachers) ? refreshData.teachers : []);
+        }
+      } else {
+        console.error("❌ Server error response:", responseData);
+        toast.error(responseData?.error || "Failed to migrate teacher");
+      }
+    } catch (err) {
+      console.error("❌ Migration error:", err);
+      toast.error("Network error: Failed to migrate teacher");
+    } finally {
+      setMigratingTeacherId(null);
     }
   };
 
@@ -769,6 +865,7 @@ export default function AdminDashboard() {
     { id: "dashboard", label: "Dashboard" },
     { id: "students", label: "Students" },
     { id: "teachers", label: "Teachers" },
+    { id: "migrate-teacher", label: "Migrate Teacher" },
     { id: "add-user", label: "Add User" },
     { id: "bulk-upload", label: "Bulk Upload" },
     { id: "subjects", label: "Subjects" },
@@ -1102,6 +1199,109 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ===== MIGRATE TEACHER ===== */}
+          {activeTab === "migrate-teacher" && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-bold text-slate-900">Migrate/Reassign Teacher</h2>
+              
+              <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm p-6">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Select Teacher to Migrate</h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Choose Teacher</label>
+                    <select
+                      value={selectedTeacherForMigration || ""}
+                      onChange={(e) => setSelectedTeacherForMigration(e.target.value)}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Select a Teacher --</option>
+                      {teachers.map((t) => (
+                        <option key={t._id} value={t._id}>
+                          {t.name} (Class: {t.class || "N/A"}, Section: {t.section || "N/A"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedTeacherForMigration && teachers.find(t => t._id === selectedTeacherForMigration) && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="text-sm text-slate-700">
+                        <p className="font-semibold mb-2">Current Assignment:</p>
+                        <p>
+                          <span className="font-semibold">Name:</span> {teachers.find(t => t._id === selectedTeacherForMigration)?.name}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Current Class:</span> {teachers.find(t => t._id === selectedTeacherForMigration)?.class || "N/A"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Current Section:</span> {teachers.find(t => t._id === selectedTeacherForMigration)?.section || "N/A"}
+                        </p>
+                        {teachers.find(t => t._id === selectedTeacherForMigration)?.subject && (
+                          <p>
+                            <span className="font-semibold">Subject:</span> {teachers.find(t => t._id === selectedTeacherForMigration)?.subject}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Target Class *</label>
+                      <select
+                        value={migrationToClass}
+                        onChange={(e) => {
+                          setMigrationToClass(e.target.value);
+                          setMigrationToSection(""); // Reset section when class changes
+                        }}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Select Class --</option>
+                        {getUniqueTeacherClasses().map((cls) => (
+                          <option key={cls} value={cls}>
+                            Class {cls}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Target Section *</label>
+                      <select
+                        value={migrationToSection}
+                        onChange={(e) => setMigrationToSection(e.target.value)}
+                        disabled={!migrationToClass}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="">-- Select Section --</option>
+                        {getUniqueTeacherSections(migrationToClass).map((sec) => (
+                          <option key={sec} value={sec}>
+                            Section {sec}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleTeacherMigration}
+                    disabled={!selectedTeacherForMigration || !migrationToClass || !migrationToSection || migratingTeacherId}
+                    className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-bold rounded-lg transition"
+                  >
+                    {migratingTeacherId ? "Migrating..." : "Migrate Teacher"}
+                  </button>
+                </div>
+              </div>
+
+              {teachers.length === 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-700">
+                  No teachers found in the system.
                 </div>
               )}
             </div>

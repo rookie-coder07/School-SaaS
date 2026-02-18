@@ -16,6 +16,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 
 import TeacherLogin from "./pages/TeacherLogin";
 import TeacherDashboard from "./pages/TeacherDashboard";
+import StudentAnalyticsDashboard from "./pages/StudentAnalyticsDashboard";
 
 import DeveloperLogin from "./pages/DeveloperLogin";
 import DeveloperDashboard from "./pages/DeveloperDashboard";
@@ -24,7 +25,7 @@ import DevSchoolDetails from "./pages/DevSchoolDetails";
 
 export default function App() {
   console.log("✅ App component mounted - Routes configured");
-  console.log("✅ Available routes: / /admin/login /admin/dashboard /student/login /student/dashboard /teacher/login /teacher/dashboard /dev/login /dev /dev/schools /dev/schools/:schoolId");
+  console.log("✅ Available routes: / /admin/login /admin/dashboard /student/login /student/dashboard /teacher/login /teacher/dashboard /teacher/student-analytics/:studentId /dev/login /dev /dev/schools /dev/schools/:schoolId");
   
   return (
     <>
@@ -66,6 +67,14 @@ export default function App() {
           element={
             <ProtectedRoute role="teacher">
               <TeacherDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher/student-analytics/:studentId"
+          element={
+            <ProtectedRoute role="teacher">
+              <StudentAnalyticsDashboard />
             </ProtectedRoute>
           }
         />
