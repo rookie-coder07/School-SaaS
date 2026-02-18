@@ -5771,7 +5771,7 @@ app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), req
     console.log('📊 ConcurrentUsers: Found', logoutTimes.length, 'logout events');
 
     // Find active users (logged in after latest logout)
-    const activeUsers = recentLogins
+    const activeUsersWithoutNames = recentLogins
       .filter(login => {
         const logout = logoutTimes.find(l => l._id === login._id);
         // User is active if they have no logout OR logout before login
@@ -5784,7 +5784,52 @@ app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), req
         loginTime: user.latestLogin,
       }));
 
-    console.log('✅ ConcurrentUsers: Returning', activeUsers.length, 'active users');
+    // Fetch user names from students/teachers collections
+    const activeUsers = await Promise.all(
+      activeUsersWithoutNames.map(async (user) => {
+        let userName = "Unknown User";
+        
+        try {
+          // Try to find in students collection (by userId field)
+          const student = await db.collection("students").findOne({
+            userId: user.userId,
+            schoolId: schoolId,
+          });
+          
+          if (student?.name) {
+            userName = student.name;
+          } else {
+            // Try to find in teachers collection (by userId field)
+            const teacher = await db.collection("teachers").findOne({
+              userId: user.userId,
+              schoolId: schoolId,
+            });
+            
+            if (teacher?.name) {
+              userName = teacher.name;
+            } else {
+              // Try users collection as fallback
+              const userDoc = await db.collection("users").findOne({
+                _id: user.userId,
+              });
+              
+              if (userDoc?.name) {
+                userName = userDoc.name;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`⚠️ Failed to fetch name for userId ${user.userId}:`, err.message);
+        }
+        
+        return {
+          ...user,
+          userName: userName,
+        };
+      })
+    );
+
+    console.log('✅ ConcurrentUsers: Returning', activeUsers.length, 'active users with names');
     res.json(activeUsers);
   } catch (error) {
     console.error("❌ Error fetching concurrent users:", error);
@@ -5843,8 +5888,53 @@ app.get("/api/tracking/daily-stats", requireAuth, requireRole("ADMIN"), requireT
       }
     });
 
-    const sessions = Object.values(userSessions).filter(s => s.loginTime);
-    console.log('✅ DailyStats: Processed', sessions.length, 'user sessions');
+    const sessionsWithoutNames = Object.values(userSessions).filter(s => s.loginTime);
+    console.log('✅ DailyStats: Processed', sessionsWithoutNames.length, 'user sessions');
+
+    // Fetch user names for each session
+    const sessions = await Promise.all(
+      sessionsWithoutNames.map(async (session) => {
+        let userName = "Unknown User";
+        
+        try {
+          // Try to find in students collection (by userId field)
+          const student = await db.collection("students").findOne({
+            userId: session.userId,
+            schoolId: schoolId,
+          });
+          
+          if (student?.name) {
+            userName = student.name;
+          } else {
+            // Try to find in teachers collection (by userId field)
+            const teacher = await db.collection("teachers").findOne({
+              userId: session.userId,
+              schoolId: schoolId,
+            });
+            
+            if (teacher?.name) {
+              userName = teacher.name;
+            } else {
+              // Try users collection as fallback
+              const userDoc = await db.collection("users").findOne({
+                _id: session.userId,
+              });
+              
+              if (userDoc?.name) {
+                userName = userDoc.name;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`⚠️ Failed to fetch name for userId ${session.userId}:`, err.message);
+        }
+        
+        return {
+          ...session,
+          userName: userName,
+        };
+      })
+    );
 
     res.json({
       date,

@@ -12,51 +12,6 @@ export default function UserTrackingDashboard({ token, schoolId }) {
     new Date().toISOString().split("T")[0]
   );
   const [filterRole, setFilterRole] = useState("all");
-  const [userNameMap, setUserNameMap] = useState({}); // Map userId to name
-
-  // Fetch user names (students and teachers)
-  useEffect(() => {
-    fetchUserNames();
-  }, [token]);
-
-  const fetchUserNames = async () => {
-    try {
-      const [studentsRes, teachersRes] = await Promise.all([
-        fetch(`${API_URL}/api/teacher/students`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).catch(() => null),
-        fetch(`${API_URL}/api/admin/teachers`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).catch(() => null),
-      ]);
-
-      const nameMap = {};
-
-      if (studentsRes?.ok) {
-        const students = await studentsRes.json();
-        students.forEach(student => {
-          if (student._id && student.name) {
-            nameMap[String(student._id)] = student.name;
-          }
-        });
-      }
-
-      if (teachersRes?.ok) {
-        const teachers = await teachersRes.json();
-        teachers.forEach(teacher => {
-          if (teacher._id && teacher.name) {
-            nameMap[String(teacher._id)] = teacher.name;
-          }
-        });
-      }
-
-      console.log('📇 UserTrackingDashboard: Built name map -', Object.keys(nameMap).length, 'users');
-      setUserNameMap(nameMap);
-    } catch (err) {
-      console.warn('⚠️ Failed to fetch user names:', err.message);
-      // Continue without names - don't break functionality
-    }
-  };
 
   // Fetch concurrent users and daily stats
   useEffect(() => {
@@ -187,7 +142,7 @@ export default function UserTrackingDashboard({ token, schoolId }) {
                   const duration = Math.floor(
                     (Date.now() - new Date(user.loginTime).getTime()) / 1000
                   );
-                  const userName = userNameMap[user.userId] || "Unknown User";
+                  const userName = user.userName || "Unknown User";
                   return (
                     <tr
                       key={idx}
@@ -321,7 +276,7 @@ export default function UserTrackingDashboard({ token, schoolId }) {
               </thead>
               <tbody>
                 {dailyStats.map((session, idx) => {
-                  const userName = userNameMap[session.userId] || "Unknown User";
+                  const userName = session.userName || "Unknown User";
                   return (
                     <tr
                       key={idx}

@@ -6,6 +6,7 @@ import VoiceAnnouncements from "../components/VoiceAnnouncements";
 import NotificationBell from "../components/NotificationBell";
 import NotificationDropdown from "../components/NotificationDropdown";
 import UserTrackingDashboard from "../components/UserTrackingDashboard";
+import AdminAnalyticsDashboard from "../components/AdminAnalyticsDashboard";
 import { useToast } from "../components/ToastProvider";
 import { createNotification } from "../utils/notificationHelper";
 import { sessionTracker } from "../utils/sessionTracker";
@@ -870,6 +871,7 @@ export default function AdminDashboard() {
     { id: "dashboard", label: "Dashboard" },
     { id: "students", label: "Students" },
     { id: "teachers", label: "Teachers" },
+    { id: "analytics", label: "Analytics" },
     { id: "migrate-teacher", label: "Migrate Teacher" },
     { id: "add-user", label: "Add User" },
     { id: "bulk-upload", label: "Bulk Upload" },
@@ -1839,6 +1841,16 @@ export default function AdminDashboard() {
           {/* ===== USER TRACKING ===== */}
           {activeTab === "tracking" && (
             <UserTrackingDashboard token={token} schoolId={schoolId} />
+          )}
+
+          {/* ===== ANALYTICS ===== */}
+          {activeTab === "analytics" && (
+            <AdminAnalyticsDashboard 
+              token={token} 
+              schoolId={schoolId}
+              teachers={teachers}
+              students={students}
+            />
           )}
         </div>
       </div>
