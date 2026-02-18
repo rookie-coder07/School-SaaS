@@ -11,6 +11,7 @@ import NotificationDropdown from "../components/NotificationDropdown";
 import TimetableGrid from "../components/TimetableGrid";
 import StudentAnalyticsContent from "../components/StudentAnalyticsContent";
 import { useToast } from "../components/ToastProvider";
+import { sessionTracker } from "../utils/sessionTracker";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -272,6 +273,9 @@ export default function StudentDashboard() {
 
   const handleLogout = async () => {
     try {
+      // End session tracking
+      await sessionTracker.endSession();
+
       const token = localStorage.getItem("studentToken");
       if (token) {
         await fetch(`${API_URL}/api/auth/logout`, {

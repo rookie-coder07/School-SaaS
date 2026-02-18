@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { sessionTracker } from "../utils/sessionTracker";
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
@@ -42,16 +43,33 @@ export default function AdminLogin() {
       }
       
       // ✅ Extract and save schoolId from token
+      let adminUserId = null;
+      let schoolId = null;
       try {
         const tokenParts = data.token.split('.');
         if (tokenParts.length === 3) {
           const payload = JSON.parse(atob(tokenParts[1]));
+          console.log('🔐 AdminLogin: Token payload:', payload);
+          
           if (payload.schoolId) {
             localStorage.setItem("adminSchoolId", payload.schoolId);
+            schoolId = payload.schoolId;
+          }
+          if (payload.userId) {
+            adminUserId = payload.userId;
           }
         }
       } catch (err) {
-        console.error("Failed to extract schoolId from token");
+        console.error("❌ Failed to extract token data:", err);
+      }
+
+      console.log('🟢 AdminLogin: Starting session with -', { adminUserId, role: 'ADMIN', schoolId });
+      
+      // ✅ Start session tracking
+      if (adminUserId && schoolId) {
+        sessionTracker.startSession(adminUserId, "ADMIN", schoolId);
+      } else {
+        console.warn('⚠️ AdminLogin: Missing data for session tracking -', { adminUserId, schoolId });
       }
 
       // ✅ Redirect (DO NOT CHANGE)

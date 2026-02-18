@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { sessionTracker } from "../utils/sessionTracker";
 
 export default function TeacherLogin() {
   const [email, setEmail] = useState("");
@@ -41,16 +42,33 @@ export default function TeacherLogin() {
       }
       
       // ✅ Extract and save schoolId from token
+      let teacherUserId = null;
+      let schoolId = null;
       try {
         const tokenParts = data.token.split('.');
         if (tokenParts.length === 3) {
           const payload = JSON.parse(atob(tokenParts[1]));
+          console.log('🔐 TeacherLogin: Token payload:', payload);
+          
           if (payload.schoolId) {
             localStorage.setItem("teacherSchoolId", payload.schoolId);
+            schoolId = payload.schoolId;
+          }
+          if (payload.userId) {
+            teacherUserId = payload.userId;
           }
         }
       } catch (err) {
-        console.error("Failed to extract schoolId from token");
+        console.error("❌ Failed to extract token data:", err);
+      }
+
+      console.log('🟢 TeacherLogin: Starting session with -', { teacherUserId, role: 'TEACHER', schoolId });
+      
+      // ✅ Start session tracking
+      if (teacherUserId && schoolId) {
+        sessionTracker.startSession(teacherUserId, "TEACHER", schoolId);
+      } else {
+        console.warn('⚠️ TeacherLogin: Missing data for session tracking -', { teacherUserId, schoolId });
       }
 
       navigate("/teacher/dashboard");

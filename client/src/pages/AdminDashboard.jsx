@@ -5,8 +5,10 @@ import VoiceRecorder from "../components/VoiceRecorder";
 import VoiceAnnouncements from "../components/VoiceAnnouncements";
 import NotificationBell from "../components/NotificationBell";
 import NotificationDropdown from "../components/NotificationDropdown";
+import UserTrackingDashboard from "../components/UserTrackingDashboard";
 import { useToast } from "../components/ToastProvider";
 import { createNotification } from "../utils/notificationHelper";
+import { sessionTracker } from "../utils/sessionTracker";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -98,6 +100,9 @@ export default function AdminDashboard() {
   // Logout
   const handleLogout = async () => {
     try {
+      // End session tracking
+      await sessionTracker.endSession();
+
       const token = localStorage.getItem("adminToken");
       if (token) {
         await fetch(`${API_URL}/api/auth/logout`, {
@@ -870,6 +875,7 @@ export default function AdminDashboard() {
     { id: "bulk-upload", label: "Bulk Upload" },
     { id: "subjects", label: "Subjects" },
     { id: "voice-broadcast", label: "Voice Broadcast" },
+    { id: "tracking", label: "User Tracking" },
   ];
 
   return (
@@ -1828,6 +1834,11 @@ export default function AdminDashboard() {
                 emptyMessage="No announcements sent yet"
               />
             </div>
+          )}
+
+          {/* ===== USER TRACKING ===== */}
+          {activeTab === "tracking" && (
+            <UserTrackingDashboard token={token} schoolId={schoolId} />
           )}
         </div>
       </div>

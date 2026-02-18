@@ -13,6 +13,7 @@ import MarksViewer from "../components/MarksViewer";
 import TimetableGrid from "../components/TimetableGrid";
 import { useToast } from "../components/ToastProvider";
 import { createNotification } from "../utils/notificationHelper";
+import { sessionTracker } from "../utils/sessionTracker";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -113,6 +114,9 @@ export default function TeacherDashboard() {
 
   const handleLogout = async () => {
     try {
+      // End session tracking
+      await sessionTracker.endSession();
+
       const token = localStorage.getItem("teacherToken");
       if (token) {
         await fetch(`${API_URL}/api/auth/logout`, {

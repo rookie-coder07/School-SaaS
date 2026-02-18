@@ -5672,6 +5672,192 @@ app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
 });
 
 /* ================================
+   USER SESSION TRACKING
+   ================================= */
+
+// Log session events (login/logout)
+app.post("/api/tracking/session-log", requireAuth, requireTenantId, async (req, res) => {
+  try {
+    const { userId, role, schoolId, eventType, startTime, duration, date } = req.body;
+
+    if (!userId || !role || !schoolId || !eventType) {
+      console.warn('⚠️ SessionLog: Missing fields -', { userId, role, schoolId, eventType });
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Store schoolId as string for consistency with token
+    const sessionLog = {
+      userId: String(userId), // Ensure it's a string
+      role,
+      schoolId: String(schoolId), // Store as string to match token
+      eventType, // 'login' or 'logout'
+      startTime: new Date(startTime),
+      duration: eventType === 'logout' ? duration : null, // in seconds
+      logoutTime: eventType === 'logout' ? new Date() : null,
+      recordedAt: new Date(date),
+      date: new Date(date).toISOString().split('T')[0],
+    };
+
+    console.log('📝 SessionLog: Storing event -', { 
+      userId: sessionLog.userId, 
+      role: sessionLog.role, 
+      schoolId: sessionLog.schoolId, 
+      eventType: sessionLog.eventType,
+      timestamp: new Date().toISOString()
+    });
+
+    const result = await db.collection("sessionLogs").insertOne(sessionLog);
+    console.log('✅ SessionLog: Event stored with ID:', result.insertedId);
+
+    res.json({ success: true, message: "Session logged" });
+  } catch (error) {
+    console.error("❌ Error logging session:", error);
+    res.status(500).json({ error: "Failed to log session" });
+  }
+});
+
+// Get concurrent users (currently logged-in users)
+app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = String(req.user?.schoolId); // Get from token via requireAuth middleware
+
+    console.log('🔍 ConcurrentUsers: Querying for schoolId:', schoolId);
+
+    // Get all login events without matching logout events in the last 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const recentLogins = await db.collection("sessionLogs").aggregate([
+      {
+        $match: {
+          schoolId: schoolId,
+          eventType: 'login',
+          recordedAt: { $gte: twentyFourHoursAgo },
+        },
+      },
+      {
+        $sort: { recordedAt: -1 },
+      },
+      {
+        $group: {
+          _id: '$userId',
+          latestLogin: { $first: '$recordedAt' },
+          role: { $first: '$role' },
+        },
+      },
+    ]).toArray();
+
+    console.log('📊 ConcurrentUsers: Found', recentLogins.length, 'login events');
+
+    // Get logout times for these users
+    const logoutTimes = await db.collection("sessionLogs").aggregate([
+      {
+        $match: {
+          schoolId: schoolId,
+          eventType: 'logout',
+          recordedAt: { $gte: twentyFourHoursAgo },
+        },
+      },
+      {
+        $sort: { recordedAt: -1 },
+      },
+      {
+        $group: {
+          _id: '$userId',
+          latestLogout: { $first: '$recordedAt' },
+        },
+      },
+    ]).toArray();
+
+    console.log('📊 ConcurrentUsers: Found', logoutTimes.length, 'logout events');
+
+    // Find active users (logged in after latest logout)
+    const activeUsers = recentLogins
+      .filter(login => {
+        const logout = logoutTimes.find(l => l._id === login._id);
+        // User is active if they have no logout OR logout before login
+        const isActive = !logout || new Date(login.latestLogin) > new Date(logout.latestLogout);
+        return isActive;
+      })
+      .map(user => ({
+        userId: user._id,
+        role: user.role,
+        loginTime: user.latestLogin,
+      }));
+
+    console.log('✅ ConcurrentUsers: Returning', activeUsers.length, 'active users');
+    res.json(activeUsers);
+  } catch (error) {
+    console.error("❌ Error fetching concurrent users:", error);
+    res.status(500).json({ error: "Failed to fetch concurrent users" });
+  }
+});
+
+// Get daily statistics
+app.get("/api/tracking/daily-stats", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const { date, role } = req.query;
+    const schoolId = String(req.user?.schoolId); // Get from token via requireAuth middleware
+
+    if (!date) {
+      return res.status(400).json({ error: "Date parameter required" });
+    }
+
+    console.log('🔍 DailyStats: Querying for schoolId:', schoolId, 'date:', date, 'role:', role);
+
+    // Parse the date to create range for the entire day
+    const startOfDay = new Date(`${date}T00:00:00Z`);
+    const endOfDay = new Date(`${date}T23:59:59.999Z`);
+
+    const matchStage = {
+      schoolId: schoolId,
+      recordedAt: { $gte: startOfDay, $lte: endOfDay },
+    };
+
+    if (role && role !== 'all') {
+      matchStage.role = role;
+    }
+
+    // Get all session logs for the day
+    const sessionLogs = await db.collection("sessionLogs").find(matchStage).toArray();
+    console.log('📊 DailyStats: Found', sessionLogs.length, 'session log entries');
+
+    // Group by userId to pair logins with logouts
+    const userSessions = {};
+    sessionLogs.forEach(log => {
+      if (!userSessions[log.userId]) {
+        userSessions[log.userId] = {
+          userId: log.userId,
+          role: log.role,
+          loginTime: null,
+          logoutTime: null,
+          duration: 0,
+          events: [],
+        };
+      }
+      userSessions[log.userId].events.push(log);
+      if (log.eventType === 'login') {
+        userSessions[log.userId].loginTime = log.recordedAt;
+      } else if (log.eventType === 'logout') {
+        userSessions[log.userId].logoutTime = log.recordedAt;
+        userSessions[log.userId].duration = log.duration || 0;
+      }
+    });
+
+    const sessions = Object.values(userSessions).filter(s => s.loginTime);
+    console.log('✅ DailyStats: Processed', sessions.length, 'user sessions');
+
+    res.json({
+      date,
+      sessions: sessions,
+      totalSessions: sessions.length,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching daily stats:", error);
+    res.status(500).json({ error: "Failed to fetch daily statistics" });
+  }
+});
+
+/* ================================
    SPA FALLBACK - Serve index.html for client-side routing
    ================================= */
 // All requests that don't match static files or API routes
