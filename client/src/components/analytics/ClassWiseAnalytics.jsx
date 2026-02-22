@@ -1,84 +1,120 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { motion } from 'framer-motion';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
 import './glassmorphism.css';
 
 /**
- * ClassWiseAnalytics Component
+ * ClassWiseAnalytics Component - OPTIMIZED
  * 
  * Displays class-level analytics with:
  * - Performance metrics per class
- * - Attendance vs Grades heatmap
- * - Risk identification
- * - Class trends and patterns
+ * - At-risk students list
+ * - Attendance vs Grades trend
+ * - Performance insights
+ * 
+ * Optimizations:
+ * - useMemo for expensive calculations
+ * - Memoized components
+ * - Single efficient chart
  */
-export default function ClassWiseAnalytics({ data = [] }) {
-  const [selectedClass, setSelectedClass] = useState(null);
+const ClassWiseAnalytics = memo(function ClassWiseAnalytics({ data = [] }) {
   const [sortBy, setSortBy] = useState('avgGrade');
+  const [expandedClass, setExpandedClass] = useState(null);
 
-  // Sort classes
-  const sortedClasses = [...data].sort((a, b) => {
-    if (sortBy === 'avgGrade') return parseFloat(b.avgGrade) - parseFloat(a.avgGrade);
-    if (sortBy === 'avgAttendance') return b.avgAttendance - a.avgAttendance;
-    if (sortBy === 'riskStudents') return b.riskStudents - a.riskStudents;
-    return 0;
-  });
+  // Memoized sorted classes
+  const sortedClasses = useMemo(() => {
+    return [...data].sort((a, b) => {
+      if (sortBy === 'avgGrade') return parseFloat(b.avgGrade) - parseFloat(a.avgGrade);
+      if (sortBy === 'avgAttendance') return b.avgAttendance - a.avgAttendance;
+      if (sortBy === 'riskStudents') return b.riskStudents - a.riskStudents;
+      return 0;
+    });
+  }, [data, sortBy]);
 
-  // Prepare chart data
-  const classChartData = sortedClasses.map(cls => ({
-    name: `${cls.class}-${cls.section}`,
-    attendance: Math.round(cls.avgAttendance),
-    grade: Math.round(parseFloat(cls.avgGrade)),
-    students: cls.students.length,
-  }));
+  // Memoized chart data
+  const classChartData = useMemo(() => {
+    return sortedClasses.map(cls => ({
+      name: `${cls.class}-${cls.section}`,
+      attendance: Math.round(cls.avgAttendance),
+      grade: Math.round(parseFloat(cls.avgGrade)),
+    }));
+  }, [sortedClasses]);
+
+  // Memoized at-risk students list
+  const atRiskStudents = useMemo(() => {
+    const allAtRisk = [];
+    sortedClasses.forEach(cls => {
+      if (cls.students && cls.students.length > 0) {
+        const atRisk = cls.students.filter(s => 
+          (s.attendance || 0) < 70 || (s.grade || 0) < 60
+        ).slice(0, 5); // Limit to 5 per class
+        atRisk.forEach(s => allAtRisk.push({ ...s, className: `${cls.class}-${cls.section}` }));
+      }
+    });
+    return allAtRisk.sort((a, b) => ((a.attendance || 0) - (b.attendance || 0))).slice(0, 10); // Top 10
+  }, [sortedClasses]);
 
   const getRiskColor = (riskCount, studentCount) => {
     const riskPercentage = (riskCount / studentCount) * 100;
-    if (riskPercentage > 40) return 'bg-red-500/20 border-red-500/50';
-    if (riskPercentage > 20) return 'bg-yellow-500/20 border-yellow-500/50';
-    return 'bg-green-500/20 border-green-500/50';
+    if (riskPercentage > 40) return 'bg-red-50 border-red-200';
+    if (riskPercentage > 20) return 'bg-yellow-50 border-yellow-200';
+    return 'bg-green-50 border-green-200';
   };
 
   const getPerformanceGrade = (attendance, grade) => {
     const combined = (attendance * 0.3 + grade * 0.7) / 100;
-    if (combined >= 0.8) return { letter: 'A', color: 'text-green-400' };
-    if (combined >= 0.7) return { letter: 'B', color: 'text-blue-400' };
-    if (combined >= 0.6) return { letter: 'C', color: 'text-yellow-400' };
-    return { letter: 'D', color: 'text-red-400' };
+    if (combined >= 0.8) return { letter: 'A', color: 'text-green-600', bg: 'bg-green-100' };
+    if (combined >= 0.7) return { letter: 'B', color: 'text-blue-600', bg: 'bg-blue-100' };
+    if (combined >= 0.6) return { letter: 'C', color: 'text-orange-600', bg: 'bg-orange-100' };
+    return { letter: 'D', color: 'text-red-600', bg: 'bg-red-100' };
   };
 
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1, delayChildren: 0.2 },
-    },
-  };
-
-  const item = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
-  };
+  // Memoized metrics
+  const metrics = useMemo(() => {
+    if (data.length === 0) return [];
+    return [
+      {
+        icon: '🎓',
+        label: 'Avg Grade',
+        value: (data.reduce((sum, c) => sum + parseFloat(c.avgGrade), 0) / data.length).toFixed(1),
+      },
+      {
+        icon: '📍',
+        label: 'Avg Attendance',
+        value: Math.round(data.reduce((sum, c) => sum + c.avgAttendance, 0) / data.length) + '%',
+      },
+      {
+        icon: '⚠️',
+        label: 'At-Risk Students',
+        value: data.reduce((sum, c) => sum + c.riskStudents, 0),
+      },
+      {
+        icon: '👥',
+        label: 'Total Students',
+        value: data.reduce((sum, c) => sum + c.students.length, 0),
+      },
+    ];
+  }, [data]);
 
   return (
-    <div className="space-y-8">
-      {/* Header with Sort Controls */}
+    <div className="space-y-6">
+      {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -15 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex justify-between items-center flex-wrap gap-4"
       >
         <div>
-          <h2 className="text-2xl font-bold text-white mb-1">📊 Class Performance Overview</h2>
-          <p className="text-slate-400">Analyzing {data.length} classes across your school</p>
+          <h2 className="text-2xl font-bold text-slate-800 mb-1">📊 Class Performance</h2>
+          <p className="text-slate-600">Overview of {data.length} classes</p>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex gap-2 flex-wrap">
           {[
-            { value: 'avgGrade', label: '📈 By Grade' },
-            { value: 'avgAttendance', label: '📍 By Attendance' },
-            { value: 'riskStudents', label: '⚠️ By Risk' },
+            { value: 'avgGrade', label: '📈 Grade' },
+            { value: 'avgAttendance', label: '📍 Attendance' },
+            { value: 'riskStudents', label: '⚠️ Risk' },
           ].map((opt) => (
             <motion.button
               key={opt.value}
@@ -87,8 +123,8 @@ export default function ClassWiseAnalytics({ data = [] }) {
               whileTap={{ scale: 0.95 }}
               className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
                 sortBy === opt.value
-                  ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/50'
-                  : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
               }`}
             >
               {opt.label}
@@ -99,117 +135,99 @@ export default function ClassWiseAnalytics({ data = [] }) {
 
       {/* Key Metrics */}
       <motion.div
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="analytics-grid"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
       >
-        {[
-          {
-            icon: '🎓',
-            label: 'Avg Grade',
-            value: (
-              data.reduce((sum, c) => sum + parseFloat(c.avgGrade), 0) / data.length
-            ).toFixed(1),
-            change: '+2.5%',
-          },
-          {
-            icon: '📍',
-            label: 'Avg Attendance',
-            value: Math.round(data.reduce((sum, c) => sum + c.avgAttendance, 0) / data.length) + '%',
-            change: '+1.2%',
-          },
-          {
-            icon: '⚠️',
-            label: 'At-Risk Students',
-            value: data.reduce((sum, c) => sum + c.riskStudents, 0),
-            change: '-5%',
-          },
-          {
-            icon: '👥',
-            label: 'Total Students',
-            value: data.reduce((sum, c) => sum + c.students.length, 0),
-            change: 'stable',
-          },
-        ].map((metric, idx) => (
+        {metrics.map((metric, idx) => (
           <motion.div
             key={idx}
-            variants={item}
-            className="metric-card with-glow-cyan"
+            whileHover={{ y: -5 }}
+            className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200 shadow-sm"
           >
-            <span className="metric-icon">{metric.icon}</span>
-            <span className="metric-label">{metric.label}</span>
-            <span className="metric-value">{metric.value}</span>
-            <span className={`metric-change ${metric.change.includes('-') ? 'negative' : 'positive'}`}>
-              {metric.change.includes('-') ? '📉' : '📈'} {metric.change}
-            </span>
+            <span className="text-3xl block mb-2">{metric.icon}</span>
+            <span className="text-xs text-slate-600 font-semibold block">{metric.label}</span>
+            <span className="text-2xl font-bold text-slate-800">{metric.value}</span>
           </motion.div>
         ))}
       </motion.div>
 
-      {/* Charts Section */}
+      {/* Attendance vs Grade Chart */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="analytics-row"
+        transition={{ delay: 0.2 }}
+        className="p-6 rounded-2xl bg-white border-2 border-slate-200 shadow-sm"
       >
-        {/* Grade vs Attendance Chart */}
-        <div className="chart-container">
-          <div className="chart-title">
-            <span className="chart-icon">📊</span> Grade vs Attendance by Class
-          </div>
-          <ResponsiveContainer width="100%" height="calc(100% - 50px)">
-            <LineChart data={classChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
-              <XAxis dataKey="name" stroke="rgba(148, 163, 184, 0.5)" />
-              <YAxis stroke="rgba(148, 163, 184, 0.5)" />
-              <Tooltip
-                contentStyle={{
-                  background: 'rgba(15, 23, 42, 0.9)',
-                  border: '1px solid rgba(6, 182, 212, 0.3)',
-                  borderRadius: '8px',
-                }}
-                cursor={{ stroke: 'rgba(6, 182, 212, 0.3)' }}
-              />
-              <Legend />
-              <Line type="monotone" dataKey="grade" stroke="#06b6d4" strokeWidth={3} name="Avg Grade" />
-              <Line type="monotone" dataKey="attendance" stroke="#ec4899" strokeWidth={3} name="Attendance %" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Class Size Distribution */}
-        <div className="chart-container">
-          <div className="chart-title">
-            <span className="chart-icon">👥</span> Class Size Distribution
-          </div>
-          <ResponsiveContainer width="100%" height="calc(100% - 50px)">
-            <BarChart data={classChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
-              <XAxis dataKey="name" stroke="rgba(148, 163, 184, 0.5)" />
-              <YAxis stroke="rgba(148, 163, 184, 0.5)" />
-              <Tooltip
-                contentStyle={{
-                  background: 'rgba(15, 23, 42, 0.9)',
-                  border: '1px solid rgba(6, 182, 212, 0.3)',
-                  borderRadius: '8px',
-                }}
-              />
-              <Bar dataKey="students" fill="#06b6d4" radius={[8, 8, 0, 0]} name="Students" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <h3 className="text-lg font-bold text-slate-800 mb-4">📈 Performance Trend</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={classChartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
+            <XAxis dataKey="name" stroke="#64748b" />
+            <YAxis stroke="#64748b" />
+            <Tooltip
+              contentStyle={{
+                background: 'rgba(255, 255, 255, 0.95)',
+                border: '2px solid #3b82f6',
+                borderRadius: '12px',
+                color: '#1e293b',
+              }}
+              cursor={{ stroke: '#3b82f6', strokeWidth: 2 }}
+            />
+            <Legend />
+            <Line type="monotone" dataKey="grade" stroke="#3b82f6" strokeWidth={3} name="Avg Grade" dot={{ fill: '#3b82f6', r: 5 }} />
+            <Line type="monotone" dataKey="attendance" stroke="#10b981" strokeWidth={3} name="Attendance %" dot={{ fill: '#10b981', r: 5 }} />
+          </LineChart>
+        </ResponsiveContainer>
       </motion.div>
 
-      {/* Class Cards */}
+      {/* At-Risk Students Section */}
+      {atRiskStudents.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="p-6 rounded-2xl bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 shadow-sm"
+        >
+          <h3 className="text-lg font-bold text-red-700 mb-4 flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" /> Students Needing Attention ({atRiskStudents.length})
+          </h3>
+          <div className="space-y-3">
+            {atRiskStudents.map((student, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 + idx * 0.05 }}
+                className="flex items-center justify-between p-3 bg-white rounded-lg border border-red-200"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-800 truncate">{student.name || `Student #${idx + 1}`}</p>
+                  <p className="text-sm text-slate-600">Class: {student.className}</p>
+                </div>
+                <div className="flex gap-4 text-sm font-semibold">
+                  <span className={student.attendance < 70 ? 'text-red-600' : 'text-slate-600'}>
+                    📍 {(student.attendance || 0).toFixed(0)}%
+                  </span>
+                  <span className={student.grade < 60 ? 'text-red-600' : 'text-slate-600'}>
+                    🎓 {(student.grade || 0).toFixed(0)}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Class Details */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="space-y-4"
+        className="space-y-3"
       >
-        <h3 className="text-lg font-bold text-white">🎓 Class Details</h3>
+        <h3 className="text-lg font-bold text-slate-800">🎓 Classes Overview</h3>
         
         {sortedClasses.map((classData, idx) => {
           const perfGrade = getPerformanceGrade(classData.avgAttendance, parseFloat(classData.avgGrade));
@@ -218,72 +236,50 @@ export default function ClassWiseAnalytics({ data = [] }) {
           return (
             <motion.div
               key={idx}
-              initial={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: -15 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.4 + idx * 0.05 }}
-              onClick={() => setSelectedClass(selectedClass === idx ? null : idx)}
-              className={`glassmorphic-card cursor-pointer hover:elevated transition-all ${riskColor}`}
+              onClick={() => setExpandedClass(expandedClass === idx ? null : idx)}
+              className={`p-4 rounded-xl cursor-pointer border-2 transition-all ${riskColor}`}
+              whileHover={{ y: -2 }}
             >
-              <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-3">
-                    <h4 className="text-lg font-bold text-white">
-                      Class {classData.class} - {classData.section}
-                    </h4>
-                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${perfGrade.color}`}>
-                      Grade: {perfGrade.letter}
+                  <div className="flex items-center gap-2 mb-2">
+                    <h4 className="text-base font-bold text-slate-800">Class {classData.class}-{classData.section}</h4>
+                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${perfGrade.color} ${perfGrade.bg}`}>
+                      {perfGrade.letter}
                     </span>
                   </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <div className="text-xs text-slate-400 uppercase font-semibold">Average Grade</div>
-                      <div className="text-xl font-bold text-cyan-400">{classData.avgGrade}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400 uppercase font-semibold">Attendance</div>
-                      <div className="text-xl font-bold text-magenta-400">{classData.avgAttendance.toFixed(1)}%</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400 uppercase font-semibold">Total Students</div>
-                      <div className="text-xl font-bold text-green-400">{classData.students.length}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400 uppercase font-semibold">At-Risk</div>
-                      <div className="text-xl font-bold text-red-400">{classData.riskStudents}</div>
-                    </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div><span className="text-slate-600">Grade:</span> <span className="font-bold text-blue-600">{classData.avgGrade}</span></div>
+                    <div><span className="text-slate-600">Attendance:</span> <span className="font-bold text-green-600">{classData.avgAttendance.toFixed(1)}%</span></div>
+                    <div><span className="text-slate-600">Students:</span> <span className="font-bold text-slate-800">{classData.students.length}</span></div>
+                    <div><span className="text-slate-600">At-Risk:</span> <span className="font-bold text-red-600">{classData.riskStudents}</span></div>
                   </div>
                 </div>
-
-                {/* Status Indicator */}
-                <div className="flex flex-col items-center gap-2">
-                  {classData.riskStudents === 0 ? (
-                    <CheckCircle className="w-8 h-8 text-green-400" />
-                  ) : classData.riskStudents > classData.students.length * 0.3 ? (
-                    <AlertCircle className="w-8 h-8 text-red-400" />
-                  ) : (
-                    <TrendingUp className="w-8 h-8 text-yellow-400" />
-                  )}
-                  <span className="text-xs text-slate-400">
-                    {((classData.riskStudents / classData.students.length) * 100).toFixed(0)}% risk
-                  </span>
-                </div>
+                {classData.riskStudents === 0 ? (
+                  <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
+                ) : classData.riskStudents > classData.students.length * 0.3 ? (
+                  <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
+                ) : (
+                  <TrendingUp className="w-6 h-6 text-orange-600 flex-shrink-0" />
+                )}
               </div>
 
-              {/* Insight Text */}
-              {selectedClass === idx && (
+              {expandedClass === idx && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="mt-4 pt-4 border-t border-slate-600"
+                  className="mt-3 pt-3 border-t border-slate-300"
                 >
-                  <p className="text-sm text-slate-300">
+                  <p className="text-sm text-slate-700">
                     {classData.avgGrade >= 70 && classData.avgAttendance >= 80
-                      ? '✨ Excellent performance! This class shows strong commitment with high grades and regular attendance.'
+                      ? '✨ Great job! Maintain this momentum.'
                       : classData.riskStudents > 0
-                      ? `⚠️ ${classData.riskStudents} student(s) need attention. Consider focused intervention programs.`
-                      : '📈 Good progress! Continue monitoring and provide support where needed.'}
+                      ? `⚠️ ${classData.riskStudents} student(s) need focus.`
+                      : '📈 Keep improving!'}
                   </p>
                 </motion.div>
               )}
@@ -293,4 +289,6 @@ export default function ClassWiseAnalytics({ data = [] }) {
       </motion.div>
     </div>
   );
-}
+});
+
+export default ClassWiseAnalytics;
