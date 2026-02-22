@@ -166,16 +166,29 @@ export default function teacherRoutes(db) {
      SUBMIT ATTENDANCE (FINALIZE)
      ================================= */
   router.post("/attendance/submit", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  const submitStartTime = Date.now();
+  const submissionId = `submit_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  
   try {
     const { date, className, section } = req.body;
 
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`🔒 [ATTENDANCE SUBMIT] Finalizing attendance`);
+    console.log(`🔒 Submission ID: ${submissionId}`);
+    console.log(`🔒 Teacher: ${req.user.email}`);
+    console.log(`🔒 Date: ${date}`);
+    console.log(`🔒 Class: ${className}${section}`);
+    console.log(`${'='.repeat(80)}\n`);
+
     if (!date || !className || !section) {
+      console.error(`❌ [ATTENDANCE SUBMIT] Missing required fields`);
       return res.status(400).json({ error: "Missing date/class/section" });
     }
 
     // ✅ Date validation: Only allow today or past dates
     const today = new Date().toISOString().slice(0, 10);
     if (date > today) {
+      console.error(`❌ [ATTENDANCE SUBMIT] Future date not allowed: ${date}`);
       return res.status(400).json({ error: "Cannot finalize future attendance" });
     }
 
@@ -188,7 +201,7 @@ export default function teacherRoutes(db) {
       submissionStatus: "DRAFT",
     };
 
-    console.log("🔒 [FINALIZE] SUBMIT FILTER:", filter);
+    console.log(`🔍 [ATTENDANCE SUBMIT] Query filter:`, filter);
 
     // ✅ First, check if all records are NOT already finalized
     const alreadyFinalized = await db.collection("attendance").findOne({
@@ -200,7 +213,7 @@ export default function teacherRoutes(db) {
     });
 
     if (alreadyFinalized) {
-      console.warn("⚠️ [FINALIZE] Attempt to finalize already-finalized attendance:", date);
+      console.warn(`⚠️  [ATTENDANCE SUBMIT] Already finalized - rejecting duplicate submission`);
       return res.status(403).json({
         error: "This attendance is already finalized and cannot be modified",
       });
@@ -215,14 +228,16 @@ export default function teacherRoutes(db) {
           isFinalized: true,
           finalizedAt: new Date(),
           submittedAt: new Date(),
+          submittedBy: req.user.email,
+          submissionId: submissionId,
         },
       }
     );
 
-    console.log("✅ [FINALIZE] SUBMIT RESULT - matched:", result.matchedCount, "modified:", result.modifiedCount);
+    console.log(`📋 [ATTENDANCE SUBMIT] Records matched: ${result.matchedCount}, modified: ${result.modifiedCount}`);
 
     if (result.matchedCount === 0) {
-      console.warn("⚠️ [FINALIZE] No draft attendance found for date:", date);
+      console.warn(`⚠️  [ATTENDANCE SUBMIT] No draft records found`);
       return res.status(400).json({
         error: "No draft attendance found. Please save first.",
       });
@@ -240,17 +255,55 @@ export default function teacherRoutes(db) {
 
     const allFinalized = verifyFinalized.every(r => r.isFinalized === true);
     if (!allFinalized) {
-      console.error("❌ [FINALIZE] VERIFICATION FAILED - not all records finalized!");
+      console.error(`❌ [ATTENDANCE SUBMIT] Verification FAILED - not all records finalized!`);
       return res.status(500).json({
         error: "Finalization verification failed. Please try again.",
       });
     }
 
-    console.log("🔒 [FINALIZE] SUCCESS - All", verifyFinalized.length, "records finalized for", date);
-    res.json({ success: true, recordsFinalized: verifyFinalized.length });
+    // Get attendance summary
+    const presentCount = verifyFinalized.filter(r => r.status === "PRESENT").length;
+    const absentCount = verifyFinalized.filter(r => r.status === "ABSENT").length;
+    const leaveCount = verifyFinalized.filter(r => r.status === "LEAVE").length;
+
+    console.log(`${'='.repeat(80)}`);
+    console.log(`✅ [ATTENDANCE SUBMIT] FINALIZED SUCCESSFULLY`);
+    console.log(`✅ Total records: ${verifyFinalized.length}`);
+    console.log(`✅ Present: ${presentCount}`);
+    console.log(`✅ Absent: ${absentCount}`);
+    console.log(`✅ Leave: ${leaveCount}`);
+    console.log(`${'='.repeat(80)}\n`);
+
+    console.log(`${'='.repeat(80)}`);
+    console.log(`📊 [ATTENDANCE SUBMIT] Response sent`);
+    console.log(`📊 Duration: ${Date.now() - submitStartTime}ms`);
+    console.log(`${'='.repeat(80)}\n`);
+
+    // Return success response
+    res.json({
+      success: true,
+      recordsFinalized: verifyFinalized.length,
+      presentCount: presentCount,
+      absentCount: absentCount,
+      leaveCount: leaveCount,
+      message: `Attendance saved successfully.`,
+      submissionId: submissionId,
+    });
   } catch (err) {
-    console.error("❌ [FINALIZE] ATTENDANCE SUBMIT ERROR:", err);
-    res.status(500).json({ error: "Attendance submit failed" });
+    const duration = Date.now() - submitStartTime;
+    console.error(`\n${'='.repeat(80)}`);
+    console.error(`❌ [ATTENDANCE SUBMIT] EXCEPTION`);
+    console.error(`❌ Submission ID: ${submissionId}`);
+    console.error(`❌ Error: ${err.message}`);
+    console.error(`❌ Duration: ${duration}ms`);
+    console.error(`❌ Stack: ${err.stack}`);
+    console.error(`${'='.repeat(80)}\n`);
+    
+    res.status(500).json({
+      error: "Attendance submit failed",
+      details: err.message,
+      submissionId: submissionId,
+    });
   }
 });
   /* ================================

@@ -5948,6 +5948,602 @@ app.get("/api/tracking/daily-stats", requireAuth, requireRole("ADMIN"), requireT
 });
 
 /* ================================
+   DEBUG - Create Sample Data (No Auth for testing)
+   ================================= */
+
+app.post("/api/debug/create-sample-data", async (req, res) => {
+  try {
+    // Find the first school
+    const school = await db.collection("schools").findOne({});
+    if (!school) {
+      return res.status(400).json({ error: "No school found in database" });
+    }
+    
+    const schoolId = school._id;
+    console.log(`🔄 Creating sample data for schoolId: ${schoolId}`);
+    
+    // Sample data
+    const classes = ["1", "2", "3", "4"];
+    const sections = ["A", "B", "C"];
+    const subjects = ["Mathematics", "English", "Science", "Hindi", "Social Studies"];
+    
+    let createdCount = 0;
+    
+    for (const classNum of classes) {
+      for (const section of sections) {
+        // Create 10 students per class-section
+        for (let i = 1; i <= 10; i++) {
+          const student = {
+            name: `Student ${classNum}-${section}-${i}`,
+            email: `student.${classNum}.${section}.${i}@school.com`,
+            class: classNum,
+            section: section,
+            rollNo: String(i),
+            parentName: `Parent ${classNum}-${section}-${i}`,
+            phone: "+91 9876543210",
+            schoolId: schoolId,
+            createdAt: new Date(),
+          };
+          
+          await db.collection("students").updateOne(
+            { email: student.email, schoolId },
+            { $set: student },
+            { upsert: true }
+          );
+          createdCount++;
+        }
+      }
+    }
+    
+    // Create sample attendance records
+    const allStudents = await db.collection("students").find({ schoolId }).toArray();
+    let attendanceCount = 0;
+    for (const student of allStudents.slice(0, 20)) {
+      for (let day = 0; day < 30; day++) {
+        const date = new Date();
+        date.setDate(date.getDate() - day);
+        
+        await db.collection("attendance").updateOne(
+          { studentId: student._id, schoolId, date: new Date(date.toDateString()) },
+          {
+            $set: {
+              studentId: student._id,
+              schoolId,
+              date: new Date(date.toDateString()),
+              status: Math.random() > 0.2 ? "present" : "absent",
+              submissionStatus: "SUBMITTED",
+              createdAt: new Date(),
+            }
+          },
+          { upsert: true }
+        );
+        attendanceCount++;
+      }
+    }
+    
+    // Create sample marks
+    let marksCount = 0;
+    for (const student of allStudents.slice(0, 20)) {
+      for (const subject of subjects) {
+        const marks = Math.floor(Math.random() * 50) + 50; // 50-100
+        await db.collection("marks").updateOne(
+          { studentId: student._id, schoolId, subject },
+          {
+            $set: {
+              studentId: student._id,
+              schoolId,
+              subject,
+              marks,
+              maxMarks: 100,
+              createdAt: new Date(),
+            }
+          },
+          { upsert: true }
+        );
+        marksCount++;
+      }
+    }
+    
+    console.log(`✅ Created ${createdCount} sample students, ${attendanceCount} attendance records, ${marksCount} marks`);
+    res.json({ success: true, message: `Created ${createdCount} students, ${attendanceCount} attendance, ${marksCount} marks` });
+  } catch (error) {
+    console.error("❌ SAMPLE DATA ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ================================
+   ADMIN: DEBUG - Create Sample Data
+   ================================= */
+
+app.post("/api/admin/debug/create-sample-data", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    console.log(`🔄 Creating sample data for schoolId: ${schoolId}`);
+    
+    // Sample data
+    const classes = ["1", "2", "3", "4"];
+    const sections = ["A", "B", "C"];
+    const subjects = ["Mathematics", "English", "Science", "Hindi", "Social Studies"];
+    
+    let  createdCount = 0;
+    
+    for (const classNum of classes) {
+      for (const section of sections) {
+        // Create 10 students per class-section
+        for (let i = 1; i <= 10; i++) {
+          const student = {
+            name: `Student ${classNum}-${section}-${i}`,
+            email: `student.${classNum}.${section}.${i}@school.com`,
+            class: classNum,
+            section: section,
+            rollNo: String(i),
+            parentName: `Parent ${classNum}-${section}-${i}`,
+            phone: "+91 9876543210",
+            schoolId: schoolId,
+            createdAt: new Date(),
+          };
+          
+          await db.collection("students").updateOne(
+            { email: student.email, schoolId },
+            { $set: student },
+            { upsert: true }
+          );
+          createdCount++;
+        }
+      }
+    }
+    
+    // Create sample attendance records
+    const allStudents = await db.collection("students").find({ schoolId }).toArray();
+    for (const student of allStudents.slice(0, 20)) {
+      for (let day = 0; day < 30; day++) {
+        const date = new Date();
+        date.setDate(date.getDate() - day);
+        
+        await db.collection("attendance").updateOne(
+          { studentId: student._id, schoolId, date: new Date(date.toDateString()) },
+          {
+            $set: {
+              studentId: student._id,
+              schoolId,
+              date: new Date(date.toDateString()),
+              status: Math.random() > 0.2 ? "present" : "absent",
+              submissionStatus: "SUBMITTED",
+              createdAt: new Date(),
+            }
+          },
+          { upsert: true }
+        );
+      }
+    }
+    
+    // Create sample marks
+    for (const student of allStudents.slice(0, 20)) {
+      for (const subject of subjects) {
+        const marks = Math.floor(Math.random() * 50) + 50; // 50-100
+        await db.collection("marks").updateOne(
+          { studentId: student._id, schoolId, subject },
+          {
+            $set: {
+              studentId: student._id,
+              schoolId,
+              subject,
+              marks,
+              maxMarks: 100,
+              createdAt: new Date(),
+            }
+          },
+          { upsert: true }
+        );
+      }
+    }
+    
+    console.log(`✅ Created ${createdCount} sample students and data`);
+    res.json({ success: true, message: `Created ${createdCount} sample students with attendance and marks` });
+  } catch (error) {
+    console.error("❌ SAMPLE DATA ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ================================
+   ADMIN: DEBUG - Database Status
+   ================================= */
+
+app.get("/api/admin/debug/db-status", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    
+    const totalStudents = await db.collection("students").countDocuments({});
+    const totalSchools = await db.collection("schools").countDocuments({});
+    const mySchoolStudents = await db.collection("students").countDocuments({ schoolId });
+    const allSchools = await db.collection("schools").find({}).toArray();
+    const sampleStudents = await db.collection("students").find({}).limit(5).toArray();
+    
+    res.json({
+      totalStudentsInDB: totalStudents,
+      totalSchools,
+      mySchoolId: schoolId.toString(),
+      mySchoolStudents,
+      schools: allSchools.map(s => ({ _id: s._id.toString(), name: s.name })),
+      sampleStudents: sampleStudents.map(s => ({ _id: s._id, schoolId: s.schoolId?.toString(), class: s.class, section: s.section, name: s.name })),
+    });
+  } catch (error) {
+    console.error("❌ DEBUG ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ================================
+   ADMIN: GET CLASSES AND SECTIONS METADATA
+   ================================= */
+
+// Get unique classes and sections for the school
+app.get("/api/admin/meta/classes-sections", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj; // Use ObjectId from middleware
+    console.log(`🎯 META: Fetching classes and sections for schoolId: ${schoolId}`);
+    
+    // Get all students for this school
+    const students = await db.collection("students").find({ schoolId }).toArray();
+    console.log(`✅ Found ${students.length} students for schoolId ${schoolId}`);
+
+    // Extract unique classes and sections
+    const classesSet = new Set();
+    const sectionsSet = new Set();
+
+    students.forEach(student => {
+      if (student.class) {
+        classesSet.add(String(student.class).trim());
+      }
+      if (student.section) {
+        sectionsSet.add(String(student.section).trim());
+      }
+    });
+
+    // Convert to sorted arrays
+    const classes = Array.from(classesSet).sort((a, b) => {
+      // Try to sort numerically if all are numbers
+      const numA = parseInt(a);
+      const numB = parseInt(b);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      return a.localeCompare(b);
+    });
+
+    const sections = Array.from(sectionsSet).sort();
+
+    console.log(`✅ Unique classes: ${classes.join(", ") || "NONE"}`);
+    console.log(`✅ Unique sections: ${sections.join(", ") || "NONE"}`);
+
+    res.json({
+      classes,
+      sections,
+      hasData: classes.length > 0 && sections.length > 0
+    });
+  } catch (error) {
+    console.error("❌ META ERROR:", error);
+    res.status(500).json({ error: "Failed to fetch classes and sections" });
+  }
+});
+
+/* ================================
+   ADMIN: GET STUDENTS BY CLASS AND SECTION
+   ================================= */
+
+// Get students for a specific class and section
+app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    let { class: classParam, section: sectionParam } = req.query;
+    
+    console.log(`🔍 STUDENTS: Fetching for class=${classParam}, section=${sectionParam}, schoolId=${schoolId}`);
+    
+    // Validate required params
+    if (!classParam || !sectionParam) {
+      return res.status(400).json({ error: "Class and section are required" });
+    }
+
+    // Convert class to number if it looks like a number
+    const classValue = isNaN(classParam) ? classParam : Number(classParam);
+    const sectionValue = String(sectionParam).trim();
+
+    console.log(`📌 Query params after conversion: class=${classValue} (type: ${typeof classValue}), section=${sectionValue}`);
+
+    // Query students - try both number and string formats for class
+    let students = await db.collection("students").find({
+      schoolId,
+      $or: [
+        { class: classValue, section: sectionValue },
+        { class: String(classValue), section: sectionValue },
+      ]
+    }).toArray();
+
+    console.log(`✅ Found ${students.length} students for class ${classValue}, section ${sectionValue}`);
+
+    // Format response - only return necessary fields
+    const formattedStudents = students.map(s => ({
+      _id: s._id,
+      name: s.name || "N/A",
+      rollNo: s.rollNo || "N/A",
+      class: s.class,
+      section: s.section,
+      email: s.email || "N/A",
+    }));
+
+    res.json({
+      success: true,
+      count: formattedStudents.length,
+      students: formattedStudents
+    });
+  } catch (error) {
+    console.error("❌ STUDENTS ERROR:", error);
+    res.status(500).json({ error: "Failed to fetch students" });
+  }
+});
+
+/* ================================
+   ADMIN: CLASS PERFORMANCE COMPARISON
+   ================================= */
+
+// Get school performance analytics with class comparison
+// Supports query parameters: ?class=X&section=Y for filtering
+app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj; // Use ObjectId from middleware
+    const filterClass = req.query.class ? String(req.query.class).trim() : null;
+    const filterSection = req.query.section ? String(req.query.section).trim() : null;
+    
+    console.log(`📊 CLASS COMPARISON: schoolId=${schoolId}, filterClass=${filterClass}, filterSection=${filterSection}`);
+
+    // Get all students for this school
+    let studentQuery = { schoolId };
+    if (filterClass) studentQuery.class = filterClass;
+    if (filterSection) studentQuery.section = filterSection;
+    
+    const students = await db.collection("students").find(studentQuery).toArray();
+    console.log(`✅ Found ${students.length} students for query:`, studentQuery);
+
+    if (students.length === 0) {
+      console.log(`⚠️ No students found. Returning empty array.`);
+      return res.json({
+        data: [],
+        summary: {
+          avgAttendance: 0,
+          avgMarks: 0,
+          totalStudents: 0,
+          excellentClassesCount: 0,
+          topPerformer: null,
+        },
+        hasData: false,
+      });
+    }
+
+    // Get all attendance records for this school
+    const attendanceRecords = await db.collection("attendance").find({ schoolId }).toArray();
+    console.log(`✅ Found ${attendanceRecords.length} total attendance records`);
+
+    // Get all marks records for this school
+    const marksRecords = await db.collection("marks").find({ schoolId }).toArray();
+    console.log(`✅ Found ${marksRecords.length} total marks records`);
+
+    // Create lookup maps for faster access
+    const attendanceMap = {};
+    const marksMap = {};
+
+    // Debug: show first few attendance studentIds
+    if (attendanceRecords.length > 0) {
+      console.log(`📌 FIRST 5 ATTENDANCE studentIds:`);
+      attendanceRecords.slice(0, 5).forEach(rec => {
+        console.log(`   - ${rec.studentId} (type: ${typeof rec.studentId}, constructor: ${rec.studentId?.constructor?.name})`);
+      });
+    }
+
+    attendanceRecords.forEach(record => {
+      const studentIdStr = String(record.studentId);
+      if (!attendanceMap[studentIdStr]) {
+        attendanceMap[studentIdStr] = [];
+      }
+      attendanceMap[studentIdStr].push(record);
+    });
+
+    // Debug: show attendance map keys
+    console.log(`📌 ATTENDANCE MAP KEYS (${Object.keys(attendanceMap).length} unique students):`);
+    Object.keys(attendanceMap).slice(0, 5).forEach(key => {
+      console.log(`   - ${key}: ${attendanceMap[key].length} records`);
+    });
+
+    // Debug: Show actual attendance status values
+    console.log(`📌 SAMPLE ATTENDANCE STATUS VALUES:`);
+    attendanceRecords.slice(0, 10).forEach(rec => {
+      console.log(`   - status: "${rec.status}" (type: ${typeof rec.status})`);
+    });
+
+    // Count attendance by status
+    const statusCounts = {};
+    attendanceRecords.forEach(rec => {
+      const status = String(rec.status || 'null').toLowerCase();
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    console.log(`📌 ATTENDANCE STATUS COUNTS:`, statusCounts);
+
+    marksRecords.forEach(record => {
+      const studentIdStr = String(record.studentId);
+      if (!marksMap[studentIdStr]) {
+        marksMap[studentIdStr] = [];
+      }
+      marksMap[studentIdStr].push(record);
+    });
+
+    // Debug: show marks map keys
+    console.log(`📌 MARKS MAP KEYS (${Object.keys(marksMap).length} unique students):`);
+    Object.keys(marksMap).slice(0, 5).forEach(key => {
+      console.log(`   - ${key}: ${marksMap[key].length} records`);
+    });
+
+    // Debug: Show sample marks values
+    console.log(`📌 SAMPLE MARKS VALUES:`);
+    marksRecords.slice(0, 10).forEach(rec => {
+      console.log(`   - marks: ${rec.marks} (type: ${typeof rec.marks}), subject: ${rec.subject}`);
+    });
+
+    // Debug: Show FULL marks document structure
+    console.log(`📌 SAMPLE FULL MARKS DOCUMENT:`);
+    if (marksRecords.length > 0) {
+      console.log(JSON.stringify(marksRecords[0], null, 2));
+    }
+
+    // Group students by class and section
+    const classGroups = {};
+    students.forEach(student => {
+      const key = `${student.class}-${student.section}`;
+      if (!classGroups[key]) {
+        classGroups[key] = {
+          class: student.class,
+          section: student.section,
+          students: [],
+        };
+      }
+      classGroups[key].students.push(student);
+    });
+
+    // Debug: show student IDs and matching
+    console.log(`📌 FIRST 5 STUDENT IDs (students collection):`);
+    students.slice(0, 5).forEach(s => {
+      console.log(`   - ${s._id} (type: ${typeof s._id}, constructor: ${s._id?.constructor?.name})`);
+    });
+
+    // Calculate metrics for each class
+    const classMetrics = Object.values(classGroups).map(classGroup => {
+      const totalStudents = classGroup.students.length;
+      let totalAttendanceDays = 0;
+      let totalPresentDays = 0;
+      const allMarks = [];
+      const subjectMarks = {};
+
+      // Calculate attendance and marks for all students in this class
+      let studentsWithAttendance = 0;
+      let studentsWithMarks = 0;
+      let attendanceByStatus = {};
+      
+      classGroup.students.forEach((student, idx) => {
+        const studentIdStr = String(student._id);
+        
+        // Attendance calculation
+        const studentAttendance = attendanceMap[studentIdStr] || [];
+        if (studentAttendance.length > 0) studentsWithAttendance++;
+        
+        // Count by status for debugging
+        studentAttendance.forEach(a => {
+          const status = String(a.status || 'null').toLowerCase();
+          attendanceByStatus[status] = (attendanceByStatus[status] || 0) + 1;
+        });
+        
+        // Check for present status (case-insensitive)
+        const presentCount = studentAttendance.filter(a => {
+          const status = String(a.status || '').toLowerCase();
+          return status === 'present';
+        }).length;
+        
+        totalAttendanceDays += studentAttendance.length;
+        totalPresentDays += presentCount;
+
+        // Marks calculation
+        const studentMarks = marksMap[studentIdStr] || [];
+        if (studentMarks.length > 0) studentsWithMarks++;
+        
+        studentMarks.forEach(mark => {
+          const markValue = Number(mark.score) || 0;
+          allMarks.push(markValue);
+
+          if (!subjectMarks[mark.subject]) {
+            subjectMarks[mark.subject] = [];
+          }
+          subjectMarks[mark.subject].push(markValue);
+        });
+      });
+
+      // Calculate average attendance percentage
+      const avgAttendancePercent = totalAttendanceDays > 0 
+        ? Math.round((totalPresentDays / totalAttendanceDays) * 100)
+        : 0;
+
+      // Calculate average marks percentage
+      const avgMarksPercent = allMarks.length > 0
+        ? Math.round(allMarks.reduce((a, b) => a + b, 0) / allMarks.length)
+        : 0;
+
+      // Find top and weakest subjects
+      const subjectAverages = {};
+      Object.keys(subjectMarks).forEach(subject => {
+        const marksArray = subjectMarks[subject];
+        const avg = marksArray.reduce((a, b) => a + b, 0) / marksArray.length;
+        subjectAverages[subject] = Math.round(avg);
+      });
+
+      const sortedSubjects = Object.entries(subjectAverages).sort((a, b) => b[1] - a[1]);
+      const topSubject = sortedSubjects[0]?.[0] || "N/A";
+      const weakestSubject = sortedSubjects[sortedSubjects.length - 1]?.[0] || "N/A";
+
+      const overall = avgMarksPercent >= 75 ? 'Excellent' : avgMarksPercent >= 60 ? 'Good' : 'Needs Attention';
+
+      console.log(`📌 CLASS ${classGroup.class}-${classGroup.section}: students=${totalStudents} (with_attendance=${studentsWithAttendance}, with_marks=${studentsWithMarks}), totalAttendanceDays=${totalAttendanceDays}, totalPresentDays=${totalPresentDays}, attendance=${avgAttendancePercent}%, marks=${avgMarksPercent}%, status=${overall}`);
+      console.log(`   Attendance status breakdown:`, attendanceByStatus);
+
+      return {
+        class: classGroup.class,
+        section: classGroup.section,
+        totalStudents: totalStudents,
+        avgAttendancePercent: avgAttendancePercent,
+        avgMarksPercent: avgMarksPercent,
+        topSubject: topSubject,
+        weakestSubject: weakestSubject,
+        overall: overall,
+      };
+    });
+
+    // Sort by overall marks (descending)
+    classMetrics.sort((a, b) => b.avgMarksPercent - a.avgMarksPercent);
+
+    // Calculate summary statistics
+    const totalAllStudents = students.length;
+    const avgAttendanceAll = classMetrics.length > 0
+      ? Math.round(classMetrics.reduce((sum, c) => sum + c.avgAttendancePercent, 0) / classMetrics.length)
+      : 0;
+    const avgMarksAll = classMetrics.length > 0
+      ? Math.round(classMetrics.reduce((sum, c) => sum + c.avgMarksPercent, 0) / classMetrics.length)
+      : 0;
+    const excellentCount = classMetrics.filter(c => c.overall === 'Excellent').length;
+    const topPerformer = classMetrics.length > 0
+      ? {
+          class: classMetrics[0].class,
+          section: classMetrics[0].section,
+          attendance: classMetrics[0].avgAttendancePercent,
+          marks: classMetrics[0].avgMarksPercent,
+        }
+      : null;
+
+    console.log(`✅ CLASS COMPARISON: Returning ${classMetrics.length} classes`);
+    res.json({
+      data: classMetrics,
+      summary: {
+        avgAttendance: avgAttendanceAll,
+        avgMarks: avgMarksAll,
+        totalStudents: totalAllStudents,
+        excellentClassesCount: excellentCount,
+        topPerformer: topPerformer,
+      },
+      hasData: classMetrics.length > 0,
+    });
+  } catch (error) {
+    console.error("❌ CLASS COMPARISON ERROR:", error);
+    res.status(500).json({ error: "Failed to fetch class comparison data", details: error.message });
+  }
+});
+
+/* ================================
    SPA FALLBACK - Serve index.html for client-side routing
    ================================= */
 // All requests that don't match static files or API routes
