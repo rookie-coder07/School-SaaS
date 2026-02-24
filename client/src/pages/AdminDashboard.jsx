@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
+import * as XLSX from "xlsx";
 import VoiceRecorder from "../components/VoiceRecorder";
 import VoiceAnnouncements from "../components/VoiceAnnouncements";
 import NotificationBell from "../components/NotificationBell";
 import NotificationDropdown from "../components/NotificationDropdown";
 import UserTrackingDashboard from "../components/UserTrackingDashboard";
+import ConfirmationModal from "../components/ConfirmationModal";
 import { useToast } from "../components/ToastProvider";
 import { createNotification } from "../utils/notificationHelper";
 import { sessionTracker } from "../utils/sessionTracker";
@@ -78,6 +80,27 @@ export default function AdminDashboard() {
   const [selectedStudents, setSelectedStudents] = useState({});
   const [selectedTeachers, setSelectedTeachers] = useState({});
   const [deletingIds, setDeletingIds] = useState([]);
+  const [studentSelectionMode, setStudentSelectionMode] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState("");
+  const [showStudentDeleteConfirm, setShowStudentDeleteConfirm] = useState(false);
+  const [showSingleEditModal, setShowSingleEditModal] = useState(false);
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [singleEditForm, setSingleEditForm] = useState({
+    class: "",
+    section: "",
+    assignedTeacher: "",
+  });
+  const [bulkEditForm, setBulkEditForm] = useState({
+    class: "",
+    section: "",
+    assignedTeacher: "__NO_CHANGE__",
+  });
+  const [lastDeletedBatch, setLastDeletedBatch] = useState(null);
+  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
+  const longPressTimerRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
+  const undoExpiryTimerRef = useRef(null);
+  const undoTickerRef = useRef(null);
 
   // Voice Broadcast
   const [audioFile, setAudioFile] = useState(null);
@@ -93,6 +116,28 @@ export default function AdminDashboard() {
   const [migrationToClass, setMigrationToClass] = useState("");
   const [migrationToSection, setMigrationToSection] = useState("");
   const [migratingTeacherId, setMigratingTeacherId] = useState(null);
+
+  // Student Migration
+  const [selectedStudentForMigration, setSelectedStudentForMigration] = useState("");
+  const [studentMigrationSearch, setStudentMigrationSearch] = useState("");
+  const [studentMigrationToClass, setStudentMigrationToClass] = useState("");
+  const [studentMigrationToSection, setStudentMigrationToSection] = useState("");
+  const [migratingStudentId, setMigratingStudentId] = useState(null);
+  const [bulkMigrationMode, setBulkMigrationMode] = useState("file");
+  const [bulkMigrationFile, setBulkMigrationFile] = useState(null);
+  const [bulkMigrationRows, setBulkMigrationRows] = useState([]);
+  const [bulkFromClass, setBulkFromClass] = useState("");
+  const [bulkFromSection, setBulkFromSection] = useState("");
+  const [bulkToClass, setBulkToClass] = useState("");
+  const [bulkToSection, setBulkToSection] = useState("");
+  const [bulkMigrating, setBulkMigrating] = useState(false);
+  const [migrationSummary, setMigrationSummary] = useState(null);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [pendingMigrationAction, setPendingMigrationAction] = useState(null);
+
+  // Student profile modal
+  const [selectedStudentProfile, setSelectedStudentProfile] = useState(null);
+  const [studentProfileTab, setStudentProfileTab] = useState("details");
   
   const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
   const token = localStorage.getItem("adminToken");
@@ -182,12 +227,71 @@ export default function AdminDashboard() {
     }
   }, [showNotifications, token]);
 
+  useEffect(() => {
+    const hasSelected = Object.values(selectedStudents).some(Boolean);
+    if (!hasSelected) {
+      setStudentSelectionMode(false);
+    }
+  }, [selectedStudents]);
+
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      if (undoExpiryTimerRef.current) clearTimeout(undoExpiryTimerRef.current);
+      if (undoTickerRef.current) clearInterval(undoTickerRef.current);
+    };
+  }, []);
+
   // Toggle student selection
   const toggleStudentSelection = (studentId) => {
     setSelectedStudents(prev => ({
       ...prev,
       [studentId]: !prev[studentId]
     }));
+  };
+
+  const selectedStudentIds = () => Object.keys(selectedStudents).filter((id) => selectedStudents[id]);
+
+  const clearStudentSelection = () => {
+    setSelectedStudents({});
+    setStudentSelectionMode(false);
+  };
+
+  const isTouchDevice = () =>
+    typeof window !== "undefined" &&
+    (window.matchMedia?.("(pointer: coarse)")?.matches || "ontouchstart" in window);
+
+  const handleStudentRowClick = (student) => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      return;
+    }
+
+    if (isTouchDevice() && !studentSelectionMode) {
+      setSelectedStudentProfile(student);
+      setStudentProfileTab("details");
+      return;
+    }
+    toggleStudentSelection(student._id);
+    setStudentSelectionMode(true);
+  };
+
+  const handleStudentRowTouchStart = (studentId) => {
+    if (!isTouchDevice()) return;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTriggeredRef.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setStudentSelectionMode(true);
+      setSelectedStudents((prev) => ({ ...prev, [studentId]: true }));
+    }, 450);
+  };
+
+  const handleStudentRowTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
   };
 
   // Toggle teacher selection
@@ -203,6 +307,7 @@ export default function AdminDashboard() {
     if (getFilteredStudents().length === Object.keys(selectedStudents).filter(id => selectedStudents[id]).length) {
       // Deselect all
       setSelectedStudents({});
+      setStudentSelectionMode(false);
     } else {
       // Select all
       const newSelection = {};
@@ -210,6 +315,7 @@ export default function AdminDashboard() {
         newSelection[s._id] = true;
       });
       setSelectedStudents(newSelection);
+      setStudentSelectionMode(true);
     }
   };
 
@@ -228,69 +334,244 @@ export default function AdminDashboard() {
     }
   };
 
-  // Delete selected students
-  const deleteSelectedStudents = async () => {
-    const selectedIds = Object.keys(selectedStudents).filter(id => selectedStudents[id]);
+  const startUndoTimers = (seconds = 10) => {
+    if (undoExpiryTimerRef.current) clearTimeout(undoExpiryTimerRef.current);
+    if (undoTickerRef.current) clearInterval(undoTickerRef.current);
+
+    setUndoSecondsLeft(seconds);
+    undoTickerRef.current = setInterval(() => {
+      setUndoSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    undoExpiryTimerRef.current = setTimeout(() => {
+      setLastDeletedBatch(null);
+      setUndoSecondsLeft(0);
+      if (undoTickerRef.current) clearInterval(undoTickerRef.current);
+    }, seconds * 1000);
+  };
+
+  const runBulkDeleteStudents = async () => {
+    const selectedIds = selectedStudentIds();
     if (selectedIds.length === 0) {
-      toast.warning("Please select at least one student to delete");
+      toast.warning("Please select at least one student");
       return;
     }
 
-    const confirmed = window.confirm(`Are you sure you want to delete ${selectedIds.length} student(s)? This action cannot be undone.`);
-    if (!confirmed) return;
+    const selectedRows = students.filter((s) => selectedIds.includes(s._id));
+    setBulkActionLoading("delete");
+    setShowStudentDeleteConfirm(false);
 
-    setDeletingIds(selectedIds);
+    // Optimistic UI removal
+    setStudents((prev) => prev.filter((s) => !selectedIds.includes(s._id)));
+    clearStudentSelection();
 
-    let successCount = 0;
-    let failureCount = 0;
-    const failedNames = [];
+    try {
+      const res = await fetch(`${API_URL}/api/admin/students/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ studentIds: selectedIds }),
+      });
 
-    for (const studentId of selectedIds) {
-      try {
-        const res = await fetch(`${API_URL}/api/admin/students/${studentId}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (res.ok) {
-          successCount++;
-        } else {
-          failureCount++;
-          const student = students.find(s => s._id === studentId);
-          failedNames.push(student?.name || "Unknown");
-        }
-      } catch (err) {
-        failureCount++;
-        const student = students.find(s => s._id === studentId);
-        failedNames.push(student?.name || "Unknown");
+      const data = await res.json();
+      if (!res.ok) {
+        setStudents((prev) => [...selectedRows, ...prev]);
+        toast.error(data?.error || "Failed to delete students");
+        return;
       }
+
+      const failed = Array.isArray(data.failed) ? data.failed : [];
+      const failedIds = new Set(failed.map((f) => String(f.studentId)));
+      const successRows = selectedRows.filter((s) => !failedIds.has(String(s._id)));
+
+      if (failedIds.size > 0) {
+        const rowsToRestore = selectedRows.filter((s) => failedIds.has(String(s._id)));
+        setStudents((prev) => [...rowsToRestore, ...prev]);
+      }
+
+      if (successRows.length > 0) {
+        setLastDeletedBatch({
+          studentIds: successRows.map((s) => s._id),
+          students: successRows,
+          deletedAt: Date.now(),
+        });
+        startUndoTimers(10);
+      }
+
+      toast.addToast(
+        `${successRows.length} students deleted`,
+        "warning",
+        10000,
+        successRows.length > 0
+          ? {
+              label: "Undo",
+              onClick: () => {
+                undoLastDelete();
+              },
+            }
+          : null
+      );
+      if (failed.length > 0) {
+        toast.warning(`${failed.length} students failed to delete`);
+      }
+    } catch (err) {
+      setStudents((prev) => [...selectedRows, ...prev]);
+      console.error("Bulk delete error:", err);
+      toast.error("Network error while deleting students");
+    } finally {
+      setBulkActionLoading("");
+    }
+  };
+
+  const undoLastDelete = async () => {
+    if (!lastDeletedBatch || !Array.isArray(lastDeletedBatch.studentIds) || lastDeletedBatch.studentIds.length === 0) {
+      return;
     }
 
-    setDeletingIds([]);
-    setSelectedStudents({});
+    setBulkActionLoading("undo");
+    try {
+      const res = await fetch(`${API_URL}/api/admin/students/bulk-restore`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ studentIds: lastDeletedBatch.studentIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to undo delete");
+        return;
+      }
 
-    if (failureCount === 0) {
-      toast.success(`Successfully deleted ${successCount} student(s)`);
-      // Refresh student list
-      setTimeout(() => {
-        const fetchAllUsers = async () => {
-          try {
-            const res = await fetch(`${API_URL}/api/admin/users`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-              const data = await res.json();
-              setStudents(Array.isArray(data.students) ? data.students : []);
-              setTeachers(Array.isArray(data.teachers) ? data.teachers : []);
-            }
-          } catch (err) {
-            console.error("Refresh error:", err);
-          }
-        };
-        fetchAllUsers();
-      }, 500);
-    } else {
-      toast.error(`Deleted ${successCount}, Failed ${failureCount}: ${failedNames.join(", ")}`);
+      if (undoExpiryTimerRef.current) clearTimeout(undoExpiryTimerRef.current);
+      if (undoTickerRef.current) clearInterval(undoTickerRef.current);
+      setUndoSecondsLeft(0);
+      setLastDeletedBatch(null);
+      await refreshUsersData();
+
+      if (Array.isArray(data.warnings) && data.warnings.length > 0) {
+        toast.warning(`Restored with ${data.warnings.length} warning(s)`);
+      } else {
+        toast.success(`${data.affectedCount || 0} students restored`);
+      }
+    } catch (err) {
+      console.error("Undo delete error:", err);
+      toast.error("Network error while restoring students");
+    } finally {
+      setBulkActionLoading("");
+    }
+  };
+
+  const openEditSelectedStudents = () => {
+    const selectedIds = selectedStudentIds();
+    if (selectedIds.length === 0) {
+      toast.warning("Select at least one student");
+      return;
+    }
+
+    if (selectedIds.length === 1) {
+      const student = students.find((s) => s._id === selectedIds[0]);
+      if (!student) return;
+      setSingleEditForm({
+        class: String(student.class || student.currentClass || ""),
+        section: String(student.section || student.currentSection || ""),
+        assignedTeacher: student.assignedTeacher ? String(student.assignedTeacher) : "",
+      });
+      setShowSingleEditModal(true);
+      return;
+    }
+
+    setBulkEditForm({
+      class: "",
+      section: "",
+      assignedTeacher: "__NO_CHANGE__",
+    });
+    setShowBulkEditModal(true);
+  };
+
+  const runSingleStudentEdit = async () => {
+    const selectedIds = selectedStudentIds();
+    if (selectedIds.length !== 1) return;
+
+    const updates = {
+      class: String(singleEditForm.class || "").trim(),
+      section: String(singleEditForm.section || "").trim(),
+      assignedTeacher: singleEditForm.assignedTeacher || "",
+    };
+
+    setBulkActionLoading("edit");
+    try {
+      const res = await fetch(`${API_URL}/api/admin/students/bulk-update`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ studentIds: selectedIds, updates }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to update student");
+        return;
+      }
+      setShowSingleEditModal(false);
+      clearStudentSelection();
+      await refreshUsersData();
+      toast.success("Student updated");
+    } catch (err) {
+      console.error("Single edit error:", err);
+      toast.error("Network error while updating student");
+    } finally {
+      setBulkActionLoading("");
+    }
+  };
+
+  const runBulkEditStudents = async () => {
+    const selectedIds = selectedStudentIds();
+    if (selectedIds.length < 2) return;
+
+    const updates = {};
+    if (String(bulkEditForm.class || "").trim()) updates.class = String(bulkEditForm.class).trim();
+    if (String(bulkEditForm.section || "").trim()) updates.section = String(bulkEditForm.section).trim();
+    if (bulkEditForm.assignedTeacher !== "__NO_CHANGE__") {
+      updates.assignedTeacher = bulkEditForm.assignedTeacher === "__UNASSIGNED__" ? "" : bulkEditForm.assignedTeacher;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      toast.warning("Provide at least one field to update");
+      return;
+    }
+
+    setBulkActionLoading("edit");
+    try {
+      const res = await fetch(`${API_URL}/api/admin/students/bulk-update`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ studentIds: selectedIds, updates }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to bulk update students");
+        return;
+      }
+      if (Array.isArray(data.failed) && data.failed.length > 0) {
+        toast.warning(`Updated ${data.affectedCount || 0}, failed ${data.failed.length}`);
+      } else {
+        toast.success(`${data.affectedCount || 0} students updated`);
+      }
+      setShowBulkEditModal(false);
+      clearStudentSelection();
+      await refreshUsersData();
+    } catch (err) {
+      console.error("Bulk edit error:", err);
+      toast.error("Network error while bulk updating students");
+    } finally {
+      setBulkActionLoading("");
     }
   };
 
@@ -357,6 +638,203 @@ export default function AdminDashboard() {
       }, 500);
     } else {
       toast.error(`Deleted ${successCount}, Failed ${failureCount}: ${failedNames.join(", ")}`);
+    }
+  };
+
+  const refreshUsersData = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setStudents(Array.isArray(data.students) ? data.students : []);
+      setTeachers(Array.isArray(data.teachers) ? data.teachers : []);
+    } catch (refreshErr) {
+      console.error("Refresh users error:", refreshErr);
+    }
+  };
+
+  const parseBulkMigrationFile = async (file) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: "array" });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+    const parsedRows = rows
+      .map((row) => ({
+        studentId: String(row.studentId || row.StudentId || row.studentID || "").trim(),
+        rollNo: String(row.rollNo || row.RollNo || row["Roll No"] || "").trim(),
+        email: String(row.email || row.Email || "").trim().toLowerCase(),
+        newClass: String(row.newClass || row.NewClass || row.toClass || row.ToClass || "").trim(),
+        newSection: String(row.newSection || row.NewSection || row.toSection || row.ToSection || "").trim(),
+      }))
+      .filter((row) => {
+        const hasIdentifier = Boolean(row.studentId || row.rollNo || row.email);
+        return hasIdentifier && row.newClass && row.newSection;
+      });
+
+    return parsedRows;
+  };
+
+  const runSingleStudentMigration = async () => {
+    if (!selectedStudentForMigration) {
+      toast.warning("Please select a student");
+      return;
+    }
+    if (!studentMigrationToClass || !studentMigrationToSection) {
+      toast.warning("Please select target class and section");
+      return;
+    }
+
+    const student = students.find((s) => s._id === selectedStudentForMigration);
+    if (!student) {
+      toast.error("Student not found");
+      return;
+    }
+
+    const cleanClass = String(studentMigrationToClass).trim();
+    const cleanSection = String(studentMigrationToSection).trim();
+    if (!cleanClass || !cleanSection) {
+      toast.error("Class and section cannot be empty");
+      return;
+    }
+
+    const currentClass = String(student.class || student.currentClass || "").trim();
+    const currentSection = String(student.section || student.currentSection || "").trim();
+    if (currentClass === cleanClass && currentSection === cleanSection) {
+      toast.warning("Student is already in this class/section");
+      return;
+    }
+
+    setMigratingStudentId(selectedStudentForMigration);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/students/${selectedStudentForMigration}/migrate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          newClass: cleanClass,
+          newSection: cleanSection,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Failed to migrate student");
+        return;
+      }
+
+      toast.success(`${student.name} migrated to Class ${cleanClass}-${cleanSection}`);
+      setSelectedStudentForMigration("");
+      setStudentMigrationToClass("");
+      setStudentMigrationToSection("");
+      await refreshUsersData();
+    } catch (err) {
+      console.error("Student migration error:", err);
+      toast.error("Network error while migrating student");
+    } finally {
+      setMigratingStudentId(null);
+      setPendingMigrationAction(null);
+    }
+  };
+
+  const runBulkMigrationFromFile = async () => {
+    if (!bulkMigrationRows.length) {
+      toast.warning("Please upload and parse a valid CSV/Excel file");
+      return;
+    }
+
+    setBulkMigrating(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/students/bulk-migrate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ records: bulkMigrationRows }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Bulk migration failed");
+        return;
+      }
+
+      setMigrationSummary({
+        mode: "file",
+        requested: bulkMigrationRows.length,
+        successCount: data.successCount || 0,
+        failed: Array.isArray(data.failed) ? data.failed : [],
+      });
+      toast.success(`Bulk migration completed. Success: ${data.successCount || 0}, Failed: ${(data.failed || []).length}`);
+      setShowSummaryModal(true);
+      await refreshUsersData();
+    } catch (err) {
+      console.error("Bulk migration from file error:", err);
+      toast.error("Network error while running bulk migration");
+    } finally {
+      setBulkMigrating(false);
+      setPendingMigrationAction(null);
+    }
+  };
+
+  const runBulkMigrationByClass = async () => {
+    if (!bulkFromClass || !bulkFromSection || !bulkToClass || !bulkToSection) {
+      toast.warning("Please select source and destination class/section");
+      return;
+    }
+    if (bulkFromClass === bulkToClass && bulkFromSection === bulkToSection) {
+      toast.warning("Source and destination cannot be the same");
+      return;
+    }
+
+    setBulkMigrating(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/students/bulk-migrate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          migrateAll: true,
+          fromClass: String(bulkFromClass).trim(),
+          fromSection: String(bulkFromSection).trim(),
+          toClass: String(bulkToClass).trim(),
+          toSection: String(bulkToSection).trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error || "Bulk class migration failed");
+        return;
+      }
+
+      const sourceCount = students.filter(
+        (s) => String(s.class || s.currentClass || "").trim() === String(bulkFromClass).trim() &&
+          String(s.section || s.currentSection || "").trim() === String(bulkFromSection).trim()
+      ).length;
+
+      setMigrationSummary({
+        mode: "class",
+        requested: sourceCount,
+        successCount: data.successCount || 0,
+        failed: Array.isArray(data.failed) ? data.failed : [],
+      });
+      toast.success(`Class migration completed. Success: ${data.successCount || 0}, Failed: ${(data.failed || []).length}`);
+      setShowSummaryModal(true);
+      await refreshUsersData();
+    } catch (err) {
+      console.error("Bulk class migration error:", err);
+      toast.error("Network error while migrating class");
+    } finally {
+      setBulkMigrating(false);
+      setPendingMigrationAction(null);
     }
   };
 
@@ -869,6 +1347,7 @@ export default function AdminDashboard() {
   const navItems = [
     { id: "dashboard", label: "Dashboard" },
     { id: "students", label: "Students" },
+    { id: "student-migration", label: "Student Migration" },
     { id: "teachers", label: "Teachers" },
     { id: "migrate-teacher", label: "Migrate Teacher" },
     { id: "add-user", label: "Add User" },
@@ -979,7 +1458,7 @@ export default function AdminDashboard() {
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-28 md:pb-8">
           {/* ===== DASHBOARD ===== */}
           {activeTab === "dashboard" && (
             <div className="space-y-4">
@@ -1067,41 +1546,262 @@ export default function AdminDashboard() {
                     </label>
                   </div>
 
-                  {/* Delete toolbar */}
-                  {Object.values(selectedStudents).some(v => v) && (
-                    <div className="bg-red-50 border border-red-200 p-3 rounded-lg flex items-center justify-between">
-                      <span className="text-sm font-semibold text-red-700">
-                        {Object.values(selectedStudents).filter(v => v).length} student(s) selected
-                      </span>
-                      <button
-                        onClick={deleteSelectedStudents}
-                        disabled={deletingIds.length > 0}
-                        className="px-4 py-2 bg-red-600 text-white text-sm font-bold rounded hover:bg-red-700 transition disabled:opacity-50"
-                      >
-                        {deletingIds.length > 0 ? "Deleting..." : "Delete Selected"}
-                      </button>
-                    </div>
-                  )}
+                  <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    Mobile tip: Long-press a row to enter selection mode.
+                  </div>
 
                   {getFilteredStudents().map((s) => (
-                    <div key={s._id} className={`bg-white p-4 rounded-xl border shadow-sm flex items-center gap-3 ${selectedStudents[s._id] ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}>
+                    <div
+                      key={s._id}
+                      onClick={() => handleStudentRowClick(s)}
+                      onTouchStart={() => handleStudentRowTouchStart(s._id)}
+                      onTouchEnd={handleStudentRowTouchEnd}
+                      onTouchCancel={handleStudentRowTouchEnd}
+                      className={`bg-white p-4 rounded-xl border shadow-sm flex items-center gap-3 transition cursor-pointer ${
+                        selectedStudents[s._id] ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
                       <input
                         type="checkbox"
                         checked={selectedStudents[s._id] || false}
-                        onChange={() => toggleStudentSelection(s._id)}
-                        disabled={deletingIds.length > 0}
-                        className="w-4 h-4 rounded border-slate-300 cursor-pointer"
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleStudentSelection(s._id);
+                          setStudentSelectionMode(true);
+                        }}
+                        disabled={bulkActionLoading === "delete"}
+                        className="w-5 h-5 rounded border-slate-300 cursor-pointer"
                       />
                       <div className="flex-1">
                         <div className="font-bold text-slate-900 text-sm">{s.name}</div>
                         <div className="text-xs text-slate-600 mt-1">
-                          Email: {s.email} | Class: {s.class || s.className || "N/A"} | Section: {s.section || "N/A"}
+                          Email: {s.email} | Class: {s.class || s.currentClass || s.className || "N/A"} | Section: {s.section || s.currentSection || "N/A"}
                         </div>
                       </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedStudentProfile(s);
+                          setStudentProfileTab("details");
+                        }}
+                        className="px-4 py-3 text-xs font-semibold rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition"
+                      >
+                        Profile
+                      </button>
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ===== STUDENT MIGRATION ===== */}
+          {activeTab === "student-migration" && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-bold text-slate-900">Student Migration</h2>
+
+              <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 space-y-4">
+                <h3 className="text-base font-bold text-slate-900">Single Student Migration</h3>
+                <input
+                  type="text"
+                  value={studentMigrationSearch}
+                  onChange={(e) => setStudentMigrationSearch(e.target.value)}
+                  placeholder="Search student by name or email"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Select Student</label>
+                  <select
+                    value={selectedStudentForMigration}
+                    onChange={(e) => setSelectedStudentForMigration(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Select Student --</option>
+                    {students
+                      .filter((s) => {
+                        if (!studentMigrationSearch) return true;
+                        const q = studentMigrationSearch.toLowerCase();
+                        return s.name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q);
+                      })
+                      .map((s) => (
+                        <option key={s._id} value={s._id}>
+                          {s.name} ({s.class || s.currentClass || "N/A"}-{s.section || s.currentSection || "N/A"})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">New Class</label>
+                    <select
+                      value={studentMigrationToClass}
+                      onChange={(e) => {
+                        setStudentMigrationToClass(e.target.value);
+                        setStudentMigrationToSection("");
+                      }}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Select Class --</option>
+                      {getUniqueStudentClasses().map((cls) => (
+                        <option key={cls} value={cls}>Class {cls}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">New Section</label>
+                    <select
+                      value={studentMigrationToSection}
+                      onChange={(e) => setStudentMigrationToSection(e.target.value)}
+                      disabled={!studentMigrationToClass}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                      <option value="">-- Select Section --</option>
+                      {getUniqueStudentSections(studentMigrationToClass).map((sec) => (
+                        <option key={sec} value={sec}>Section {sec}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setPendingMigrationAction({ type: "single" })}
+                  disabled={!selectedStudentForMigration || !studentMigrationToClass || !studentMigrationToSection || migratingStudentId}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded-lg font-bold transition"
+                >
+                  {migratingStudentId ? "Migrating..." : "Migrate Student"}
+                </button>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 space-y-4">
+                <h3 className="text-base font-bold text-slate-900">Bulk Migration</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBulkMigrationMode("file")}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${bulkMigrationMode === "file" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                  >
+                    Upload CSV/Excel
+                  </button>
+                  <button
+                    onClick={() => setBulkMigrationMode("class")}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${bulkMigrationMode === "class" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                  >
+                    Migrate Whole Class
+                  </button>
+                </div>
+
+                {bulkMigrationMode === "file" && (
+                  <div className="space-y-3">
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        setBulkMigrationFile(file || null);
+                        setBulkMigrationRows([]);
+                        if (!file) return;
+                        try {
+                          const rows = await parseBulkMigrationFile(file);
+                          setBulkMigrationRows(rows);
+                          if (!rows.length) {
+                            toast.warning("No valid migration rows found in file");
+                          } else {
+                            toast.success(`Parsed ${rows.length} migration row(s)`);
+                          }
+                        } catch (parseErr) {
+                          console.error("File parse error:", parseErr);
+                          toast.error("Failed to parse file");
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                    />
+                    <div className="text-xs text-slate-600">
+                      Parsed rows: <span className="font-semibold">{bulkMigrationRows.length}</span>
+                      {bulkMigrationFile && (
+                        <span className="ml-2 text-slate-500">File: {bulkMigrationFile.name}</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setPendingMigrationAction({ type: "bulk-file" })}
+                      disabled={!bulkMigrationRows.length || bulkMigrating}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded-lg font-bold transition"
+                    >
+                      {bulkMigrating ? "Migrating..." : "Start Bulk Migration"}
+                    </button>
+                  </div>
+                )}
+
+                {bulkMigrationMode === "class" && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <select
+                        value={bulkFromClass}
+                        onChange={(e) => {
+                          setBulkFromClass(e.target.value);
+                          setBulkFromSection("");
+                        }}
+                        className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Old Class</option>
+                        {getUniqueStudentClasses().map((cls) => (
+                          <option key={cls} value={cls}>Class {cls}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={bulkFromSection}
+                        onChange={(e) => setBulkFromSection(e.target.value)}
+                        disabled={!bulkFromClass}
+                        className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      >
+                        <option value="">Old Section</option>
+                        {getUniqueStudentSections(bulkFromClass).map((sec) => (
+                          <option key={sec} value={sec}>Section {sec}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={bulkToClass}
+                        onChange={(e) => {
+                          setBulkToClass(e.target.value);
+                          setBulkToSection("");
+                        }}
+                        className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">New Class</option>
+                        {getUniqueStudentClasses().map((cls) => (
+                          <option key={cls} value={cls}>Class {cls}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={bulkToSection}
+                        onChange={(e) => setBulkToSection(e.target.value)}
+                        disabled={!bulkToClass}
+                        className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      >
+                        <option value="">New Section</option>
+                        {getUniqueStudentSections(bulkToClass).map((sec) => (
+                          <option key={sec} value={sec}>Section {sec}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => setPendingMigrationAction({ type: "bulk-class" })}
+                      disabled={!bulkFromClass || !bulkFromSection || !bulkToClass || !bulkToSection || bulkMigrating}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded-lg font-bold transition"
+                    >
+                      {bulkMigrating ? "Migrating..." : "Migrate All"}
+                    </button>
+                  </div>
+                )}
+
+                {bulkMigrating && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="text-sm font-semibold text-blue-800">Migration in progress...</div>
+                    <div className="w-full h-2 bg-blue-100 rounded-full mt-2 overflow-hidden">
+                      <div className="h-full w-2/3 bg-blue-600 animate-pulse" />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1842,6 +2542,353 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {(selectedStudentIds().length > 0 || lastDeletedBatch) && (
+        <div className="fixed bottom-0 left-0 right-0 md:left-64 z-40 border-t border-slate-200 bg-white/95 backdrop-blur px-3 py-3 md:px-6 shadow-2xl">
+          <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-slate-800">
+              {selectedStudentIds().length > 0
+                ? `${selectedStudentIds().length} students selected`
+                : "No active selection"}
+            </div>
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+              <button
+                onClick={openEditSelectedStudents}
+                disabled={selectedStudentIds().length === 0 || Boolean(bulkActionLoading)}
+                className="flex-1 md:flex-none min-h-[44px] px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white disabled:bg-slate-300"
+              >
+                {bulkActionLoading === "edit" ? "Updating..." : "Edit Selected"}
+              </button>
+              <button
+                onClick={() => setShowStudentDeleteConfirm(true)}
+                disabled={selectedStudentIds().length === 0 || Boolean(bulkActionLoading)}
+                className="flex-1 md:flex-none min-h-[44px] px-4 py-2 rounded-lg text-sm font-bold bg-red-600 text-white disabled:bg-slate-300"
+              >
+                {bulkActionLoading === "delete" ? "Deleting..." : "Delete Selected"}
+              </button>
+              {lastDeletedBatch && (
+                <button
+                  onClick={undoLastDelete}
+                  disabled={bulkActionLoading === "undo"}
+                  className="flex-1 md:flex-none min-h-[44px] px-4 py-2 rounded-lg text-sm font-bold bg-amber-500 text-white disabled:bg-slate-300"
+                >
+                  {bulkActionLoading === "undo" ? "Undoing..." : `Undo (${undoSecondsLeft}s)`}
+                </button>
+              )}
+              <button
+                onClick={clearStudentSelection}
+                disabled={selectedStudentIds().length === 0 || Boolean(bulkActionLoading)}
+                className="flex-1 md:flex-none min-h-[44px] px-4 py-2 rounded-lg text-sm font-bold border border-slate-300 text-slate-700 bg-white disabled:opacity-50"
+              >
+                Clear Selection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSingleEditModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="px-5 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-900">Edit Student</h3>
+            </div>
+            <div className="p-5 space-y-3">
+              <select
+                value={singleEditForm.class}
+                onChange={(e) => setSingleEditForm((prev) => ({ ...prev, class: e.target.value }))}
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="">Select Class</option>
+                {getUniqueStudentClasses().map((cls) => (
+                  <option key={cls} value={cls}>Class {cls}</option>
+                ))}
+              </select>
+              <select
+                value={singleEditForm.section}
+                onChange={(e) => setSingleEditForm((prev) => ({ ...prev, section: e.target.value }))}
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="">Select Section</option>
+                {getUniqueStudentSections(singleEditForm.class || studentFilterClass).map((sec) => (
+                  <option key={sec} value={sec}>Section {sec}</option>
+                ))}
+              </select>
+              <select
+                value={singleEditForm.assignedTeacher}
+                onChange={(e) => setSingleEditForm((prev) => ({ ...prev, assignedTeacher: e.target.value }))}
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="">Unassigned</option>
+                {teachers.map((t) => (
+                  <option key={t._id} value={t._id}>
+                    {t.name} ({t.class || "N/A"}-{t.section || "N/A"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-200 flex gap-2 justify-end">
+              <button
+                onClick={() => setShowSingleEditModal(false)}
+                className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runSingleStudentEdit}
+                disabled={bulkActionLoading === "edit"}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold disabled:bg-slate-400"
+              >
+                {bulkActionLoading === "edit" ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkEditModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+            <div className="px-5 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-900">Bulk Edit Students</h3>
+              <p className="text-xs text-slate-500 mt-1">Only provided fields will be updated.</p>
+            </div>
+            <div className="p-5 space-y-3">
+              <select
+                value={bulkEditForm.class}
+                onChange={(e) => setBulkEditForm((prev) => ({ ...prev, class: e.target.value }))}
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="">No change to Class</option>
+                {getUniqueStudentClasses().map((cls) => (
+                  <option key={cls} value={cls}>Class {cls}</option>
+                ))}
+              </select>
+              <select
+                value={bulkEditForm.section}
+                onChange={(e) => setBulkEditForm((prev) => ({ ...prev, section: e.target.value }))}
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="">No change to Section</option>
+                {getUniqueStudentSections(bulkEditForm.class || studentFilterClass).map((sec) => (
+                  <option key={sec} value={sec}>Section {sec}</option>
+                ))}
+              </select>
+              <select
+                value={bulkEditForm.assignedTeacher}
+                onChange={(e) => setBulkEditForm((prev) => ({ ...prev, assignedTeacher: e.target.value }))}
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="__NO_CHANGE__">No change to Assigned Teacher</option>
+                <option value="__UNASSIGNED__">Unassigned</option>
+                {teachers.map((t) => (
+                  <option key={t._id} value={t._id}>
+                    {t.name} ({t.class || "N/A"}-{t.section || "N/A"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-200 flex gap-2 justify-end">
+              <button
+                onClick={() => setShowBulkEditModal(false)}
+                className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runBulkEditStudents}
+                disabled={bulkActionLoading === "edit"}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold disabled:bg-slate-400"
+              >
+                {bulkActionLoading === "edit" ? "Updating..." : "Update Selected"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedStudentProfile && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">
+                Student Profile: {selectedStudentProfile.name}
+              </h3>
+              <button
+                onClick={() => setSelectedStudentProfile(null)}
+                className="text-slate-500 hover:text-slate-700 text-sm font-semibold"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="px-6 py-3 border-b border-slate-200 flex gap-2">
+              <button
+                onClick={() => setStudentProfileTab("details")}
+                className={`px-3 py-2 rounded-lg text-sm font-semibold ${studentProfileTab === "details" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}
+              >
+                Details
+              </button>
+              <button
+                onClick={() => setStudentProfileTab("history")}
+                className={`px-3 py-2 rounded-lg text-sm font-semibold ${studentProfileTab === "history" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}
+              >
+                Migration History
+              </button>
+            </div>
+
+            <div className="p-6 overflow-auto max-h-[60vh]">
+              {studentProfileTab === "details" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div><span className="font-semibold">Email:</span> {selectedStudentProfile.email || "N/A"}</div>
+                  <div><span className="font-semibold">Roll No:</span> {selectedStudentProfile.rollNo || "N/A"}</div>
+                  <div><span className="font-semibold">Current Class:</span> {selectedStudentProfile.class || selectedStudentProfile.currentClass || "N/A"}</div>
+                  <div><span className="font-semibold">Current Section:</span> {selectedStudentProfile.section || selectedStudentProfile.currentSection || "N/A"}</div>
+                  <div><span className="font-semibold">Parent Name:</span> {selectedStudentProfile.parentName || "N/A"}</div>
+                  <div><span className="font-semibold">Phone:</span> {selectedStudentProfile.phone || "N/A"}</div>
+                </div>
+              )}
+
+              {studentProfileTab === "history" && (
+                <div>
+                  {!Array.isArray(selectedStudentProfile.migrationHistory) || selectedStudentProfile.migrationHistory.length === 0 ? (
+                    <div className="text-sm text-slate-500 bg-slate-50 rounded-lg border border-slate-200 p-4">
+                      No migration history available.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50">
+                          <tr className="text-left text-slate-700">
+                            <th className="px-3 py-2">From</th>
+                            <th className="px-3 py-2">To</th>
+                            <th className="px-3 py-2">Date</th>
+                            <th className="px-3 py-2">By Admin</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...selectedStudentProfile.migrationHistory]
+                            .reverse()
+                            .map((item, idx) => (
+                              <tr key={`${item.migratedAt || idx}-${idx}`} className="border-t border-slate-100">
+                                <td className="px-3 py-2">{item.fromClass || "-"}-{item.fromSection || "-"}</td>
+                                <td className="px-3 py-2">{item.toClass || "-"}-{item.toSection || "-"}</td>
+                                <td className="px-3 py-2">
+                                  {item.migratedAt ? new Date(item.migratedAt).toLocaleString() : "N/A"}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {item.migratedByEmail || String(item.migratedBy || "Unknown")}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSummaryModal && migrationSummary && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Migration Summary</h3>
+              <button
+                onClick={() => setShowSummaryModal(false)}
+                className="text-slate-500 hover:text-slate-700 text-sm font-semibold"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-6 space-y-4 overflow-auto max-h-[70vh]">
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <div className="text-slate-500">Requested</div>
+                  <div className="font-bold text-slate-900">{migrationSummary.requested || 0}</div>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="text-green-700">Success</div>
+                  <div className="font-bold text-green-800">{migrationSummary.successCount || 0}</div>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="text-red-700">Failed</div>
+                  <div className="font-bold text-red-800">{(migrationSummary.failed || []).length}</div>
+                </div>
+              </div>
+
+              {Array.isArray(migrationSummary.failed) && migrationSummary.failed.length > 0 && (
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50">
+                      <tr className="text-left text-slate-700">
+                        <th className="px-3 py-2">Student</th>
+                        <th className="px-3 py-2">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {migrationSummary.failed.map((f, idx) => (
+                        <tr key={`${f.student || "row"}-${idx}`} className="border-t border-slate-100">
+                          <td className="px-3 py-2">{f.student || "Unknown"}</td>
+                          <td className="px-3 py-2 text-red-700">{f.reason || "Unknown error"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmationModal
+        isOpen={showStudentDeleteConfirm}
+        title="Confirm Bulk Delete"
+        message={`Delete ${selectedStudentIds().length} students?`}
+        warning="You can undo this for 10 seconds."
+        confirmText={bulkActionLoading === "delete" ? "Deleting..." : "Delete"}
+        cancelText="Cancel"
+        isLoading={bulkActionLoading === "delete"}
+        isDangerous={true}
+        onCancel={() => {
+          if (bulkActionLoading !== "delete") setShowStudentDeleteConfirm(false);
+        }}
+        onConfirm={runBulkDeleteStudents}
+      />
+
+      <ConfirmationModal
+        isOpen={Boolean(pendingMigrationAction)}
+        title="Confirm Migration"
+        message="Are you sure you want to migrate?"
+        warning="This will move the selected student(s) to a new class/section."
+        confirmText={bulkMigrating || migratingStudentId ? "Migrating..." : "Yes, Migrate"}
+        cancelText="Cancel"
+        isLoading={Boolean(bulkMigrating || migratingStudentId)}
+        isDangerous={false}
+        onCancel={() => {
+          if (!bulkMigrating && !migratingStudentId) {
+            setPendingMigrationAction(null);
+          }
+        }}
+        onConfirm={() => {
+          if (!pendingMigrationAction) return;
+          if (pendingMigrationAction.type === "single") {
+            runSingleStudentMigration();
+            return;
+          }
+          if (pendingMigrationAction.type === "bulk-file") {
+            runBulkMigrationFromFile();
+            return;
+          }
+          if (pendingMigrationAction.type === "bulk-class") {
+            runBulkMigrationByClass();
+          }
+        }}
+      />
     </div>
   );
 }

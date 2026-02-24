@@ -400,6 +400,7 @@ app.post("/api/auth/student/login", async (req, res) => {
 
     const student = await db.collection("students").findOne({
       userId: user._id,
+      isDeleted: { $ne: true },
     });
     console.log("🔍 Student profile found:", !!student);
 
@@ -588,6 +589,7 @@ app.get("/api/student/dashboard", requireAuth, requireRole("STUDENT"), requireTe
     const student = await db.collection("students").findOne({
       userId: userObjectId,
       schoolId: schoolObjectId,
+      isDeleted: { $ne: true },
     });
 
     if (!student) {
@@ -658,6 +660,7 @@ app.get("/api/student/attendance", requireAuth, requireRole("STUDENT"), requireT
     const student = await db.collection("students").findOne({
       userId: userObjectId,
       schoolId: schoolObjectId,
+      isDeleted: { $ne: true },
     });
     if (!student) return res.json([]);
 
@@ -701,6 +704,7 @@ app.get("/api/student/marks", requireAuth, requireRole("STUDENT"), requireTenant
     const student = await db.collection("students").findOne({
       userId: userObjectId,
       schoolId: schoolObjectId,
+      isDeleted: { $ne: true },
     });
     if (!student) return res.json([]);
 
@@ -744,6 +748,7 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
     const student = await db.collection("students").findOne({
       userId: userObjectId,
       schoolId,
+      isDeleted: { $ne: true },
     });
 
     if (!student) {
@@ -1021,6 +1026,7 @@ app.get(
           class: req.user.class,
           section: req.user.section,
           schoolId,
+          isDeleted: { $ne: true },
         })
         .toArray();
 
@@ -1128,13 +1134,20 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
                   email: email,
                   name: row.name,
                   class: String(row.class),
+                  currentClass: String(row.class),
                   className: String(row.class),
                   section: String(row.section),
+                  currentSection: String(row.section),
+                  assignedTeacher: row.assignedTeacher ? safeObjectId(row.assignedTeacher) || null : null,
                   rollNo: row.rollNo || "",
                   parentName: row.parentName || "",
                   phone: row.phone || "",
+                  isDeleted: false,
                   schoolId: schoolId,
                   createdAt: new Date(),
+                },
+                $setOnInsert: {
+                  migrationHistory: [],
                 },
               },
               { upsert: true }
@@ -1646,6 +1659,7 @@ app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTen
       class: className,
       section: section,
       schoolId: schoolId,
+      isDeleted: { $ne: true },
     };
 
     console.log("✅ STUDENT QUERY - schoolId:", schoolId, "class:", className, "section:", section);
@@ -1772,6 +1786,7 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
     const student = await db.collection("students").findOne({
       _id: studentIdObj,
       schoolId,
+      isDeleted: { $ne: true },
     });
 
     if (!student) {
@@ -1971,7 +1986,7 @@ app.get(
    ================================= */
 app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
   try {
-    const { name, email, rollNo, className, section, password, parentName, phone } = req.body;
+    const { name, email, rollNo, className, section, password, parentName, phone, assignedTeacher } = req.body;
     if (!name || !email) return res.status(400).json({ error: "Missing name or email" });
     const schoolId = req.user.schoolIdObj;
     if (!schoolId) return res.status(400).json({ error: "Missing schoolId" });
@@ -1998,10 +2013,15 @@ app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTen
       email: String(email).toLowerCase(),
       name,
       class: String(className ?? ""),
+      currentClass: String(className ?? ""),
       section: String(section ?? ""),
+      currentSection: String(section ?? ""),
+      assignedTeacher: assignedTeacher ? safeObjectId(assignedTeacher) || null : null,
       rollNo: rollNo || "",
       parentName: parentName || "",
       phone: phone || "",
+      isDeleted: false,
+      migrationHistory: [],
       schoolId,
       createdAt: new Date(),
     };
@@ -2188,13 +2208,26 @@ app.get(
     try {
       const schoolId = req.user.schoolIdObj;
 
-      const studentsQuery = { schoolId };
+      const studentsQuery = withActiveStudents({ schoolId });
       const teachersQuery = { schoolId };
 
       const students = await db
         .collection("students")
         .find(studentsQuery)
-        .project({ name: 1, _id: 1, class: 1, section: 1, rollNo: 1, parentName: 1, phone: 1, email: 1 })
+        .project({
+          name: 1,
+          _id: 1,
+          class: 1,
+          section: 1,
+          currentClass: 1,
+          currentSection: 1,
+          assignedTeacher: 1,
+          rollNo: 1,
+          parentName: 1,
+          phone: 1,
+          email: 1,
+          migrationHistory: 1,
+        })
         .sort({ name: 1 })
         .toArray();
       const teachers = await db
@@ -2285,39 +2318,45 @@ app.delete(
     try {
       const studentId = safeObjectId(req.params.id);
       const schoolId = req.user.schoolIdObj;
+      const adminId = safeObjectId(req.user.userId);
 
-      if (!studentId || !schoolId) {
-        return res.status(400).json({ error: "Invalid studentId or schoolId" });
+      if (!studentId || !schoolId || !adminId) {
+        return res.status(400).json({ error: "Invalid studentId, schoolId, or adminId" });
       }
 
-      // ✅ TENANT CHECK: Verify student belongs to this school
       const student = await db.collection("students").findOne({
         _id: studentId,
         schoolId,
+        isDeleted: { $ne: true },
       });
 
       if (!student) {
         return res.status(404).json({ error: "Student not found" });
       }
 
-      // Delete related data
-      await db.collection("attendance").deleteMany({ studentId });
-      await db.collection("marks").deleteMany({ studentId });
-      await db.collection("homework").deleteMany({ "submittedBy.studentId": studentId });
+      await detachStudentsFromTeachers(db.collection("teachers"), [studentId], schoolId);
+      await detachStudentsFromClassMappings([studentId], schoolId);
 
-      // Delete from students collection
-      await db.collection("students").deleteOne({ _id: studentId });
+      await db.collection("students").updateOne(
+        { _id: studentId, schoolId },
+        {
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: adminId,
+            previousAssignment: {
+              class: student.class || student.currentClass || "",
+              section: student.section || student.currentSection || "",
+              assignedTeacher: student.assignedTeacher || null,
+            },
+          },
+        }
+      );
 
-      // Optional: Delete user account
-      if (student.userId) {
-        await db.collection("users").deleteOne({ _id: student.userId });
-      }
-
-      // Log action
       await db.collection("adminLogs").insertOne({
         schoolId,
-        adminId: safeObjectId(req.user.userId),
-        action: "DELETE_STUDENT",
+        adminId,
+        action: "SOFT_DELETE_STUDENT",
         targetType: "STUDENT",
         targetId: studentId,
         targetName: student.name,
@@ -2325,11 +2364,748 @@ app.delete(
         details: { email: student.email, class: student.class, section: student.section, rollNo: student.rollNo },
       });
 
-      console.log("✅ STUDENT DELETED:", student.name, "ID:", studentId);
+      console.log("✅ STUDENT SOFT DELETED:", student.name, "ID:", studentId);
       res.json({ success: true, message: `Student ${student.name} deleted` });
     } catch (err) {
       console.error("❌ DELETE STUDENT ERROR:", err);
       res.status(500).json({ error: "Failed to delete student" });
+    }
+  }
+);
+
+/* ================================
+   ADMIN: STUDENT MIGRATION HELPERS
+   ================================= */
+const normalizeClassOrSection = (value) => String(value ?? "").trim();
+const normalizeEmail = (value) => String(value ?? "").trim().toLowerCase();
+const activeStudentsFilter = { isDeleted: { $ne: true } };
+
+const withActiveStudents = (query = {}) => ({
+  ...query,
+  ...activeStudentsFilter,
+});
+
+async function detachStudentsFromTeachers(teachersCol, studentObjectIds = [], schoolId) {
+  if (!Array.isArray(studentObjectIds) || studentObjectIds.length === 0 || !schoolId) return;
+  await teachersCol.updateMany(
+    { schoolId, assignedStudents: { $in: studentObjectIds } },
+    { $pull: { assignedStudents: { $in: studentObjectIds } } }
+  );
+}
+
+async function detachStudentsFromClassMappings(studentObjectIds = [], schoolId) {
+  if (!Array.isArray(studentObjectIds) || studentObjectIds.length === 0 || !schoolId) return;
+
+  const idsAsString = studentObjectIds.map((id) => String(id));
+  const mappingCollections = ["classSectionMappings", "classSectionMap", "classMappings"];
+  await Promise.all(
+    mappingCollections.map(async (collectionName) => {
+      try {
+        await db.collection(collectionName).updateMany(
+          { schoolId },
+          {
+            $pull: {
+              studentIds: { $in: studentObjectIds },
+              students: { $in: [...studentObjectIds, ...idsAsString] },
+            },
+          }
+        );
+      } catch (err) {
+        console.warn(`⚠️ CLASS MAPPING DETACH SKIPPED (${collectionName}):`, err.message);
+      }
+    })
+  );
+}
+
+async function attachStudentToTeacher(teachersCol, schoolId, teacherId, studentId) {
+  if (!schoolId || !teacherId || !studentId) return false;
+  const teacherObjectId = safeObjectId(teacherId);
+  const studentObjectId = safeObjectId(studentId);
+  if (!teacherObjectId || !studentObjectId) return false;
+
+  const teacher = await teachersCol.findOne({ _id: teacherObjectId, schoolId });
+  if (!teacher) return false;
+
+  await teachersCol.updateOne(
+    { _id: teacherObjectId, schoolId },
+    { $addToSet: { assignedStudents: studentObjectId } }
+  );
+  return true;
+}
+
+async function reattachStudentToClassMappings(schoolId, className, section, studentId) {
+  if (!schoolId || !className || !section || !studentId) return false;
+  const studentObjectId = safeObjectId(studentId);
+  if (!studentObjectId) return false;
+  const idsAsString = String(studentObjectId);
+  const mappingCollections = ["classSectionMappings", "classSectionMap", "classMappings"];
+
+  let attached = false;
+  for (const collectionName of mappingCollections) {
+    try {
+      const result = await db.collection(collectionName).updateOne(
+        { schoolId, class: String(className), section: String(section) },
+        {
+          $addToSet: {
+            studentIds: studentObjectId,
+            students: idsAsString,
+          },
+        }
+      );
+      if (result.matchedCount > 0) attached = true;
+    } catch (err) {
+      console.warn(`⚠️ CLASS MAPPING ATTACH SKIPPED (${collectionName}):`, err.message);
+    }
+  }
+  return attached;
+}
+
+/* ================================
+   ADMIN: BULK SOFT DELETE STUDENTS
+   ================================= */
+app.post(
+  "/api/admin/students/bulk-delete",
+  requireAuth,
+  requireRole("ADMIN"),
+  requireTenantId,
+  async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const adminId = safeObjectId(req.user.userId);
+      const studentIds = Array.isArray(req.body?.studentIds) ? req.body.studentIds : [];
+      const objectIds = studentIds.map((id) => safeObjectId(id)).filter(Boolean);
+
+      if (!schoolId || !adminId) return res.status(400).json({ error: "Invalid schoolId or adminId" });
+      if (objectIds.length === 0) return res.status(400).json({ error: "studentIds array is required" });
+
+      const studentsCol = db.collection("students");
+      const teachersCol = db.collection("teachers");
+
+      const students = await studentsCol.find({
+        _id: { $in: objectIds },
+        schoolId,
+        isDeleted: { $ne: true },
+      }).toArray();
+
+      const foundIds = new Set(students.map((s) => String(s._id)));
+      const failed = [];
+      objectIds.forEach((id) => {
+        if (!foundIds.has(String(id))) failed.push({ studentId: String(id), reason: "Student not found or already deleted" });
+      });
+
+      if (students.length > 0) {
+        const now = new Date();
+        await detachStudentsFromTeachers(teachersCol, students.map((s) => s._id), schoolId);
+        await detachStudentsFromClassMappings(students.map((s) => s._id), schoolId);
+
+        await Promise.all(
+          students.map((student) =>
+            studentsCol.updateOne(
+              { _id: student._id, schoolId, isDeleted: { $ne: true } },
+              {
+                $set: {
+                  isDeleted: true,
+                  deletedAt: now,
+                  deletedBy: adminId,
+                  previousAssignment: {
+                    class: student.class || student.currentClass || "",
+                    section: student.section || student.currentSection || "",
+                    assignedTeacher: student.assignedTeacher || null,
+                  },
+                },
+              }
+            )
+          )
+        );
+      }
+
+      await db.collection("adminLogs").insertOne({
+        schoolId,
+        adminId,
+        action: "BULK_SOFT_DELETE_STUDENTS",
+        targetType: "STUDENT",
+        timestamp: new Date(),
+        details: {
+          requestedCount: objectIds.length,
+          affectedCount: students.length,
+          failedCount: failed.length,
+        },
+      });
+
+      return res.json({
+        affectedCount: students.length,
+        failed,
+      });
+    } catch (err) {
+      console.error("❌ BULK DELETE STUDENTS ERROR:", err);
+      return res.status(500).json({ error: "Failed to bulk delete students" });
+    }
+  }
+);
+
+/* ================================
+   ADMIN: BULK RESTORE STUDENTS
+   ================================= */
+app.post(
+  "/api/admin/students/bulk-restore",
+  requireAuth,
+  requireRole("ADMIN"),
+  requireTenantId,
+  async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const adminId = safeObjectId(req.user.userId);
+      const studentIds = Array.isArray(req.body?.studentIds) ? req.body.studentIds : [];
+      const objectIds = studentIds.map((id) => safeObjectId(id)).filter(Boolean);
+
+      if (!schoolId || !adminId) return res.status(400).json({ error: "Invalid schoolId or adminId" });
+      if (objectIds.length === 0) return res.status(400).json({ error: "studentIds array is required" });
+
+      const studentsCol = db.collection("students");
+      const teachersCol = db.collection("teachers");
+      const failed = [];
+      const warnings = [];
+      let affectedCount = 0;
+
+      const students = await studentsCol.find({
+        _id: { $in: objectIds },
+        schoolId,
+        isDeleted: true,
+      }).toArray();
+
+      const foundIds = new Set(students.map((s) => String(s._id)));
+      objectIds.forEach((id) => {
+        if (!foundIds.has(String(id))) failed.push({ studentId: String(id), reason: "Deleted student not found" });
+      });
+
+      for (const student of students) {
+        try {
+          const previous = student.previousAssignment || {};
+          const restoredClass = String(previous.class || student.class || student.currentClass || "").trim();
+          const restoredSection = String(previous.section || student.section || student.currentSection || "").trim();
+          const previousTeacherId = previous.assignedTeacher ? safeObjectId(previous.assignedTeacher) : null;
+
+          const updateDoc = {
+            isDeleted: false,
+            restoredAt: new Date(),
+            restoredBy: adminId,
+          };
+
+          if (restoredClass) {
+            updateDoc.class = restoredClass;
+            updateDoc.currentClass = restoredClass;
+          }
+          if (restoredSection) {
+            updateDoc.section = restoredSection;
+            updateDoc.currentSection = restoredSection;
+          }
+
+          if (previousTeacherId) {
+            const attached = await attachStudentToTeacher(teachersCol, schoolId, previousTeacherId, student._id);
+            if (attached) {
+              updateDoc.assignedTeacher = previousTeacherId;
+            } else {
+              updateDoc.assignedTeacher = null;
+              warnings.push({ studentId: String(student._id), reason: "Previous teacher not found; restored as Unassigned" });
+            }
+          } else {
+            updateDoc.assignedTeacher = null;
+            warnings.push({ studentId: String(student._id), reason: "No previous teacher mapping; restored as Unassigned" });
+          }
+
+          const classAttached = await reattachStudentToClassMappings(
+            schoolId,
+            restoredClass,
+            restoredSection,
+            student._id
+          );
+          if (!classAttached) {
+            warnings.push({ studentId: String(student._id), reason: "Class/section mapping not found during restore" });
+          }
+
+          const result = await studentsCol.updateOne(
+            { _id: student._id, schoolId, isDeleted: true },
+            {
+              $set: updateDoc,
+              $unset: { deletedAt: "", deletedBy: "" },
+            }
+          );
+
+          if (result.modifiedCount > 0) {
+            affectedCount += 1;
+          } else {
+            failed.push({ studentId: String(student._id), reason: "Failed to restore student" });
+          }
+        } catch (rowErr) {
+          failed.push({ studentId: String(student._id), reason: rowErr.message || "Restore failed" });
+        }
+      }
+
+      await db.collection("adminLogs").insertOne({
+        schoolId,
+        adminId,
+        action: "BULK_RESTORE_STUDENTS",
+        targetType: "STUDENT",
+        timestamp: new Date(),
+        details: {
+          requestedCount: objectIds.length,
+          affectedCount,
+          failedCount: failed.length,
+          warningCount: warnings.length,
+        },
+      });
+
+      return res.json({
+        affectedCount,
+        failed,
+        warnings,
+      });
+    } catch (err) {
+      console.error("❌ BULK RESTORE STUDENTS ERROR:", err);
+      return res.status(500).json({ error: "Failed to bulk restore students" });
+    }
+  }
+);
+
+/* ================================
+   ADMIN: BULK UPDATE STUDENTS
+   ================================= */
+app.post(
+  "/api/admin/students/bulk-update",
+  requireAuth,
+  requireRole("ADMIN"),
+  requireTenantId,
+  async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const adminId = safeObjectId(req.user.userId);
+      const studentIds = Array.isArray(req.body?.studentIds) ? req.body.studentIds : [];
+      const updates = req.body?.updates || {};
+      const objectIds = studentIds.map((id) => safeObjectId(id)).filter(Boolean);
+
+      if (!schoolId || !adminId) return res.status(400).json({ error: "Invalid schoolId or adminId" });
+      if (objectIds.length === 0) return res.status(400).json({ error: "studentIds array is required" });
+
+      const hasClass = typeof updates.class !== "undefined" && String(updates.class).trim() !== "";
+      const hasSection = typeof updates.section !== "undefined" && String(updates.section).trim() !== "";
+      const hasAssignedTeacher = typeof updates.assignedTeacher !== "undefined";
+      if (!hasClass && !hasSection && !hasAssignedTeacher) {
+        return res.status(400).json({ error: "At least one field is required: class, section, assignedTeacher" });
+      }
+
+      const studentsCol = db.collection("students");
+      const teachersCol = db.collection("teachers");
+      const students = await studentsCol.find({
+        _id: { $in: objectIds },
+        schoolId,
+        isDeleted: { $ne: true },
+      }).toArray();
+
+      const foundIds = new Set(students.map((s) => String(s._id)));
+      const failed = [];
+      objectIds.forEach((id) => {
+        if (!foundIds.has(String(id))) failed.push({ studentId: String(id), reason: "Student not found or deleted" });
+      });
+
+      let affectedCount = 0;
+      const assignedTeacherObjectId =
+        hasAssignedTeacher && String(updates.assignedTeacher).trim()
+          ? safeObjectId(updates.assignedTeacher)
+          : null;
+
+      for (const student of students) {
+        try {
+          const setDoc = {};
+          if (hasClass) {
+            const classValue = String(updates.class).trim();
+            setDoc.class = classValue;
+            setDoc.currentClass = classValue;
+          }
+          if (hasSection) {
+            const sectionValue = String(updates.section).trim();
+            setDoc.section = sectionValue;
+            setDoc.currentSection = sectionValue;
+          }
+
+          if (hasAssignedTeacher) {
+            await detachStudentsFromTeachers(teachersCol, [student._id], schoolId);
+            if (assignedTeacherObjectId) {
+              const attached = await attachStudentToTeacher(teachersCol, schoolId, assignedTeacherObjectId, student._id);
+              setDoc.assignedTeacher = attached ? assignedTeacherObjectId : null;
+              if (!attached) {
+                failed.push({ studentId: String(student._id), reason: "Assigned teacher not found; set as Unassigned" });
+              }
+            } else {
+              setDoc.assignedTeacher = null;
+            }
+          }
+
+          if (Object.keys(setDoc).length > 0) {
+            setDoc.updatedAt = new Date();
+            const updateResult = await studentsCol.updateOne(
+              { _id: student._id, schoolId, isDeleted: { $ne: true } },
+              { $set: setDoc }
+            );
+            if (updateResult.modifiedCount > 0) affectedCount += 1;
+          }
+        } catch (rowErr) {
+          failed.push({ studentId: String(student._id), reason: rowErr.message || "Bulk update failed" });
+        }
+      }
+
+      await db.collection("adminLogs").insertOne({
+        schoolId,
+        adminId,
+        action: "BULK_UPDATE_STUDENTS",
+        targetType: "STUDENT",
+        timestamp: new Date(),
+        details: {
+          requestedCount: objectIds.length,
+          affectedCount,
+          failedCount: failed.length,
+          updates: {
+            class: hasClass ? String(updates.class).trim() : undefined,
+            section: hasSection ? String(updates.section).trim() : undefined,
+            assignedTeacher: hasAssignedTeacher ? String(updates.assignedTeacher || "") : undefined,
+          },
+        },
+      });
+
+      return res.json({ affectedCount, failed });
+    } catch (err) {
+      console.error("❌ BULK UPDATE STUDENTS ERROR:", err);
+      return res.status(500).json({ error: "Failed to bulk update students" });
+    }
+  }
+);
+
+const getStudentPlacement = (student) => ({
+  classValue: normalizeClassOrSection(student?.class || student?.currentClass),
+  sectionValue: normalizeClassOrSection(student?.section || student?.currentSection),
+});
+
+async function resolveStudentForMigration(studentsCol, schoolId, item) {
+  const studentId = safeObjectId(item?.studentId);
+  if (studentId) {
+    const student = await studentsCol.findOne(withActiveStudents({ _id: studentId, schoolId }));
+    if (!student) return { ok: false, reason: "Student not found for given studentId" };
+    return { ok: true, student };
+  }
+
+  if (item?.email) {
+    const email = normalizeEmail(item.email);
+    const student = await studentsCol.findOne(withActiveStudents({ schoolId, email }));
+    if (!student) return { ok: false, reason: "Student not found for given email" };
+    return { ok: true, student };
+  }
+
+  if (item?.rollNo) {
+    const rollNo = String(item.rollNo).trim();
+    if (!rollNo) return { ok: false, reason: "rollNo cannot be empty" };
+
+    const rollMatches = await studentsCol.find(withActiveStudents({ schoolId, rollNo })).toArray();
+    if (rollMatches.length === 0) {
+      return { ok: false, reason: "Student not found for given rollNo" };
+    }
+    if (rollMatches.length === 1) {
+      return { ok: true, student: rollMatches[0] };
+    }
+
+    const fromClass = normalizeClassOrSection(item?.fromClass);
+    const fromSection = normalizeClassOrSection(item?.fromSection);
+    if (!fromClass || !fromSection) {
+      return {
+        ok: false,
+        reason: "rollNo matched multiple students. Provide studentId/email or include fromClass and fromSection",
+      };
+    }
+
+    const matchedStudent = rollMatches.find((s) => {
+      const placement = getStudentPlacement(s);
+      return placement.classValue === fromClass && placement.sectionValue === fromSection;
+    });
+
+    if (!matchedStudent) {
+      return { ok: false, reason: "No student found for rollNo in the provided fromClass/fromSection" };
+    }
+    return { ok: true, student: matchedStudent };
+  }
+
+  return { ok: false, reason: "Provide one identifier: studentId, rollNo, or email" };
+}
+
+async function migrateSingleStudentRecord({
+  studentsCol,
+  schoolId,
+  student,
+  toClass,
+  toSection,
+  adminObjectId,
+  migratedByEmail,
+}) {
+  const targetClass = normalizeClassOrSection(toClass);
+  const targetSection = normalizeClassOrSection(toSection);
+
+  if (!targetClass || !targetSection) {
+    return { ok: false, reason: "newClass and newSection are required" };
+  }
+
+  const { classValue: fromClass, sectionValue: fromSection } = getStudentPlacement(student);
+  if (!fromClass || !fromSection) {
+    return { ok: false, reason: "Student has invalid current class/section" };
+  }
+
+  if (fromClass === targetClass && fromSection === targetSection) {
+    return { ok: false, reason: "Student is already in the target class/section" };
+  }
+
+  const rollNo = String(student.rollNo || "").trim();
+  if (rollNo) {
+    const duplicate = await studentsCol.findOne({
+      schoolId,
+      _id: { $ne: student._id },
+      rollNo,
+      class: targetClass,
+      section: targetSection,
+      isDeleted: { $ne: true },
+    });
+
+    if (duplicate) {
+      return { ok: false, reason: `Duplicate roll number '${rollNo}' in Class ${targetClass}, Section ${targetSection}` };
+    }
+  }
+
+  const now = new Date();
+  const migrationEntry = {
+    fromClass,
+    fromSection,
+    toClass: targetClass,
+    toSection: targetSection,
+    migratedAt: now,
+    migratedBy: adminObjectId,
+    migratedByEmail: migratedByEmail || "",
+  };
+
+  const updateResult = await studentsCol.updateOne(
+    { _id: student._id, schoolId },
+    {
+      $set: {
+        class: targetClass,
+        section: targetSection,
+        currentClass: targetClass,
+        currentSection: targetSection,
+        migratedAt: now,
+        updatedAt: now,
+      },
+      $push: {
+        migrationHistory: migrationEntry,
+      },
+    }
+  );
+
+  if (updateResult.modifiedCount === 0) {
+    return { ok: false, reason: "Migration failed to update student record" };
+  }
+
+  return { ok: true, fromClass, fromSection, toClass: targetClass, toSection: targetSection, migrationEntry };
+}
+
+/* ================================
+   ADMIN: MIGRATE SINGLE STUDENT
+   ================================= */
+app.post(
+  "/api/admin/students/:id/migrate",
+  requireAuth,
+  requireRole("ADMIN"),
+  requireTenantId,
+  async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const adminObjectId = safeObjectId(req.user.userId);
+      const studentId = safeObjectId(req.params.id);
+      const toClass = req.body?.newClass;
+      const toSection = req.body?.newSection;
+
+      if (!schoolId || !adminObjectId || !studentId) {
+        return res.status(400).json({ error: "Invalid schoolId, adminId, or studentId" });
+      }
+
+      const studentsCol = db.collection("students");
+      const usersCol = db.collection("users");
+      const adminUser = await usersCol.findOne({ _id: adminObjectId });
+      const migratedByEmail = adminUser?.email || "";
+
+      const student = await studentsCol.findOne(withActiveStudents({ _id: studentId, schoolId }));
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      const migration = await migrateSingleStudentRecord({
+        studentsCol,
+        schoolId,
+        student,
+        toClass,
+        toSection,
+        adminObjectId,
+        migratedByEmail,
+      });
+
+      if (!migration.ok) {
+        const statusCode = migration.reason?.startsWith("Duplicate roll number") ? 409 : 400;
+        return res.status(statusCode).json({ error: migration.reason });
+      }
+
+      await db.collection("adminLogs").insertOne({
+        schoolId,
+        adminId: adminObjectId,
+        action: "MIGRATE_SINGLE_STUDENT",
+        targetType: "STUDENT",
+        targetId: student._id,
+        targetName: student.name,
+        timestamp: new Date(),
+        details: {
+          rollNo: student.rollNo || "",
+          fromClass: migration.fromClass,
+          fromSection: migration.fromSection,
+          toClass: migration.toClass,
+          toSection: migration.toSection,
+        },
+      });
+
+      console.log("✅ STUDENT MIGRATED:", student.name, "from", `${migration.fromClass}-${migration.fromSection}`, "to", `${migration.toClass}-${migration.toSection}`);
+      return res.json({
+        success: true,
+        message: "Student migrated successfully",
+        studentId: String(student._id),
+        fromClass: migration.fromClass,
+        fromSection: migration.fromSection,
+        toClass: migration.toClass,
+        toSection: migration.toSection,
+      });
+    } catch (err) {
+      console.error("❌ SINGLE STUDENT MIGRATION ERROR:", err);
+      return res.status(500).json({ error: "Failed to migrate student" });
+    }
+  }
+);
+
+/* ================================
+   ADMIN: BULK MIGRATE STUDENTS
+   ================================= */
+app.post(
+  "/api/admin/students/bulk-migrate",
+  requireAuth,
+  requireRole("ADMIN"),
+  requireTenantId,
+  async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const adminObjectId = safeObjectId(req.user.userId);
+      if (!schoolId || !adminObjectId) {
+        return res.status(400).json({ error: "Invalid schoolId or adminId" });
+      }
+
+      const studentsCol = db.collection("students");
+      const usersCol = db.collection("users");
+      const adminUser = await usersCol.findOne({ _id: adminObjectId });
+      const migratedByEmail = adminUser?.email || "";
+
+      let records = [];
+      if (Array.isArray(req.body)) {
+        records = req.body;
+      } else if (Array.isArray(req.body?.records)) {
+        records = req.body.records;
+      } else if (Array.isArray(req.body?.migrations)) {
+        records = req.body.migrations;
+      } else if (req.body?.migrateAll) {
+        const fromClass = normalizeClassOrSection(req.body?.fromClass);
+        const fromSection = normalizeClassOrSection(req.body?.fromSection);
+        const toClass = normalizeClassOrSection(req.body?.toClass || req.body?.newClass);
+        const toSection = normalizeClassOrSection(req.body?.toSection || req.body?.newSection);
+        if (!fromClass || !fromSection || !toClass || !toSection) {
+          return res.status(400).json({ error: "fromClass, fromSection, toClass, and toSection are required for migrateAll" });
+        }
+
+        const allSourceStudents = await studentsCol.find(withActiveStudents({
+          schoolId,
+          class: fromClass,
+          section: fromSection,
+        })).toArray();
+
+        records = allSourceStudents.map((s) => ({
+          studentId: String(s._id),
+          newClass: toClass,
+          newSection: toSection,
+          fromClass,
+          fromSection,
+        }));
+      } else {
+        return res.status(400).json({ error: "Invalid payload. Send an array or { records: [] }" });
+      }
+
+      if (!Array.isArray(records) || records.length === 0) {
+        return res.status(400).json({ error: "No migration records provided" });
+      }
+
+      let successCount = 0;
+      const failed = [];
+
+      for (let index = 0; index < records.length; index++) {
+        const row = records[index] || {};
+        const identifier = row.studentId || row.email || row.rollNo || `row-${index + 1}`;
+        const toClass = row.newClass || row.toClass;
+        const toSection = row.newSection || row.toSection;
+
+        try {
+          const resolved = await resolveStudentForMigration(studentsCol, schoolId, row);
+          if (!resolved.ok) {
+            failed.push({ student: identifier, reason: resolved.reason });
+            continue;
+          }
+
+          const migration = await migrateSingleStudentRecord({
+            studentsCol,
+            schoolId,
+            student: resolved.student,
+            toClass,
+            toSection,
+            adminObjectId,
+            migratedByEmail,
+          });
+
+          if (!migration.ok) {
+            failed.push({
+              student: resolved.student.email || resolved.student.rollNo || String(resolved.student._id),
+              reason: migration.reason,
+            });
+            continue;
+          }
+
+          successCount += 1;
+        } catch (rowErr) {
+          console.error("❌ BULK MIGRATION ROW ERROR:", rowErr);
+          failed.push({ student: identifier, reason: rowErr.message || "Unexpected migration error" });
+        }
+      }
+
+      await db.collection("adminLogs").insertOne({
+        schoolId,
+        adminId: adminObjectId,
+        action: "BULK_MIGRATE_STUDENTS",
+        targetType: "STUDENT",
+        timestamp: new Date(),
+        details: {
+          requestedCount: records.length,
+          successCount,
+          failedCount: failed.length,
+        },
+      });
+
+      console.log("✅ BULK STUDENT MIGRATION SUMMARY:", { requested: records.length, successCount, failedCount: failed.length });
+      return res.json({ successCount, failed });
+    } catch (err) {
+      console.error("❌ BULK STUDENT MIGRATION ERROR:", err);
+      return res.status(500).json({ error: "Failed to bulk migrate students" });
     }
   }
 );
@@ -2346,6 +3122,9 @@ app.post(
     try {
       const { fromClass, fromSection, toClass, toSection, studentIds, migrateAll } = req.body;
       const schoolId = req.user.schoolIdObj;
+      const adminObjectId = safeObjectId(req.user.userId);
+      const adminUser = await db.collection("users").findOne({ _id: adminObjectId });
+      const migratedByEmail = adminUser?.email || "";
 
       if (!fromClass || !fromSection || !toClass || !toSection) {
         return res.status(400).json({ error: "Missing required fields: fromClass, fromSection, toClass, toSection" });
@@ -2356,6 +3135,7 @@ app.post(
         schoolId,
         class: String(fromClass),
         section: String(fromSection),
+        isDeleted: { $ne: true },
       };
 
       // If specific studentIds provided, add to filter
@@ -2373,6 +3153,8 @@ app.post(
           $set: {
             class: String(toClass),
             section: String(toSection),
+            currentClass: String(toClass),
+            currentSection: String(toSection),
             migratedAt: new Date(),
           },
           $push: {
@@ -2382,7 +3164,8 @@ app.post(
               toClass: String(toClass),
               toSection: String(toSection),
               migratedAt: new Date(),
-              migratedBy: safeObjectId(req.user.userId),
+              migratedBy: adminObjectId,
+              migratedByEmail,
             },
           },
         }
@@ -3931,12 +4714,16 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
 
     // Create voice message document
     const voiceMessage = {
+      type: "VOICE",
       schoolId,
       senderRole: "ADMIN",
       senderId,
       targetRole: "TEACHER",
       targetUserIds,
       audioUrl,
+      status: "SENT",
+      deliveredCount: targetUserIds.length,
+      failedCount: 0,
       createdAt: new Date(),
     };
 
@@ -3984,9 +4771,10 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
  */
 app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), requireTenantId, voiceUpload.single("audio"), async (req, res) => {
   try {
-    const { targetStudentIds, broadcastToClass } = req.body;
+    const { broadcastToClass } = req.body;
+    let { targetStudentIds } = req.body;
     const schoolId = req.user.schoolIdObj;
-    const senderId = safeObjectId(req.user.userId);
+    const senderUserId = safeObjectId(req.user.userId);
     const className = req.user.class;
     const section = req.user.section;
 
@@ -4003,8 +4791,46 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
       return res.status(400).json({ error: "Audio file is empty. Please record audio and try again." });
     }
 
-    if (!senderId) {
+    if (!senderUserId) {
       return res.status(400).json({ error: "Invalid teacher ID" });
+    }
+
+    const teacherDoc =
+      (await db.collection("teachers").findOne({
+        userId: senderUserId,
+        schoolId,
+      })) ||
+      (await db.collection("teachers").findOne({
+        userId: senderUserId,
+      }));
+    if (!teacherDoc?._id) {
+      console.warn("⚠️ TEACHER PROFILE LOOKUP: Not found in teachers collection, using token userId as senderId fallback");
+    }
+
+    const senderId = teacherDoc?._id || senderUserId;
+    console.log("🧾 TEACHER VOICE SENDER IDS:", {
+      senderId: String(senderId),
+      senderUserId: String(senderUserId),
+      teacherDocFound: Boolean(teacherDoc?._id),
+    });
+
+    if (typeof targetStudentIds === "string") {
+      try {
+        const parsed = JSON.parse(targetStudentIds);
+        if (Array.isArray(parsed)) {
+          targetStudentIds = parsed;
+        }
+      } catch (e) {
+        console.warn("⚠️ targetStudentIds JSON parse failed:", e.message);
+      }
+    }
+
+    const teacherLookup = await db.collection("teachers").findOne({
+      userId: senderUserId,
+      schoolId,
+    });
+    if (!teacherLookup?._id) {
+      console.warn("⚠️ TEACHER LOOKUP FOR CLASS/SECTION missing for schoolId, relying on token class/section");
     }
 
     // Generate audio URL (public path to uploaded file)
@@ -4025,19 +4851,30 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
       targetUserIds = targetStudentIds.map((id) => safeObjectId(id)).filter(Boolean);
     }
 
+    console.log("🔍 TEACHER VOICE TARGETS:", {
+      broadcastToClass,
+      requestedTargetCount: Array.isArray(targetStudentIds) ? targetStudentIds.length : 0,
+      resolvedTargetCount: targetUserIds.length,
+    });
+
     if (targetUserIds.length === 0) {
       return res.status(400).json({ error: "No target students selected" });
     }
 
     const voiceMessage = {
+      type: "VOICE",
       schoolId,
       senderRole: "TEACHER",
       senderId,
+      senderUserId,
       targetRole: "STUDENT",
       targetClass: className,
       targetSection: section,
       targetUserIds,
       audioUrl,
+      status: "SENT",
+      deliveredCount: targetUserIds.length,
+      failedCount: 0,
       createdAt: new Date(),
     };
 
@@ -4066,7 +4903,7 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
       console.log("✅ NOTIFICATIONS CREATED:", notifications.length, "for voice message");
     }
 
-    console.log("✅ TEACHER VOICE BROADCAST - Recipients:", targetUserIds.length, "Class:", className, "Section:", section, "Audio URL:", audioUrl);
+    console.log("✅ TEACHER VOICE BROADCAST - Recipients:", targetUserIds.length, "Class:", className, "Section:", section, "Audio URL:", audioUrl, "Type:", voiceMessage.type, "SenderRole:", voiceMessage.senderRole);
     res.json({
       success: true,
       messageId: voiceMessageId.toString(),
@@ -4309,6 +5146,7 @@ app.get("/api/student/timetable", requireAuth, requireRole("STUDENT"), requireTe
     const student = await db.collection("students").findOne({
       userId,
       schoolId,
+      isDeleted: { $ne: true },
     });
 
     if (!student) {
@@ -4822,6 +5660,7 @@ app.get("/api/student/exam-syllabus", requireAuth, requireRole("STUDENT"), requi
     const student = await db.collection("students").findOne({
       userId: userObjectId,
       schoolId: schoolObjectId,
+      isDeleted: { $ne: true },
     });
 
     if (!student) {
@@ -4974,7 +5813,7 @@ app.get("/api/student/exams", requireAuth, requireRole("STUDENT"), requireTenant
     }
 
     // Get student's class and section
-    const student = await db.collection("students").findOne({ userId, schoolId });
+    const student = await db.collection("students").findOne({ userId, schoolId, isDeleted: { $ne: true } });
 
     if (!student) {
       return res.status(404).json({ error: "Student profile not found" });
@@ -5069,6 +5908,7 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
     // Create announcements for teachers if broadcastTo is "all" or "teachers"
     if ((broadcastTo === "all" || broadcastTo === "teachers") && teacherUserIds.length > 0) {
       const teacherAnnouncement = {
+        type: "VOICE",
         schoolId,
         senderRole: "ADMIN",
         senderId,
@@ -5076,6 +5916,9 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
         audioUrl,
         targetRole: "TEACHER",
         targetUserIds: teacherUserIds,
+        status: "SENT",
+        deliveredCount: teacherUserIds.length,
+        failedCount: 0,
         createdAt: new Date(),
       };
       await db.collection("voice_messages").insertOne(teacherAnnouncement);
@@ -5086,6 +5929,7 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
     // Create announcements for students if broadcastTo is "all" or "students"
     if ((broadcastTo === "all" || broadcastTo === "students") && studentUserIds.length > 0) {
       const studentAnnouncement = {
+        type: "VOICE",
         schoolId,
         senderRole: "ADMIN",
         senderId,
@@ -5093,6 +5937,9 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
         audioUrl,
         targetRole: "STUDENT",
         targetUserIds: studentUserIds,
+        status: "SENT",
+        deliveredCount: studentUserIds.length,
+        failedCount: 0,
         createdAt: new Date(),
       };
       await db.collection("voice_messages").insertOne(studentAnnouncement);
@@ -5186,6 +6033,7 @@ app.post("/api/admin/announcements", requireAuth, requireRole("ADMIN"), requireT
 
     // Create announcement document
     const announcement = {
+      type: "ANNOUNCEMENT",
       schoolId,
       senderId,
       senderRole: "ADMIN",
@@ -6186,7 +7034,7 @@ app.get("/api/admin/meta/classes-sections", requireAuth, requireRole("ADMIN"), r
     console.log(`🎯 META: Fetching classes and sections for schoolId: ${schoolId}`);
     
     // Get all students for this school
-    const students = await db.collection("students").find({ schoolId }).toArray();
+    const students = await db.collection("students").find(withActiveStudents({ schoolId })).toArray();
     console.log(`✅ Found ${students.length} students for schoolId ${schoolId}`);
 
     // Extract unique classes and sections
@@ -6253,13 +7101,13 @@ app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requi
     console.log(`📌 Query params after conversion: class=${classValue} (type: ${typeof classValue}), section=${sectionValue}`);
 
     // Query students - try both number and string formats for class
-    let students = await db.collection("students").find({
+    let students = await db.collection("students").find(withActiveStudents({
       schoolId,
       $or: [
         { class: classValue, section: sectionValue },
         { class: String(classValue), section: sectionValue },
       ]
-    }).toArray();
+    })).toArray();
 
     console.log(`✅ Found ${students.length} students for class ${classValue}, section ${sectionValue}`);
 
@@ -6299,7 +7147,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
     console.log(`📊 CLASS COMPARISON: schoolId=${schoolId}, filterClass=${filterClass}, filterSection=${filterSection}`);
 
     // Get all students for this school
-    let studentQuery = { schoolId };
+    let studentQuery = withActiveStudents({ schoolId });
     if (filterClass) studentQuery.class = filterClass;
     if (filterSection) studentQuery.section = filterSection;
     
@@ -6562,4 +7410,130 @@ app.get("*", (req, res) => {
       res.status(500).json({ error: "Internal server error" });
     }
   });
+});
+
+/**
+ * TEACHER: GET /api/teacher/announcements
+ * Only admin text announcements for this school
+ */
+app.get("/api/teacher/announcements", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    console.log("🔍 TEACHER ANNOUNCEMENTS QUERY:", {
+      schoolId: String(schoolId),
+      type: "ANNOUNCEMENT",
+      senderRole: "ADMIN",
+    });
+
+    const announcements = await db.collection("announcements")
+      .find({
+        schoolId,
+        type: "ANNOUNCEMENT",
+        senderRole: "ADMIN",
+        recipientRole: { $in: ["TEACHER", "ALL"] },
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    console.log("✅ TEACHER ANNOUNCEMENTS COUNT:", announcements.length);
+    res.json(
+      announcements.map((a) => ({
+        _id: a._id.toString(),
+        type: a.type,
+        senderRole: a.senderRole,
+        senderId: a.senderId ? String(a.senderId) : null,
+        schoolId: a.schoolId ? String(a.schoolId) : null,
+        title: a.title || "Announcement",
+        message: a.message || "",
+        createdAt: a.createdAt,
+      }))
+    );
+  } catch (err) {
+    console.error("❌ TEACHER ANNOUNCEMENTS ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch announcements" });
+  }
+});
+
+/**
+ * TEACHER: GET /api/teacher/voice-messages/history
+ * Only this teacher's sent voice history
+ */
+app.get("/api/teacher/voice-messages/history", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const teacherUserId = safeObjectId(req.user.userId);
+    if (!teacherUserId) {
+      return res.status(400).json({ error: "Invalid teacher user ID" });
+    }
+
+    const teacherDoc =
+      (await db.collection("teachers").findOne({
+        userId: teacherUserId,
+        schoolId,
+      })) ||
+      (await db.collection("teachers").findOne({
+        userId: teacherUserId,
+      }));
+    const teacherId = teacherDoc?._id || teacherUserId;
+    console.log("🔍 TEACHER VOICE HISTORY QUERY:", {
+      schoolId: String(schoolId),
+      type: "VOICE",
+      senderRole: "TEACHER",
+      senderId: String(teacherId),
+      senderUserId: String(teacherUserId),
+    });
+
+    const baseQuery = {
+      schoolId,
+      senderRole: "TEACHER",
+      $or: [
+        { senderId: teacherId },
+        { senderId: teacherUserId },
+        { senderUserId: teacherUserId },
+      ],
+    };
+
+    const typeQuery = {
+      $or: [
+        { type: "VOICE" },
+        { type: "voice" },
+        { type: { $exists: false } }, // backward compatibility
+      ],
+    };
+
+    const [historyPrimary, historyLegacy] = await Promise.all([
+      db.collection("voiceMessages").find({ ...baseQuery, ...typeQuery }).toArray(),
+      db.collection("voice_messages").find({ ...baseQuery, ...typeQuery }).toArray(),
+    ]);
+
+    const merged = [...historyPrimary, ...historyLegacy];
+    const uniqueById = new Map();
+    merged.forEach((item) => uniqueById.set(String(item._id), item));
+    const history = Array.from(uniqueById.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+
+    console.log("✅ TEACHER VOICE HISTORY COUNTS:", {
+      primary: historyPrimary.length,
+      legacy: historyLegacy.length,
+      merged: history.length,
+    });
+    res.json(
+      history.map((m) => ({
+        _id: m._id.toString(),
+        type: m.type || "VOICE",
+        senderRole: m.senderRole || "TEACHER",
+        senderId: m.senderId ? String(m.senderId) : null,
+        schoolId: m.schoolId ? String(m.schoolId) : null,
+        audioUrl: m.audioUrl,
+        status: m.status || "SENT",
+        deliveredCount: Number(m.deliveredCount || (Array.isArray(m.targetUserIds) ? m.targetUserIds.length : 0)),
+        failedCount: Number(m.failedCount || 0),
+        createdAt: m.createdAt,
+      }))
+    );
+  } catch (err) {
+    console.error("❌ TEACHER VOICE HISTORY ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch voice history" });
+  }
 });

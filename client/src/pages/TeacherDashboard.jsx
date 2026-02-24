@@ -4,7 +4,6 @@ import axios from "axios";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
 import VoiceRecorder from "../components/VoiceRecorder";
-import VoiceAnnouncements from "../components/VoiceAnnouncements";
 import NotificationBell from "../components/NotificationBell";
 import NotificationDropdown from "../components/NotificationDropdown";
 import ExamSyllabusManager from "../components/ExamSyllabusManager";
@@ -95,6 +94,7 @@ export default function TeacherDashboard() {
 
   // ===== VOICE MESSAGES STATE =====
   const [voiceMessages, setVoiceMessages] = useState([]);
+  const [adminAnnouncements, setAdminAnnouncements] = useState([]);
   const [audioFile, setAudioFile] = useState(null);
   const [voiceLoading, setVoiceLoading] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState([]);
@@ -587,17 +587,43 @@ export default function TeacherDashboard() {
     fetchAnalytics();
 }, [activeTab, students, token, className, section, marksRefreshTrigger]);
 
-/* ===== FETCH VOICE MESSAGES ===== */
+/* ===== FETCH ADMIN ANNOUNCEMENTS ===== */
+useEffect(() => {
+  if (activeTab !== "announcements" || !token) return;
+
+  const fetchTeacherAnnouncements = async () => {
+    try {
+      console.log("🔍 FE teacher announcements query: /api/teacher/announcements");
+      const res = await fetch(`${API_URL}/api/teacher/announcements`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      console.log("✅ FE teacher announcements count:", list.length, "types:", list.map((x) => x.type));
+      setAdminAnnouncements(list);
+    } catch (err) {
+      console.error("ANNOUNCEMENTS FETCH ERROR:", err);
+      setAdminAnnouncements([]);
+    }
+  };
+
+  fetchTeacherAnnouncements();
+}, [activeTab, token]);
+
+/* ===== FETCH TEACHER SENT VOICE HISTORY ===== */
 useEffect(() => {
   if (activeTab !== "voice" || !token) return;
 
   const fetchVoiceMessages = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/teacher/voice-messages`, {
+      console.log("🔍 FE voice history query: /api/teacher/voice-messages/history");
+      const res = await fetch(`${API_URL}/api/teacher/voice-messages/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      setVoiceMessages(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      console.log("✅ FE voice history count:", list.length, "types:", list.map((x) => x.type));
+      setVoiceMessages(list);
     } catch (err) {
       console.error("VOICE MESSAGES FETCH ERROR:", err);
       setVoiceMessages([]);
@@ -1300,8 +1326,8 @@ useEffect(() => {
                 <p className="text-blue-800 mb-6">Get comprehensive performance insights for each student including attendance trends, subject-wise performance, and actionable recommendations.</p>
                 <button
                   onClick={() => {
-                    const studentsTab = document.querySelector('[data-tab="summary"]');
-                    if (studentsTab) studentsTab.click();
+                    setActiveTab("summary");
+                    setSidebarOpen(false);
                   }}
                   className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition inline-block"
                 >
@@ -1794,11 +1820,31 @@ useEffect(() => {
 
           {/* ===== ANNOUNCEMENTS ===== */}
           {activeTab === "announcements" && (
-            <VoiceAnnouncements 
-              endpoint="/api/teacher/voice-announces"
-              title="📢 School Announcements"
-              emptyMessage="No announcements yet"
-            />
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-slate-900">School Announcements</h2>
+              {adminAnnouncements.length === 0 ? (
+                <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
+                  No announcements yet
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {adminAnnouncements
+                    .filter((a) => a.type === "ANNOUNCEMENT" && a.senderRole === "ADMIN")
+                    .map((a) => {
+                      console.log("🖥️ Render announcement item type:", a.type, "senderRole:", a.senderRole);
+                      return (
+                        <div key={a._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-bold text-slate-900 text-sm">{a.title || "Announcement"}</h3>
+                            <span className="text-xs text-slate-500">{new Date(a.createdAt).toLocaleString()}</span>
+                          </div>
+                          <p className="text-sm text-slate-700">{a.message || "-"}</p>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
           )}
 
           {/* ===== VOICE MESSAGES ===== */}
@@ -1890,6 +1936,19 @@ useEffect(() => {
                       toast.success(`Voice message sent to ${data.broadcastTo} student(s)`);
                       setAudioFile(null);
                       setSelectedStudents([]);
+
+                      // Refresh teacher's sent voice history in Voice tab
+                      try {
+                        const historyRes = await fetch(`${API_URL}/api/teacher/voice-messages/history`, {
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        const historyData = await historyRes.json();
+                        const list = Array.isArray(historyData) ? historyData : [];
+                        console.log("✅ FE voice history refreshed after send:", list.length);
+                        setVoiceMessages(list);
+                      } catch (historyErr) {
+                        console.warn("⚠️ Could not refresh voice history after send:", historyErr.message);
+                      }
                     } catch (err) {
                       console.error("❌ VOICE BROADCAST ERROR:", err);
                       toast.error("Failed to send voice message");
@@ -1903,31 +1962,39 @@ useEffect(() => {
                 />
               </div>
 
-              {/* Received Messages */}
+              {/* Sent Voice History */}
               <div>
-                <h3 className="font-bold text-slate-900 mb-4">📨 Messages from Admin</h3>
+                <h3 className="font-bold text-slate-900 mb-4">📨 Sent Voice History</h3>
                 {voiceMessages.length === 0 ? (
                   <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">
-                    No voice messages from admin
+                    No voice messages sent yet
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {voiceMessages.map((msg) => (
-                      <div key={msg._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <div className="font-semibold text-slate-900 text-sm">From: {msg.senderName}</div>
-                            <div className="text-xs text-slate-500">
-                              {new Date(msg.createdAt).toLocaleString()}
+                    {voiceMessages
+                      .filter((msg) => msg.type === "VOICE" && msg.senderRole === "TEACHER")
+                      .map((msg) => {
+                        console.log("🖥️ Render voice history item type:", msg.type, "senderRole:", msg.senderRole);
+                        return (
+                          <div key={msg._id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <div className="font-semibold text-slate-900 text-sm">Status: {msg.status || "SENT"}</div>
+                                <div className="text-xs text-slate-500">
+                                  {new Date(msg.createdAt).toLocaleString()}
+                                </div>
+                              </div>
+                              <div className="text-xs text-slate-600">
+                                Delivered: {msg.deliveredCount ?? 0} | Failed: {msg.failedCount ?? 0}
+                              </div>
                             </div>
+                            <audio controls className="w-full max-w-md">
+                              <source src={`${API_URL}${msg.audioUrl}`} type="audio/mpeg" />
+                              Your browser does not support the audio element.
+                            </audio>
                           </div>
-                        </div>
-                        <audio controls className="w-full max-w-md">
-                          <source src={`${API_URL}${msg.audioUrl}`} type="audio/mpeg" />
-                          Your browser does not support the audio element.
-                        </audio>
-                      </div>
-                    ))}
+                        );
+                      })}
                   </div>
                 )}
               </div>

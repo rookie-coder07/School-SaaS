@@ -5,9 +5,13 @@ const ToastContext = createContext();
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
-  const addToast = useCallback((message, type = "info", duration = 4000) => {
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const addToast = useCallback((message, type = "info", duration = 4000, action = null) => {
     const id = Date.now();
-    const newToast = { id, message, type };
+    const newToast = { id, message, type, action };
 
     setToasts((prev) => [...prev, newToast]);
 
@@ -18,11 +22,7 @@ export function ToastProvider({ children }) {
     }
 
     return id;
-  }, []);
-
-  const removeToast = useCallback((id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  }, [removeToast]);
 
   const success = useCallback((message) => addToast(message, "success"), [addToast]);
   const error = useCallback((message) => addToast(message, "error"), [addToast]);
@@ -103,6 +103,19 @@ function Toast({ toast, onRemove }) {
       <span className="text-lg">{styles.icon}</span>
       <div className="flex-1">
         <p className="text-sm font-medium">{toast.message}</p>
+        {toast.action?.label && (
+          <button
+            onClick={() => {
+              if (typeof toast.action.onClick === "function") {
+                toast.action.onClick();
+              }
+              onRemove(toast.id);
+            }}
+            className={`mt-2 text-xs font-bold underline ${styles.text} hover:opacity-100 opacity-90`}
+          >
+            {toast.action.label}
+          </button>
+        )}
       </div>
       <button
         onClick={() => onRemove(toast.id)}
