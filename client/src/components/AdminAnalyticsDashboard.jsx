@@ -103,6 +103,8 @@ const AdminAnalyticsDashboard = memo(function AdminAnalyticsDashboard({ token, s
   const [classRows, setClassRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [warning, setWarning] = useState("");
+  const safeTeachers = useMemo(() => (Array.isArray(teachers) ? teachers : []), [teachers]);
+  const safeStudents = useMemo(() => (Array.isArray(students) ? students : []), [students]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -118,18 +120,18 @@ const AdminAnalyticsDashboard = memo(function AdminAnalyticsDashboard({ token, s
         if (!res.ok) {
           throw new Error(`Analytics request failed (${res.status})`);
         }
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         const fetchedRows = Array.isArray(data?.data) ? data.data : [];
 
         const teacherMap = new Map();
-        teachers.forEach((t) => {
+        safeTeachers.forEach((t) => {
           const key = `${String(t.class || "").trim()}-${String(t.section || "").trim()}`;
           if (key !== "-" && !teacherMap.has(key)) {
             teacherMap.set(key, t.name || "Not Assigned");
           }
         });
 
-        const normalized = fetchedRows.map((row) => {
+        const normalized = fetchedRows.filter((row) => row && typeof row === "object").map((row) => {
           const className = String(row.class || "").trim();
           const section = String(row.section || "").trim();
           const key = `${className}-${section}`;
@@ -145,7 +147,7 @@ const AdminAnalyticsDashboard = memo(function AdminAnalyticsDashboard({ token, s
 
         if (mounted) {
           if (normalized.length === 0) {
-            const fallbackRows = buildMockClassData(students, teachers);
+            const fallbackRows = buildMockClassData(safeStudents, safeTeachers);
             setClassRows(fallbackRows);
             if (fallbackRows.length > 0) {
               setWarning("No analytics records yet. Showing estimated class cards from current class data.");
@@ -157,7 +159,7 @@ const AdminAnalyticsDashboard = memo(function AdminAnalyticsDashboard({ token, s
       } catch (err) {
         if (err?.name === "AbortError") return;
         if (mounted) {
-          const fallbackRows = buildMockClassData(students, teachers);
+          const fallbackRows = buildMockClassData(safeStudents, safeTeachers);
           setClassRows(fallbackRows);
           setWarning("Analytics API is unavailable. Showing mock class cards.");
         }
@@ -176,19 +178,20 @@ const AdminAnalyticsDashboard = memo(function AdminAnalyticsDashboard({ token, s
       mounted = false;
       controller.abort();
     };
-  }, [token, schoolId, teachers, students]);
+  }, [token, schoolId, safeTeachers, safeStudents]);
 
   const summary = useMemo(() => {
-    const totalStudents = classRows.reduce((sum, row) => sum + normalizeNumber(row.totalStudents), 0);
-    const totalClasses = classRows.length;
+    const rows = Array.isArray(classRows) ? classRows : [];
+    const totalStudents = rows.reduce((sum, row) => sum + normalizeNumber(row?.totalStudents), 0);
+    const totalClasses = rows.length;
     return {
       totalStudents,
-      totalTeachers: teachers.length,
+      totalTeachers: safeTeachers.length,
       totalClasses,
     };
-  }, [classRows, teachers.length]);
+  }, [classRows, safeTeachers.length]);
 
-  const sortedClassRows = useMemo(() => sortByClassSection(classRows), [classRows]);
+  const sortedClassRows = useMemo(() => sortByClassSection(Array.isArray(classRows) ? classRows : []), [classRows]);
 
   return (
     <PageContainer className="space-y-6">
@@ -221,7 +224,7 @@ const AdminAnalyticsDashboard = memo(function AdminAnalyticsDashboard({ token, s
             const attendance = normalizeNumber(row.avgAttendancePercent);
             const marks = normalizeNumber(row.avgMarksPercent);
             const status = computeStatus(attendance, marks);
-            const statusStyle = STATUS_STYLES[status];
+            const statusStyle = STATUS_STYLES[status] || STATUS_STYLES["Needs Attention"];
             return (
               <div
                 key={`${row.class}-${row.section}`}
