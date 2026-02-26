@@ -7,6 +7,10 @@ export default function StudentLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState("");
 
   const navigate = useNavigate();
 
@@ -43,6 +47,11 @@ export default function StudentLogin() {
       // ✅ Save school name
       if (data.schoolName) {
         localStorage.setItem("studentSchoolName", data.schoolName);
+      }
+      if (data.mustChangePassword) {
+        localStorage.setItem("studentMustChangePassword", "1");
+      } else {
+        localStorage.removeItem("studentMustChangePassword");
       }
       
       // ✅ Extract and save schoolId from token
@@ -82,6 +91,35 @@ export default function StudentLogin() {
       setError("Server not responding. Try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const submitForgotRequest = async () => {
+    const requestEmail = String(forgotEmail || email || "").trim().toLowerCase();
+    if (!requestEmail) {
+      setForgotMessage("Please enter your email.");
+      return;
+    }
+    setForgotLoading(true);
+    setForgotMessage("");
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      const res = await fetch(`${API_URL}/api/student/password-reset-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: requestEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setForgotMessage(data?.error || "Failed to submit request");
+        return;
+      }
+      setForgotMessage(data?.message || "Request submitted to your class teacher.");
+    } catch (err) {
+      console.error("FORGOT REQUEST ERROR:", err);
+      setForgotMessage("Failed to submit request");
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -127,7 +165,55 @@ export default function StudentLogin() {
         >
           {loading ? "Logging in..." : "Login"}
         </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setForgotEmail(email);
+            setForgotMessage("");
+            setShowForgotModal(true);
+          }}
+          className="w-full mt-3 py-2 text-sm font-semibold text-blue-700 hover:text-blue-800"
+        >
+          Forgot Password?
+        </button>
       </form>
+
+      {showForgotModal && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full h-full sm:h-auto sm:max-w-md bg-white rounded-none sm:rounded-2xl border border-slate-200 shadow-xl p-4 sm:p-5 space-y-4">
+            <h3 className="text-lg font-bold text-slate-900">Forgot Password</h3>
+            <p className="text-sm text-slate-600">
+              Submit a reset request. Your class teacher will set a temporary password.
+            </p>
+            <input
+              type="email"
+              value={forgotEmail}
+              onChange={(e) => setForgotEmail(e.target.value)}
+              placeholder="Enter your student email"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {forgotMessage && <p className="text-sm text-slate-700">{forgotMessage}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(false)}
+                className="flex-1 py-2 rounded-lg border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={submitForgotRequest}
+                disabled={forgotLoading}
+                className="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {forgotLoading ? "Submitting..." : "Submit Request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

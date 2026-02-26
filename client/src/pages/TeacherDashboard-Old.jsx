@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const SUBJECTS_CACHE_TTL_MS = 15000;
+const subjectsCache = new Map();
 
 export default function TeacherDashboard() {
   const [students, setStudents] = useState([]);
@@ -42,6 +44,9 @@ export default function TeacherDashboard() {
   const [marksData, setMarksData] = useState({});
   const [allMarks, setAllMarks] = useState([]); // For summary display
   const [availableSubjects, setAvailableSubjects] = useState([]); // Fetch from admin
+  const subjectsFetchInFlightRef = useRef(false);
+  const lastSubjectsFetchKeyRef = useRef("");
+  const academicsFetchKeyRef = useRef("");
 
   // ===== EVENTS FORM STATE =====
   const [eventName, setEventName] = useState("");
@@ -161,40 +166,46 @@ export default function TeacherDashboard() {
     fetchAllMarks();
   }, [activeTab, token]);
 
-  /* ===== FETCH AVAILABLE SUBJECTS ===== */
-  useEffect(() => {
-    if (activeTab !== "academics" || !className || !section) {
-      console.log("Skipping subjects fetch:", { activeTab, className, section });
+  const fetchSubjects = useCallback(async (force = false) => {
+    if (!className || !section || !token) return;
+    const fetchKey = `${className}::${section}`;
+    const cacheKey = `${token}::${fetchKey}`;
+    const cached = subjectsCache.get(cacheKey);
+    if (!force && cached && Date.now() - cached.timestamp < SUBJECTS_CACHE_TTL_MS) {
+      setAvailableSubjects(cached.data);
+      lastSubjectsFetchKeyRef.current = fetchKey;
       return;
     }
+    if (!force && (subjectsFetchInFlightRef.current || lastSubjectsFetchKeyRef.current === fetchKey)) return;
+    subjectsFetchInFlightRef.current = true;
 
-    const fetchSubjects = async () => {
-      try {
-        const url = `${API_URL}/api/teacher/subjects?class=${encodeURIComponent(className)}&section=${encodeURIComponent(section)}`;
-        console.log("Fetching subjects from:", url);
-        console.log("Teacher data:", teacher);
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        
-        const data = await res.json();
-        console.log("Subjects response status:", res.status, "data:", JSON.stringify(data, null, 2));
-        console.log("Data is array?:", Array.isArray(data), "Data length:", Array.isArray(data) ? data.length : "N/A");
-        
-        if (res.ok) {
-          const subjects = Array.isArray(data) ? data : (data.subjects || []);
-          console.log("Setting availableSubjects to:", subjects);
-          setAvailableSubjects(subjects);
-        } else {
-          console.error("Subjects fetch error:", data);
-          setAvailableSubjects([]);
-        }
-      } catch (err) {
-        console.error("SUBJECTS FETCH ERROR:", err);
-        setAvailableSubjects([]);
-      }
-    };
+    try {
+      const url = `${API_URL}/api/teacher/subjects?class=${encodeURIComponent(className)}&section=${encodeURIComponent(section)}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to fetch subjects");
 
-    fetchSubjects();
-  }, [activeTab, className, section, token, teacher]);
+      const subjects = Array.isArray(data) ? data : data.subjects || [];
+      setAvailableSubjects(subjects);
+      subjectsCache.set(cacheKey, { data: subjects, timestamp: Date.now() });
+      lastSubjectsFetchKeyRef.current = fetchKey;
+    } catch (err) {
+      console.error("SUBJECTS FETCH ERROR:", err);
+      setAvailableSubjects([]);
+    } finally {
+      subjectsFetchInFlightRef.current = false;
+    }
+  }, [className, section, token]);
+
+  /* ===== FETCH AVAILABLE SUBJECTS ===== */
+  useEffect(() => {
+    if (activeTab !== "academics" || !className || !section || !token) return;
+    const fetchKey = `${className}::${section}`;
+    // Prevent duplicate fetches for same class/section on re-renders.
+    if (academicsFetchKeyRef.current === fetchKey) return;
+    academicsFetchKeyRef.current = fetchKey;
+    fetchSubjects(false);
+  }, [activeTab, className, section, token, fetchSubjects]);
 
   /* ===== FETCH STUDENTS ===== */
   useEffect(() => {

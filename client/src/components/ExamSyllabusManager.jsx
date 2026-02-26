@@ -8,6 +8,8 @@ export default function ExamSyllabusManager({ token, teacher }) {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingSubjectId, setEditingSubjectId] = useState(null);
+  const [undoStack, setUndoStack] = useState([]);
+  const [undoing, setUndoing] = useState(false);
 
   // Create new exam form state
   const [newExamName, setNewExamName] = useState("");
@@ -173,6 +175,7 @@ export default function ExamSyllabusManager({ token, teacher }) {
     if (!window.confirm("Delete this entire exam? This cannot be undone.")) return;
 
     try {
+      const snapshot = exams.find((exam) => exam._id === examId);
       const res = await fetch(`${API_URL}/api/teacher/exam-syllabus/${examId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -180,16 +183,58 @@ export default function ExamSyllabusManager({ token, teacher }) {
 
       if (!res.ok) throw new Error("Failed to delete exam");
 
-      toast.success("Exam deleted!");
-      fetchExams();
+      setExams((prev) => prev.filter((exam) => exam._id !== examId));
+      if (snapshot) setUndoStack((prev) => [...prev, { type: "DELETE", model: "exam-syllabus", data: snapshot, timestamp: Date.now() }]);
+      toast.success("Exam deleted!", 10000, {
+        actionLabel: "Undo",
+        onAction: handleUndoDelete,
+      });
     } catch (err) {
       console.error(err);
       toast.error(err.message || "Failed to delete exam");
     }
   };
 
+  const handleUndoDelete = async () => {
+    if (!undoStack.length) return;
+    const lastAction = undoStack[undoStack.length - 1];
+
+    try {
+      setUndoing(true);
+      const res = await fetch(`${API_URL}/api/teacher/restore`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ model: "exam-syllabus", data: lastAction.data }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to restore exam");
+      setUndoStack((prev) => prev.slice(0, -1));
+      fetchExams();
+      toast.success("Restored successfully");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || "Failed to undo");
+    } finally {
+      setUndoing(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
+      {undoStack.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            onClick={handleUndoDelete}
+            disabled={undoing}
+            className="px-3 py-2 text-xs font-semibold rounded-lg bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 transition disabled:opacity-50"
+          >
+            {undoing ? "Undoing..." : `Undo (${undoStack.length})`}
+          </button>
+        </div>
+      )}
       {/* ===== CREATE NEW EXAM SECTION ===== */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200/50 shadow-sm">
         <h2 className="text-xl font-bold text-slate-900 mb-6">📝 Create New Exam</h2>

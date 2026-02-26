@@ -46,7 +46,8 @@ export default function StudentExamSyllabus({ token, selectedExamId }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const data = await res.json();
+        const payload = await res.json();
+        const data = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
         console.log(`✅ StudentExamSyllabus: Fetched ${Array.isArray(data) ? data.length : 0} exams`);
         data.forEach((exam) => {
           console.log(`   📚 Exam: ${exam.examName} (ID: ${exam._id}, Subjects: ${exam.subjects?.length || 0})`);

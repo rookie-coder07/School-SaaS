@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useToast } from "./ToastProvider";
+import DateFilterBar from "./DateFilterBar";
+import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -23,7 +25,12 @@ export default function VoiceAnnouncements({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [playingId, setPlayingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [undoStack, setUndoStack] = useState([]);
+  const [undoing, setUndoing] = useState(false);
+  const [dateFilter, setDateFilter] = useState({ from: "", to: "" });
   const toast = useToast();
+  const isAdminEndpoint = endpoint.includes("/admin/");
 
   // Get the correct token based on what the endpoint expects
   // This is determined by the API endpoint path
@@ -44,7 +51,7 @@ export default function VoiceAnnouncements({
   // Fetch announcements on mount
   useEffect(() => {
     fetchAnnouncements();
-  }, [endpoint]);
+  }, [endpoint, dateFilter.from, dateFilter.to]);
 
   const fetchAnnouncements = async () => {
     try {
@@ -69,7 +76,9 @@ export default function VoiceAnnouncements({
         console.warn(`   ⚠️ NO TOKEN FOUND for ${tokenType}`);
       }
 
-      const res = await fetch(`${API_URL}${endpoint}`, {
+      const query = buildDateFilterQuery(dateFilter);
+      const url = `${API_URL}${endpoint}${query ? `?${query}` : ""}`;
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -83,7 +92,7 @@ export default function VoiceAnnouncements({
       const data = await res.json();
       console.log(`✅ Loaded ${data.length} announcements from ${endpoint}`);
       data.forEach((ann, idx) => {
-        console.log(`   [${idx + 1}] ${ann.title} - Audio URL: ${API_URL}${ann.audioUrl}`);
+        console.log(`   [${idx + 1}] ${ann.title} - Type: ${ann.audioUrl ? "voice" : "text"}`);
       });
       setAnnouncements(data || []);
     } catch (err) {
@@ -94,6 +103,73 @@ export default function VoiceAnnouncements({
       toast.error("Failed to load announcements");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (announcementId) => {
+    const confirmed = window.confirm("This will remove this message for all teachers and students. Continue?");
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(announcementId);
+      const snapshot = announcements.find((item) => item._id === announcementId);
+      const res = await fetch(`${API_URL}/api/admin/voice-messages/${announcementId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete message");
+      }
+
+      setAnnouncements((prev) => prev.filter((item) => item._id !== announcementId));
+      if (snapshot) {
+        setUndoStack((prev) => [...prev, { type: "DELETE", model: "voice", data: snapshot, timestamp: Date.now() }]);
+      }
+      toast.success("Message deleted for everyone", 10000, {
+        actionLabel: "Undo",
+        onAction: handleUndo,
+      });
+    } catch (err) {
+      console.error("DELETE VOICE ANNOUNCEMENT ERROR:", err);
+      toast.error(err.message || "Failed to delete announcement");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!undoStack.length) return;
+    const lastAction = undoStack[undoStack.length - 1];
+    if (!lastAction?.data?._id) return;
+
+    try {
+      setUndoing(true);
+      const res = await fetch(`${API_URL}/api/admin/restore`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: lastAction.model || "voice",
+          data: lastAction.data,
+        }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error || "Failed to restore message");
+
+      setUndoStack((prev) => prev.slice(0, -1));
+      setAnnouncements((prev) => {
+        if (prev.some((item) => item._id === lastAction.data._id)) return prev;
+        return [lastAction.data, ...prev];
+      });
+      toast.success("Restored successfully");
+    } catch (err) {
+      console.error("UNDO VOICE ANNOUNCEMENT ERROR:", err);
+      toast.error(err.message || "Failed to undo");
+    } finally {
+      setUndoing(false);
     }
   };
 
@@ -121,10 +197,11 @@ export default function VoiceAnnouncements({
 
   if (announcements.length === 0) {
     return (
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
         <h2 className="text-lg font-bold text-slate-900 mb-4">{icon} {title}</h2>
+        <DateFilterBar value={dateFilter} onChange={setDateFilter} />
         <div className="text-center py-12">
-          <p className="text-slate-500 text-sm">{emptyMessage}</p>
+          <p className="text-slate-500 text-sm">{hasDateFilter(dateFilter) ? "No items for selected date range" : emptyMessage}</p>
         </div>
       </div>
     );
@@ -133,6 +210,18 @@ export default function VoiceAnnouncements({
   return (
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
       <h2 className="text-lg font-bold text-slate-900">{icon} {title}</h2>
+      <DateFilterBar value={dateFilter} onChange={setDateFilter} />
+      {isAdminEndpoint && undoStack.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            onClick={handleUndo}
+            disabled={undoing}
+            className="px-3 py-2 text-xs font-semibold rounded-lg bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 transition disabled:opacity-50"
+          >
+            {undoing ? "Undoing..." : `Undo (${undoStack.length})`}
+          </button>
+        </div>
+      )}
 
       <div className="space-y-3">
         {announcements.map((announcement) => (
@@ -153,40 +242,55 @@ export default function VoiceAnnouncements({
                   {announcement.createdAtFormatted}
                 </p>
               </div>
-            </div>
-
-            {/* Audio Player */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setPlayingId(playingId === announcement._id ? null : announcement._id)}
-                className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                  playingId === announcement._id
-                    ? "bg-blue-100 text-blue-600"
-                    : "bg-slate-100 text-slate-600 hover:bg-blue-100"
-                }`}
-                title={playingId === announcement._id ? "Pause" : "Play"}
-              >
-                {playingId === announcement._id ? "⏸️" : "▶️"}
-              </button>
-
-              <div className="flex-1">
-                <audio
-                  key={`${announcement._id}-audio`}
-                  controls
-                  className="w-full h-8"
-                  onPlay={() => setPlayingId(announcement._id)}
-                  onPause={() => setPlayingId(null)}
-                  onEnded={() => setPlayingId(null)}
-                  onError={(e) => {
-                    console.error(`❌ Audio failed to load for announcement ${announcement._id}:`, e);
-                    console.error(`   URL attempted: ${API_URL}${announcement.audioUrl}`);
-                  }}
+              {isAdminEndpoint && (
+                <button
+                  onClick={() => handleDeleteAnnouncement(announcement._id)}
+                  disabled={deletingId === announcement._id}
+                  className="px-3 py-1 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition disabled:opacity-50"
+                  title="Delete for everyone"
                 >
-                  <source src={`${API_URL}${announcement.audioUrl}`} type="audio/webm" />
-                  Your browser does not support the audio element.
-                </audio>
-              </div>
+                  {deletingId === announcement._id ? "Deleting..." : "Delete"}
+                </button>
+              )}
             </div>
+
+            {announcement.audioUrl ? (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setPlayingId(playingId === announcement._id ? null : announcement._id)}
+                  className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                    playingId === announcement._id
+                      ? "bg-blue-100 text-blue-600"
+                      : "bg-slate-100 text-slate-600 hover:bg-blue-100"
+                  }`}
+                  title={playingId === announcement._id ? "Pause" : "Play"}
+                >
+                  {playingId === announcement._id ? "⏸️" : "▶️"}
+                </button>
+
+                <div className="flex-1">
+                  <audio
+                    key={`${announcement._id}-audio`}
+                    controls
+                    className="w-full h-8"
+                    onPlay={() => setPlayingId(announcement._id)}
+                    onPause={() => setPlayingId(null)}
+                    onEnded={() => setPlayingId(null)}
+                    onError={(e) => {
+                      console.error(`❌ Audio failed to load for announcement ${announcement._id}:`, e);
+                      console.error(`   URL attempted: ${API_URL}${announcement.audioUrl}`);
+                    }}
+                  >
+                    <source src={`${API_URL}${announcement.audioUrl}`} type="audio/webm" />
+                    Your browser does not support the audio element.
+                  </audio>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
+                {announcement.message || "No message content."}
+              </div>
+            )}
           </div>
         ))}
       </div>

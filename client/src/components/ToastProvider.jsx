@@ -5,13 +5,9 @@ const ToastContext = createContext();
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
-  const removeToast = useCallback((id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  const addToast = useCallback((message, type = "info", duration = 4000, action = null) => {
+  const addToast = useCallback((message, type = "info", duration = 4000, options = {}) => {
     const id = Date.now();
-    const newToast = { id, message, type, action };
+    const newToast = { id, message, type, actionLabel: options.actionLabel, onAction: options.onAction };
 
     setToasts((prev) => [...prev, newToast]);
 
@@ -22,12 +18,16 @@ export function ToastProvider({ children }) {
     }
 
     return id;
-  }, [removeToast]);
+  }, []);
 
-  const success = useCallback((message) => addToast(message, "success"), [addToast]);
-  const error = useCallback((message) => addToast(message, "error"), [addToast]);
-  const warning = useCallback((message) => addToast(message, "warning"), [addToast]);
-  const info = useCallback((message) => addToast(message, "info"), [addToast]);
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const success = useCallback((message, duration, options) => addToast(message, "success", duration ?? 4000, options), [addToast]);
+  const error = useCallback((message, duration, options) => addToast(message, "error", duration ?? 4000, options), [addToast]);
+  const warning = useCallback((message, duration, options) => addToast(message, "warning", duration ?? 4000, options), [addToast]);
+  const info = useCallback((message, duration, options) => addToast(message, "info", duration ?? 4000, options), [addToast]);
 
   return (
     <ToastContext.Provider value={{ addToast, removeToast, success, error, warning, info }}>
@@ -103,17 +103,15 @@ function Toast({ toast, onRemove }) {
       <span className="text-lg">{styles.icon}</span>
       <div className="flex-1">
         <p className="text-sm font-medium">{toast.message}</p>
-        {toast.action?.label && (
+        {toast.actionLabel && typeof toast.onAction === "function" && (
           <button
             onClick={() => {
-              if (typeof toast.action.onClick === "function") {
-                toast.action.onClick();
-              }
+              toast.onAction();
               onRemove(toast.id);
             }}
-            className={`mt-2 text-xs font-bold underline ${styles.text} hover:opacity-100 opacity-90`}
+            className={`mt-1 text-xs font-bold underline ${styles.text} hover:opacity-80 transition`}
           >
-            {toast.action.label}
+            {toast.actionLabel}
           </button>
         )}
       </div>

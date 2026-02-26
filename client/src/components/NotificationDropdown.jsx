@@ -11,26 +11,32 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export default function NotificationDropdown({ isOpen, onClose, token, toast, onNotificationsUpdated }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [lastRefresh, setLastRefresh] = useState(0);
+  const [undoStack, setUndoStack] = useState([]);
+  const [undoing, setUndoing] = useState(false);
   const navigate = useNavigate();
 
   // Fetch notifications when dropdown opens
   useEffect(() => {
     if (isOpen && token) {
-      fetchNotifications();
+      fetchNotifications(1, true);
       
       // Auto-refresh every 10 seconds while dropdown is open
-      const interval = setInterval(fetchNotifications, 10000);
+      const interval = setInterval(() => fetchNotifications(1, true), 10000);
       return () => clearInterval(interval);
     }
   }, [isOpen, token]);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (nextPage = 1, replace = false) => {
     try {
-      setLoading(true);
+      if (replace) setLoading(true);
+      else setLoadingMore(true);
       setError(null);
-      const response = await axios.get(`${API_URL}/api/notifications`, {
+      const response = await axios.get(`${API_URL}/api/notifications?page=${nextPage}&limit=20`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       
@@ -39,7 +45,10 @@ export default function NotificationDropdown({ isOpen, onClose, token, toast, on
       console.log("   Unread count from API:", response.data.unreadCount || 0);
       console.log("   Sample notification fields:", response.data.notifications?.[0] ? Object.keys(response.data.notifications[0]) : "No notifications");
       
-      setNotifications(response.data.notifications || []);
+      const incoming = response.data.notifications || [];
+      setNotifications((prev) => (replace ? incoming : [...prev, ...incoming]));
+      setPage(response.data.page || nextPage);
+      setTotalPages(response.data.totalPages || 1);
       setLastRefresh(Date.now());
       
       // Immediately notify parent about the unread count
@@ -51,6 +60,7 @@ export default function NotificationDropdown({ isOpen, onClose, token, toast, on
       setError("Failed to load notifications");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -98,7 +108,20 @@ export default function NotificationDropdown({ isOpen, onClose, token, toast, on
 
   const handleDelete = async (notificationId) => {
     try {
-      await axios.delete(`${API_URL}/api/notifications/${notificationId}`, {
+      const adminToken = localStorage.getItem("adminToken");
+      const isAdminAction = token && adminToken && token === adminToken;
+      const snapshot = notifications.find((n) => n._id === notificationId);
+
+      if (isAdminAction) {
+        const confirmed = window.confirm("This will remove this message for all teachers and students. Continue?");
+        if (!confirmed) return;
+      }
+
+      const deleteUrl = isAdminAction
+        ? `${API_URL}/api/admin/notifications/${notificationId}`
+        : `${API_URL}/api/notifications/${notificationId}`;
+
+      await axios.delete(deleteUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -106,13 +129,50 @@ export default function NotificationDropdown({ isOpen, onClose, token, toast, on
       setNotifications((prev) =>
         prev.filter((n) => n._id !== notificationId)
       );
+      if (isAdminAction && snapshot) {
+        setUndoStack((prev) => [...prev, { type: "DELETE", model: "notification", data: snapshot, timestamp: Date.now() }]);
+      }
       
       // Notify parent component to refresh unread count
       if (onNotificationsUpdated) {
         onNotificationsUpdated();
       }
+
+      if (isAdminAction) {
+        toast?.success("Message deleted for everyone", 10000, {
+          actionLabel: "Undo",
+          onAction: handleUndo,
+        });
+      }
     } catch (err) {
       console.error("Error deleting notification:", err);
+      toast?.error("Failed to delete notification");
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!undoStack.length) return;
+    const lastAction = undoStack[undoStack.length - 1];
+    if (!lastAction?.data?._id) return;
+
+    try {
+      setUndoing(true);
+      const res = await axios.post(
+        `${API_URL}/api/admin/restore`,
+        { model: "notification", data: lastAction.data },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.data?.success) throw new Error("Restore failed");
+
+      setUndoStack((prev) => prev.slice(0, -1));
+      setNotifications((prev) => [lastAction.data, ...prev]);
+      toast?.success("Restored successfully");
+      if (onNotificationsUpdated) onNotificationsUpdated();
+    } catch (err) {
+      console.error("Error undoing notification delete:", err);
+      toast?.error("Failed to undo");
+    } finally {
+      setUndoing(false);
     }
   };
 
@@ -169,14 +229,25 @@ export default function NotificationDropdown({ isOpen, onClose, token, toast, on
         {/* Header */}
         <div className="sticky top-0 bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center">
           <h3 className="text-lg font-bold text-white">Notifications</h3>
-          {notifications.some((n) => !n.isRead) && (
-            <button
-              onClick={handleMarkAllAsRead}
-              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              Mark all as read
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {undoStack.length > 0 && (
+              <button
+                onClick={handleUndo}
+                disabled={undoing}
+                className="text-sm text-amber-300 hover:text-amber-200 transition-colors disabled:opacity-50"
+              >
+                {undoing ? "Undoing..." : `Undo (${undoStack.length})`}
+              </button>
+            )}
+            {notifications.some((n) => !n.isRead) && (
+              <button
+                onClick={handleMarkAllAsRead}
+                className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                Mark all as read
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content */}
@@ -309,6 +380,17 @@ export default function NotificationDropdown({ isOpen, onClose, token, toast, on
                 )}
               </div>
             ))}
+            {page < totalPages && (
+              <div className="p-3">
+                <button
+                  onClick={() => fetchNotifications(page + 1, false)}
+                  disabled={loadingMore}
+                  className="w-full py-2 rounded-lg bg-slate-700 text-slate-100 text-sm font-semibold hover:bg-slate-600 transition disabled:opacity-50"
+                >
+                  {loadingMore ? "Loading..." : "Load more"}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

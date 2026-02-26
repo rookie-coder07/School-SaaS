@@ -273,6 +273,7 @@ async function seed() {
             section: teacher.section,
             rollNo: String(rollNo),
             parentName: parentName,
+            parentPhone: parentPhone,
             phone: parentPhone,
             schoolId: school._id,
             createdAt: new Date(),
