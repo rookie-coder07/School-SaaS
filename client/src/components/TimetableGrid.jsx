@@ -342,7 +342,8 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-h-screen bg-slate-50 overflow-x-hidden">
+      <div className="w-full px-4 md:px-6 space-y-6">
       {canEdit && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4">
           <div className="flex items-center justify-between">
@@ -444,15 +445,16 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 md:p-4 overflow-x-auto">
-        <table className="w-full border-separate border-spacing-0 text-sm">
+      <div className="w-full overflow-x-auto">
+        <div className="min-w-[1100px]">
+          <table className="border-collapse w-full text-sm">
           <thead>
             <tr>
-              <th className="border border-slate-200 bg-slate-100 p-2 md:p-3 font-bold text-slate-700 text-center rounded-tl-xl">Row / Time</th>
+              <th className="border border-slate-200 bg-slate-100 px-4 py-3 whitespace-nowrap font-bold text-slate-700 text-center rounded-tl-xl">Row / Time</th>
               {(config.days || []).map((day, idx) => (
                 <th
                   key={day}
-                  className={`border border-slate-200 bg-slate-100 p-2 md:p-3 font-bold text-slate-700 text-center min-w-28 md:min-w-36 ${
+                  className={`border border-slate-200 bg-slate-100 px-4 py-3 whitespace-nowrap font-bold text-slate-700 text-center min-w-28 md:min-w-36 ${
                     idx === (config.days || []).length - 1 ? "rounded-tr-xl" : ""
                   }`}
                 >
@@ -469,7 +471,7 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
                 const rowBg = isLunch ? "bg-orange-100 text-orange-800" : "bg-yellow-50 text-yellow-800";
                 return (
                   <tr key={row.rowKey || rowIndex}>
-                    <td colSpan={(config.days || []).length + 1} className={`border border-slate-200 p-2 md:p-3 text-center font-semibold ${rowBg}`}>
+                    <td colSpan={(config.days || []).length + 1} className={`border border-slate-200 px-4 py-3 whitespace-nowrap text-center font-semibold ${rowBg}`}>
                       {row.label} ({timeText})
                     </td>
                   </tr>
@@ -479,7 +481,7 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
               return (
                 <tr key={row.rowKey || rowIndex}>
                   <td
-                    className={`border border-slate-200 bg-slate-50 p-2 md:p-3 font-semibold text-slate-700 text-center ${
+                    className={`border border-slate-200 bg-slate-50 px-4 py-3 whitespace-nowrap font-semibold text-slate-700 text-center ${
                       rowIndex === (config.rows || []).length - 1 ? "rounded-bl-xl" : ""
                     }`}
                   >
@@ -494,7 +496,7 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
                         key={`${row.rowKey}-${day}`}
                         onClick={() => handleCellClick(row, day)}
                         className={`
-                          border border-slate-200 p-3 text-center min-h-20 transition
+                          border border-slate-200 px-4 py-3 whitespace-nowrap text-center min-h-20 transition
                           ${canEdit ? "cursor-pointer hover:bg-blue-50 hover:border-blue-200" : "cursor-default bg-white"}
                           ${isSelected ? "bg-blue-100 border-blue-400" : ""}
                           ${rowIndex === (config.rows || []).length - 1 && dayIndex === (config.days || []).length - 1 ? "rounded-br-xl" : ""}
@@ -502,8 +504,8 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
                       >
                         {cellData ? (
                           <div className="text-xs md:text-sm space-y-1">
-                            <div className="flex justify-center">
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-semibold ${getSubjectTone(cellData.subject)}`}>
+                            <div className="text-center">
+                              <span className={`inline-block px-2.5 py-1 rounded-full border text-xs font-semibold ${getSubjectTone(cellData.subject)}`}>
                                 {cellData.subject}
                               </span>
                             </div>
@@ -520,12 +522,13 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {showForm && selectedCell && canEdit && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-40 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-lg space-y-4">
+          <div className="bg-white rounded-2xl p-6 w-full shadow-lg space-y-4">
             <h3 className="text-lg font-bold text-slate-900">Assign Subject</h3>
             <div className="text-sm text-slate-600">
               {selectedCell.day} - {getSelectedRow()?.label} ({getSelectedRow()?.startTime} - {getSelectedRow()?.endTime})
@@ -566,6 +569,7 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

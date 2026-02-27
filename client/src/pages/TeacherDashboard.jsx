@@ -1892,7 +1892,7 @@ useEffect(() => {
   ];
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col lg:flex-row bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 font-sans">
+    <div className={`h-screen ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"} flex flex-col lg:flex-row bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 font-sans`}>
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -1973,7 +1973,7 @@ useEffect(() => {
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className="flex-1 w-full lg:w-auto min-w-0 flex flex-col overflow-hidden">
+      <div className={`flex-1 w-full lg:w-auto min-w-0 flex flex-col ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"}`}>
         {/* Header */}
         <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3">
           <div className="flex items-center min-w-0">
@@ -2026,7 +2026,7 @@ useEffect(() => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 lg:p-8 pb-20 md:pb-6 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100">
-          <div className="mx-auto w-full max-w-7xl">
+          <div className={activeTab === "timetable" ? "w-full" : "mx-auto w-full max-w-7xl"}>
           {/* ===== DASHBOARD ===== */}
           {activeTab === "dashboard" && (
             <PageContainer className="space-y-4">
@@ -2047,7 +2047,7 @@ useEffect(() => {
                 ) : (
                   <div className="space-y-3">
                     {/* Attendance Overview Stats */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                         <div className="text-xs font-semibold text-green-700 uppercase">Excellent (90%+)</div>
                         <div className="text-2xl font-bold text-green-900 mt-1">
@@ -2072,7 +2072,7 @@ useEffect(() => {
                     </div>
 
                     {/* Detailed Student List Sorted by Attendance */}
-                    <div className="saas-card overflow-hidden">
+                    <div className="saas-card">
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm md:text-base">
                           <thead>
@@ -2105,7 +2105,7 @@ useEffect(() => {
                                 return (
                                   <tr key={student._id} className="border-b border-slate-100 hover:bg-slate-50">
                                     <td className="px-4 py-3 text-slate-700 font-semibold">{idx + 1}</td>
-                                    <td className="px-4 py-3 font-semibold text-slate-900">{student.name}</td>
+                                    <td className="px-4 py-3 min-w-0 max-w-full font-semibold text-sm md:text-base break-words whitespace-normal text-slate-900">{student.name}</td>
                                     <td className="px-4 py-3 text-slate-600">{student.rollNo}</td>
                                     <td className="px-4 py-3 text-right font-bold text-slate-900">{percentage}%</td>
                                     <td className="px-4 py-3 text-center">
@@ -2146,7 +2146,7 @@ useEffect(() => {
                         className="saas-list-card p-3 md:p-4 cursor-pointer min-w-0"
                         onClick={() => navigate(`/teacher/student-analytics/${s._id}`)}
                       >
-                        <div className="font-bold text-slate-900">{s.name}</div>
+                        <div className="min-w-0 max-w-full font-semibold text-sm md:text-base break-words whitespace-normal text-slate-900">{s.name}</div>
                         <div className="text-xs md:text-sm text-slate-700 mt-1 break-words">Roll: {s.rollNo || "-"}</div>
                         <div className="text-xs md:text-sm text-slate-700 mt-1 break-words">Parent: {s.parentName || "Not set"}</div>
                         <div className="text-xs md:text-sm text-slate-700 mt-1 break-words break-all">Email: {s.email || "-"}</div>
@@ -2199,7 +2199,7 @@ useEffect(() => {
                             onClick={() => navigate(`/teacher/student-analytics/${s._id}`)}
                           >
                             <td className="px-4 py-3 text-slate-700">{s.rollNo}</td>
-                            <td className="px-4 py-3 font-semibold text-slate-900">{s.name}</td>
+                            <td className="px-4 py-3 min-w-0 max-w-full font-semibold text-sm md:text-base break-words whitespace-normal text-slate-900">{s.name}</td>
                             <td className="px-4 py-3 text-slate-700 text-xs md:text-sm">{s.parentName || "Not set"}</td>
                             <td className="px-4 py-3 text-slate-700 text-xs md:text-sm">
                               {s.parentPhone || s.phone ? (
@@ -2261,7 +2261,7 @@ useEffect(() => {
               </div>
 
               {/* Features Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="rounded-2xl border border-blue-200 bg-blue-50 text-blue-900 shadow-sm transition hover:shadow-md p-3 md:p-5">
                   <div className="text-3xl mb-3">📈</div>
                   <h4 className="font-bold text-slate-900 mb-2">Performance Trends</h4>
@@ -2613,7 +2613,7 @@ useEffect(() => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 mt-4 text-center">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-4 text-center">
                   <div className="bg-blue-50 p-3 rounded-lg">
                     <div className="text-xs text-slate-500">Total Students</div>
                     <div className="text-2xl font-black text-blue-600">{students.length ?? 0}</div>
@@ -2634,9 +2634,9 @@ useEffect(() => {
 
               <div className="space-y-3">
                 {students.map((s) => (
-                  <div key={s._id} className="saas-list-card p-3 md:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <div className="font-semibold text-slate-900 text-sm">{s.name}</div>
+                  <div key={s._id} className="saas-list-card p-3 md:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
+                    <div className="min-w-0 max-w-full">
+                      <div className="font-semibold text-sm md:text-base break-words whitespace-normal max-w-full text-slate-900">{s.name}</div>
                       <div className="text-xs md:text-sm text-slate-500 mt-1 break-words">Roll {s.rollNo || "—"}</div>
                     </div>
                     <div className="flex items-center gap-2">

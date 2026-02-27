@@ -141,14 +141,22 @@ export default function StudentAnalyticsDashboard() {
           >
             ← Back to Dashboard
           </button>
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-5xl font-black text-white mb-2">{student.name}'s Learning Profile</h1>
-              <p className="text-blue-200 text-base font-semibold">Class {student.class} • Section {student.section} • Analyzing growth & potential 📊</p>
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-3xl md:text-5xl font-bold break-words text-white mb-2">
+                {student.name}'s Learning Profile
+              </h1>
+              <p className="text-blue-200 text-base font-semibold break-words whitespace-normal">
+                Class {student.class} • Section {student.section} • Analyzing growth & potential 📊
+              </p>
             </div>
-            <div className="text-right bg-white/10 backdrop-blur-md rounded-lg p-4 border border-white/20">
-              <p className="text-blue-100 text-sm">Roll No: <span className="font-bold text-white">{student.rollNo}</span></p>
-              <p className="text-blue-100 text-sm">Email: <span className="font-semibold">{student.email}</span></p>
+            <div className="w-full md:w-auto max-w-full md:max-w-sm min-w-0 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-3">
+              <p className="text-blue-100 text-sm break-words whitespace-normal">
+                Roll No: <span className="font-bold text-white">{student.rollNo || "-"}</span>
+              </p>
+              <p className="text-blue-100 text-sm break-words whitespace-normal">
+                {student.email || "-"}
+              </p>
             </div>
           </div>
         </div>

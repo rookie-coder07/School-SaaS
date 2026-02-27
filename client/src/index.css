@@ -13,6 +13,11 @@ body {
   min-height: 100vh;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 #root {
   min-height: 100vh;
   background: linear-gradient(to bottom right, rgb(241 245 249), rgb(240 249 255), rgb(224 231 255));

@@ -494,7 +494,7 @@ export default function StudentDashboard() {
     typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col lg:flex-row bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 font-sans">
+    <div className={`h-screen ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"} flex flex-col lg:flex-row bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 font-sans`}>
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -549,7 +549,7 @@ export default function StudentDashboard() {
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className="flex-1 w-full lg:w-auto min-w-0 flex flex-col overflow-hidden">
+      <div className={`flex-1 w-full lg:w-auto min-w-0 flex flex-col ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"}`}>
         {/* Header */}
         <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3">
           <div className="flex items-center min-w-0">
@@ -602,7 +602,7 @@ export default function StudentDashboard() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 lg:p-8 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100">
-          <div className="mx-auto w-full max-w-7xl">
+          <div className={activeTab === "timetable" ? "w-full" : "mx-auto w-full max-w-7xl"}>
           {loading && (
             <PageContainer className="space-y-4">
               <StatCardSkeleton count={2} />
