@@ -1,12 +1,7 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import VoiceRecorder from "../components/VoiceRecorder";
-import VoiceAnnouncements from "../components/VoiceAnnouncements";
 import NotificationBell from "../components/NotificationBell";
-import NotificationDropdown from "../components/NotificationDropdown";
-import UserTrackingDashboard from "../components/UserTrackingDashboard";
-import AdminAnalyticsDashboard from "../components/AdminAnalyticsDashboard";
 import ConfirmationModal from "../components/ConfirmationModal";
 import PageContainer from "../components/ui/PageContainer";
 import { StatCard } from "../components/ui/Card";
@@ -15,8 +10,22 @@ import { ListSkeleton } from "../components/ui/Skeleton";
 import { useToast } from "../components/ToastProvider";
 import { createNotification } from "../utils/notificationHelper";
 import { sessionTracker } from "../utils/sessionTracker";
+import VoiceRecorder from "../components/VoiceRecorder";
+import VoiceAnnouncements from "../components/VoiceAnnouncements";
+import NotificationDropdown from "../components/NotificationDropdown";
+import UserTrackingDashboard from "../components/UserTrackingDashboard";
+import AdminAnalyticsDashboard from "../components/AdminAnalyticsDashboard";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const isConstrainedDevice = () => {
+  if (typeof navigator === "undefined") return false;
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const saveData = Boolean(connection?.saveData);
+  const slowNetwork = ["slow-2g", "2g", "3g"].includes(String(connection?.effectiveType || "").toLowerCase());
+  const lowMemory = typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 4;
+  return saveData || slowNetwork || lowMemory;
+};
+const UNREAD_POLL_INTERVAL_MS = isConstrainedDevice() ? 60000 : 30000;
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -27,6 +36,13 @@ export default function AdminDashboard() {
   const [schoolId, setSchoolId] = useState("");
   const [schoolName, setSchoolName] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [dashboardSummary, setDashboardSummary] = useState({
+    studentCount: 0,
+    teacherCount: 0,
+    classCount: 0,
+    sectionCount: 0,
+    classSectionCount: 0,
+  });
   const [showNotifications, setShowNotifications] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -222,6 +238,8 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
+    const tabsNeedingMeta = new Set(["students", "teachers", "add-user", "bulk-upload", "subjects", "migrate-student", "migrate-teacher", "user-management"]);
+    if (!tabsNeedingMeta.has(activeTab)) return undefined;
     const controller = new AbortController();
 
     const fetchClassSectionMeta = async () => {
@@ -248,7 +266,34 @@ export default function AdminDashboard() {
 
     if (token) fetchClassSectionMeta();
     return () => controller.abort();
-  }, [token]);
+  }, [token, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "dashboard" || !token) return undefined;
+    const controller = new AbortController();
+    const fetchDashboardSummary = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/dashboard/summary`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setDashboardSummary({
+          studentCount: Number(data?.studentCount || 0),
+          teacherCount: Number(data?.teacherCount || 0),
+          classCount: Number(data?.classCount || 0),
+          sectionCount: Number(data?.sectionCount || 0),
+          classSectionCount: Number(data?.classSectionCount || 0),
+        });
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        console.error("DASHBOARD SUMMARY FETCH ERROR:", err);
+      }
+    };
+    fetchDashboardSummary();
+    return () => controller.abort();
+  }, [activeTab, token]);
 
   // Handle navigation from notification clicks via query params
   useEffect(() => {
@@ -277,12 +322,14 @@ export default function AdminDashboard() {
     };
 
     if (token) {
-      fetchUnreadCount();
+      const initialDelayMs = isConstrainedDevice() ? 1800 : 0;
+      const initialTimer = setTimeout(fetchUnreadCount, initialDelayMs);
       
       // Poll every 30 seconds to keep count updated
-      const interval = setInterval(fetchUnreadCount, 30000);
+      const interval = setInterval(fetchUnreadCount, UNREAD_POLL_INTERVAL_MS);
       return () => {
         controller.abort();
+        clearTimeout(initialTimer);
         clearInterval(interval);
       };
     }
@@ -324,6 +371,18 @@ export default function AdminDashboard() {
       setShowTeacherBulkEditModal(false);
       setShowTeacherDeleteConfirm(false);
     }
+  }, [activeTab]);
+
+  useEffect(() => {
+    // Prevent stuck global overlays when navigating between sections.
+    setShowNotifications(false);
+    setShowSubjectEditModal(false);
+    setShowChangePasswordModal(false);
+    setShowBulkEditModal(false);
+    setShowEditStudentModal(false);
+    setShowTeacherBulkEditModal(false);
+    setShowDeleteConfirm(false);
+    setShowTeacherDeleteConfirm(false);
   }, [activeTab]);
 
   const selectedStudentIds = useMemo(
@@ -1177,10 +1236,21 @@ export default function AdminDashboard() {
 
   // Fetch all users (students and teachers) from single endpoint
   useEffect(() => {
+    const tabsNeedingUsers = new Set([
+      "students",
+      "teachers",
+      "analytics",
+      "migrate-student",
+      "migrate-teacher",
+      "add-user",
+      "bulk-upload",
+      "user-management",
+    ]);
+    if (!tabsNeedingUsers.has(activeTab)) return undefined;
     const controller = new AbortController();
     if (token) reloadUsers({ signal: controller.signal });
     return () => controller.abort();
-  }, [token, reloadUsers]);
+  }, [token, reloadUsers, activeTab]);
 
   useEffect(() => {
     setStudentPage(1);
@@ -1200,29 +1270,13 @@ export default function AdminDashboard() {
 
   // Fetch subjects
   useEffect(() => {
-    if (activeTab !== "subjects" && activeTab !== "dashboard") return;
-    const controller = new AbortController();
-    const fetchSubjects = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/admin/subjects`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          setSubjects([]);
-          return;
-        }
-        const data = await res.json();
-        setSubjects(Array.isArray(data) ? data : data.subjects || []);
-      } catch (err) {
-        if (err?.name === "AbortError") return;
-        console.error("SUBJECTS FETCH ERROR:", err);
-        setSubjects([]);
-      }
-    };
-    fetchSubjects();
-    return () => controller.abort();
-  }, [activeTab, token]);
+    if (activeTab !== "subjects") return;
+    if (!subjectFilters.className || !subjectFilters.section) {
+      setSubjects([]);
+      return;
+    }
+    loadSubjects(subjectFilters.className, subjectFilters.section);
+  }, [activeTab, token, subjectFilters.className, subjectFilters.section]);
 
   // Add user
   const addUser = async () => {
@@ -1704,16 +1758,6 @@ export default function AdminDashboard() {
     });
   };
 
-  const totalClassSectionCount = useMemo(() => {
-    const pairs = new Set();
-    [...students, ...teachers].forEach((item) => {
-      const className = String(item?.class || item?.className || "").trim();
-      const section = String(item?.section || "").trim();
-      if (className && section) pairs.add(`${className}-${section}`);
-    });
-    return pairs.size;
-  }, [students, teachers]);
-
   const userManagementItems = useMemo(() => ([
     { id: "add-user", label: "Add User" },
   ]), []);
@@ -1855,27 +1899,37 @@ export default function AdminDashboard() {
 
         {/* Notification Dropdown */}
         {showNotifications && (
-          <NotificationDropdown
-            isOpen={showNotifications}
-            onClose={() => setShowNotifications(false)}
-            token={localStorage.getItem("adminToken")}
-            toast={toast}
-            onNotificationsUpdated={async () => {
-              try {
-                const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
-                  headers: { Authorization: `Bearer ${token}` },
-                });
-                setUnreadCount(response.data.unreadCount || 0);
-              } catch (err) {
-                console.error("Error refreshing unread count:", err);
-              }
-            }}
-          />
+          <Suspense fallback={null}>
+            <NotificationDropdown
+              isOpen={showNotifications}
+              onClose={() => setShowNotifications(false)}
+              token={localStorage.getItem("adminToken")}
+              toast={toast}
+              showBackdrop={false}
+              onNotificationsUpdated={async () => {
+                try {
+                  const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  setUnreadCount(response.data.unreadCount || 0);
+                } catch (err) {
+                  console.error("Error refreshing unread count:", err);
+                }
+              }}
+            />
+          </Suspense>
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 lg:p-8 pb-20 md:pb-6 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100">
-          <div className="mx-auto w-full max-w-7xl">
+        <div
+          className={`flex-1 overflow-y-auto overflow-x-hidden ${
+            activeTab === "analytics"
+              ? "bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] p-0 pb-16 md:pb-0"
+              : "p-3 md:p-6 lg:p-8 pb-20 md:pb-6 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100"
+          }`}
+        >
+          <div className={`mx-auto w-full ${activeTab === "analytics" ? "max-w-none" : "max-w-7xl"}`}>
+          <Suspense fallback={<ListSkeleton rows={2} />}>
           {/* ===== DASHBOARD ===== */}
           {activeTab === "dashboard" && (
             <PageContainer className="space-y-6">
@@ -1884,11 +1938,12 @@ export default function AdminDashboard() {
                 <h2 className="text-xl font-black text-slate-900 mt-1">Dashboard Overview</h2>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Total Students" value={studentTotalCount} icon="👨‍🎓" tone="blue" />
-                <StatCard label="Total Teachers" value={teacherTotalCount} icon="👨‍🏫" tone="green" />
-                <StatCard label="Total Classes / Sections" value={totalClassSectionCount} icon="🏫" tone="purple" />
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <StatCard label="Total Students" value={dashboardSummary.studentCount || studentTotalCount} icon="👨‍🎓" tone="blue" />
+                  <StatCard label="Total Teachers" value={dashboardSummary.teacherCount || teacherTotalCount} icon="👨‍🏫" tone="green" />
+                  <StatCard label="Total Classes" value={dashboardSummary.classCount || 0} icon="🏫" tone="purple" />
+                  <StatCard label="Total Sections" value={dashboardSummary.sectionCount || 0} icon="📚" tone="purple" />
+                </div>
             </PageContainer>
           )}
 
@@ -3442,6 +3497,7 @@ export default function AdminDashboard() {
           {activeTab === "tracking" && (
             <UserTrackingDashboard token={token} schoolId={schoolId} />
           )}
+          </Suspense>
 
           </div>
         </div>
@@ -3721,6 +3777,7 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
 
 
 

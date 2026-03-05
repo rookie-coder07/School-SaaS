@@ -90,11 +90,12 @@ export default function VoiceAnnouncements({
       }
 
       const data = await res.json();
-      console.log(`✅ Loaded ${data.length} announcements from ${endpoint}`);
-      data.forEach((ann, idx) => {
+      const announcementList = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      console.log(`✅ Loaded ${announcementList.length} announcements from ${endpoint}`);
+      announcementList.forEach((ann, idx) => {
         console.log(`   [${idx + 1}] ${ann.title} - Type: ${ann.audioUrl ? "voice" : "text"}`);
       });
-      setAnnouncements(data || []);
+      setAnnouncements(announcementList);
     } catch (err) {
       console.error("❌ FETCH ANNOUNCEMENTS ERROR:", err);
       console.error(`   Endpoint: ${API_URL}${endpoint}`);

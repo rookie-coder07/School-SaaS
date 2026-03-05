@@ -24,7 +24,8 @@ export default function StudentExams({ token }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch exam timetable");
-      setExams(Array.isArray(data) ? data : []);
+      const examList = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      setExams(examList);
     } catch (err) {
       console.error("STUDENT EXAMS FETCH ERROR:", err);
       setError(err.message || "Failed to load exam timetable");

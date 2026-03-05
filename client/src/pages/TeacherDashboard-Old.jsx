@@ -242,7 +242,7 @@ export default function TeacherDashboard() {
 
         const map = {};
         (data || []).forEach((d) => {
-          const id = String(d.studentId ?? d._id ?? d.studentUserId ?? "");
+          const id = String(d.studentId ? d._id ? d.studentUserId ? "");
           const total = Number(d.total) || 0;
           const present = Number(d.present) || 0;
           map[id] = total > 0 ? Math.round((present / total) * 100) : 0;

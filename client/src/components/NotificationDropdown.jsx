@@ -8,7 +8,14 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
  * NotificationDropdown Component
  * Displays a list of notifications with ability to mark as read and navigate
  */
-export default function NotificationDropdown({ isOpen, onClose, token, toast, onNotificationsUpdated }) {
+export default function NotificationDropdown({
+  isOpen,
+  onClose,
+  token,
+  toast,
+  onNotificationsUpdated,
+  showBackdrop = true,
+}) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -219,10 +226,7 @@ export default function NotificationDropdown({ isOpen, onClose, token, toast, on
   return (
     <div className="fixed inset-0 z-40 overflow-hidden">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black bg-opacity-50"
-        onClick={onClose}
-      />
+      <div className={`absolute inset-0 ${showBackdrop ? "bg-black bg-opacity-50" : "bg-transparent"}`} onClick={onClose} />
 
       {/* Dropdown Panel */}
       <div className="absolute top-12 right-4 w-96 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">

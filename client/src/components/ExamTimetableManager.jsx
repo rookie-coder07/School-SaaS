@@ -54,7 +54,8 @@ export default function ExamTimetableManager({ token, teacher }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch exams");
-      setExams(Array.isArray(data) ? data : []);
+      const examList = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      setExams(examList);
     } catch (err) {
       console.error("EXAM FETCH ERROR:", err);
       toast.error(err.message || "Failed to load exam timetable");

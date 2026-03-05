@@ -1,4 +1,6 @@
-// ...existing code...
+// Deprecated route module.
+// Do not mount this file; server/server.js contains the active teacher routes.
+// This file uses legacy attendance identity fields and is kept only for reference.
 import express from "express";
 import { ObjectId } from "mongodb";
 import { requireAuth, requireRole, requireTenantId } from "../middleware/authMiddleware.js";

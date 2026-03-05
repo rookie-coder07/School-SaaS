@@ -1,17 +1,8 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import AttendanceCalendar from "../components/AttendanceCalendar";
-import StudentExamSyllabus from "../components/StudentExamSyllabus";
-import StudentExams from "../components/StudentExams";
-import StudentMarksCards from "../components/StudentMarksCards";
-import VoiceAnnouncements from "../components/VoiceAnnouncements";
-import DateFilterBar from "../components/DateFilterBar";
 import NotificationBell from "../components/NotificationBell";
-import NotificationDropdown from "../components/NotificationDropdown";
-import TimetableGrid from "../components/TimetableGrid";
-import StudentAnalyticsContent from "../components/StudentAnalyticsContent";
 import { useToast } from "../components/ToastProvider";
 import PageContainer from "../components/ui/PageContainer";
 import { Card, StatCard } from "../components/ui/Card";
@@ -19,8 +10,18 @@ import ListItemCard from "../components/ui/ListItemCard";
 import { ListSkeleton, StatCardSkeleton } from "../components/ui/Skeleton";
 import { sessionTracker } from "../utils/sessionTracker";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
+import AttendanceCalendar from "../components/AttendanceCalendar";
+import StudentExamSyllabus from "../components/StudentExamSyllabus";
+import StudentExams from "../components/StudentExams";
+import StudentMarksCards from "../components/StudentMarksCards";
+import VoiceAnnouncements from "../components/VoiceAnnouncements";
+import DateFilterBar from "../components/DateFilterBar";
+import NotificationDropdown from "../components/NotificationDropdown";
+import TimetableGrid from "../components/TimetableGrid";
+import StudentAnalyticsDashboard from "../components/student/StudentAnalyticsDashboard";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const lazyFallback = <ListSkeleton rows={2} />;
 
 export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -51,9 +52,6 @@ export default function StudentDashboard() {
   const [eventsDateFilter, setEventsDateFilter] = useState({ from: "", to: "" });
   const [voiceDateFilter, setVoiceDateFilter] = useState({ from: "", to: "" });
   const [timetable, setTimetable] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsError, setAnalyticsError] = useState(null);
   const [showForcePasswordModal, setShowForcePasswordModal] = useState(
     localStorage.getItem("studentMustChangePassword") === "1"
   );
@@ -135,6 +133,7 @@ export default function StudentDashboard() {
   }, [token, navigate]);
 
   useEffect(() => {
+    if (activeTab !== "marks") return undefined;
     const controller = new AbortController();
     const fetchStudentMarks = async () => {
       try {
@@ -163,7 +162,7 @@ export default function StudentDashboard() {
 
     if (token) fetchStudentMarks();
     return () => controller.abort();
-  }, [token]);
+  }, [token, activeTab]);
 
   // Fetch unread notification count on mount and periodically
   useEffect(() => {
@@ -236,7 +235,14 @@ export default function StudentDashboard() {
           return;
         }
         const data = await res.json();
-        setHomework(Array.isArray(data) ? data : data.homework || []);
+        const homeworkList = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.data)
+            ? data.data
+            : Array.isArray(data?.homework)
+              ? data.homework
+              : [];
+        setHomework(homeworkList);
       } catch (err) {
         if (err?.name === "AbortError") return;
         console.error("HOMEWORK FETCH ERROR:", err);
@@ -263,7 +269,14 @@ export default function StudentDashboard() {
           return;
         }
         const data = await res.json();
-        setEvents(Array.isArray(data) ? data : data.events || []);
+        const eventsList = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.data)
+            ? data.data
+            : Array.isArray(data?.events)
+              ? data.events
+              : [];
+        setEvents(eventsList);
       } catch (err) {
         if (err?.name === "AbortError") return;
         console.error("EVENTS FETCH ERROR:", err);
@@ -360,38 +373,6 @@ export default function StudentDashboard() {
     return () => controller.abort();
   }, [activeTab, token]);
 
-  // Fetch analytics
-  useEffect(() => {
-    if (activeTab !== "analytics") return;
-    const controller = new AbortController();
-    const fetchAnalytics = async () => {
-      try {
-        setAnalyticsLoading(true);
-        setAnalyticsError(null);
-        const res = await fetch(`${API_URL}/api/student/analytics`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.error || "Failed to fetch analytics");
-        }
-        const data = await res.json();
-        setAnalytics(data);
-        setAnalyticsError(null);
-      } catch (err) {
-        if (err?.name === "AbortError") return;
-        console.error("ANALYTICS FETCH ERROR:", err);
-        setAnalyticsError(err.message || "Failed to load analytics");
-        setAnalytics(null);
-      } finally {
-        setAnalyticsLoading(false);
-      }
-    };
-    if (token) fetchAnalytics();
-    return () => controller.abort();
-  }, [activeTab, token]);
-
   // Teacher info is already loaded from the dashboard fetch above
   // No need for additional fetch
 
@@ -473,6 +454,7 @@ export default function StudentDashboard() {
   const navItems = [
     { id: "dashboard", label: "Dashboard" },
     { id: "attendance", label: "Attendance" },
+    { id: "analytics", label: "Analytics" },
     { id: "marks", label: "Marks" },
     { id: "homework", label: "Homework" },
     { id: "timetable", label: "Timetable" },
@@ -582,33 +564,36 @@ export default function StudentDashboard() {
 
         {/* Notification Dropdown */}
         {showNotifications && (
-          <NotificationDropdown
-            isOpen={showNotifications}
-            onClose={() => setShowNotifications(false)}
-            token={localStorage.getItem("studentToken")}
-            toast={toast}
-            onNotificationsUpdated={async () => {
-              try {
-                const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
-                  headers: { Authorization: `Bearer ${token}` },
-                });
-                setUnreadCount(response.data.unreadCount || 0);
-              } catch (err) {
-                console.error("Error refreshing unread count:", err);
-              }
-            }}
-          />
+          <Suspense fallback={null}>
+            <NotificationDropdown
+              isOpen={showNotifications}
+              onClose={() => setShowNotifications(false)}
+              token={localStorage.getItem("studentToken")}
+              toast={toast}
+              onNotificationsUpdated={async () => {
+                try {
+                  const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  setUnreadCount(response.data.unreadCount || 0);
+                } catch (err) {
+                  console.error("Error refreshing unread count:", err);
+                }
+              }}
+            />
+          </Suspense>
         )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 lg:p-8 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100">
           <div className={activeTab === "timetable" ? "w-full" : "mx-auto w-full max-w-7xl"}>
-          {loading && (
-            <PageContainer className="space-y-4">
-              <StatCardSkeleton count={2} />
-              <ListSkeleton rows={2} />
-            </PageContainer>
-          )}
+          <Suspense fallback={lazyFallback}>
+            {loading && (
+              <PageContainer className="space-y-4">
+                <StatCardSkeleton count={2} />
+                <ListSkeleton rows={2} />
+              </PageContainer>
+            )}
 
           {/* ===== DASHBOARD ===== */}
           {activeTab === "dashboard" && (
@@ -667,7 +652,7 @@ export default function StudentDashboard() {
 
 
           {/* ===== MARKS ===== */}
-          {activeTab === "marks" && (
+            {activeTab === "marks" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Your Marks</h2>
               {marksLoading ? (
@@ -686,7 +671,7 @@ export default function StudentDashboard() {
           )}
 
           {/* ===== ATTENDANCE ===== */}
-          {activeTab === "attendance" && (
+            {activeTab === "attendance" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Attendance</h2>
               {!attendance || attendance.length === 0 ? (
@@ -700,19 +685,18 @@ export default function StudentDashboard() {
           )}
 
           {/* ===== ANALYTICS ===== */}
-          {activeTab === "analytics" && (
+            {activeTab === "analytics" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Your Analytics Dashboard</h2>
-              <StudentAnalyticsContent 
-                analytics={analytics}
-                loading={analyticsLoading}
-                error={analyticsError}
+              <StudentAnalyticsDashboard
+                endpoint={`${API_URL}/api/student/analytics`}
+                authToken={token}
+                onBack={() => setActiveTab("dashboard")}
               />
             </div>
           )}
 
           {/* ===== EXAM SYLLABUS ===== */}
-          {activeTab === "exam-syllabus" && (
+            {activeTab === "exam-syllabus" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Exam Syllabus</h2>
               <StudentExamSyllabus token={token} selectedExamId={selectedExamId} />
@@ -720,7 +704,7 @@ export default function StudentDashboard() {
           )}
 
           {/* ===== EXAMS ===== */}
-          {activeTab === "exams" && (
+            {activeTab === "exams" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Exam Timetable</h2>
               <StudentExams token={token} />
@@ -728,7 +712,7 @@ export default function StudentDashboard() {
           )}
 
           {/* ===== HOMEWORK ===== */}
-          {activeTab === "homework" && (
+            {activeTab === "homework" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Homework</h2>
               <DateFilterBar value={homeworkDateFilter} onChange={setHomeworkDateFilter} />
@@ -757,7 +741,7 @@ export default function StudentDashboard() {
           {/* ===== EVENTS ===== */}
 
           {/* ===== EVENTS ===== */}
-          {activeTab === "events" && (
+            {activeTab === "events" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Events</h2>
               <DateFilterBar value={eventsDateFilter} onChange={setEventsDateFilter} />
@@ -784,7 +768,7 @@ export default function StudentDashboard() {
           )}
 
           {/* ===== PROFILE ===== */}
-          {activeTab === "profile" && student && (
+            {activeTab === "profile" && student && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">My Profile</h2>
               <div className="saas-card p-3 md:p-6 space-y-3">
@@ -832,7 +816,7 @@ export default function StudentDashboard() {
           )}
 
           {/* ===== TIMETABLE ===== */}
-          {activeTab === "timetable" && (
+            {activeTab === "timetable" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Class Timetable</h2>
               <TimetableGrid token={token} isTeacher={false} readOnly={true} />
@@ -840,7 +824,7 @@ export default function StudentDashboard() {
           )}
 
           {/* ===== ANNOUNCEMENTS ===== */}
-          {activeTab === "announcements" && (
+            {activeTab === "announcements" && (
             <VoiceAnnouncements 
               endpoint="/api/student/announcements"
               title="📢 School Announcements"
@@ -849,7 +833,7 @@ export default function StudentDashboard() {
           )}
 
           {/* ===== VOICE MESSAGES ===== */}
-          {activeTab === "voice" && (
+            {activeTab === "voice" && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-slate-900">Voice Messages</h2>
               <DateFilterBar value={voiceDateFilter} onChange={setVoiceDateFilter} />
@@ -906,7 +890,8 @@ export default function StudentDashboard() {
                 </div>
               )}
             </div>
-          )}
+            )}
+          </Suspense>
           </div>
         </div>
       </div>

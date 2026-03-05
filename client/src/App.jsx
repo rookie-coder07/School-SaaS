@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
@@ -7,24 +7,28 @@ import { FullPageLoader } from "./components/ui/Loaders";
 import AdminLogin from "./pages/AdminLogin";
 import StudentLogin from "./pages/StudentLogin";
 import TeacherLogin from "./pages/TeacherLogin";
+import { lazyWithRetry } from "./utils/lazyWithRetry";
 
-const Home = lazy(() => import("./pages/Home"));
-const About = lazy(() => import("./pages/About"));
-const Admissions = lazy(() => import("./pages/Admissions"));
-const Contact = lazy(() => import("./pages/Contact"));
+const Home = lazyWithRetry(() => import("./pages/Home"), "HomePage");
+const About = lazyWithRetry(() => import("./pages/About"), "AboutPage");
+const Admissions = lazyWithRetry(() => import("./pages/Admissions"), "AdmissionsPage");
+const Contact = lazyWithRetry(() => import("./pages/Contact"), "ContactPage");
 
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminDashboard = lazyWithRetry(() => import("./pages/AdminDashboard"), "AdminDashboardPage");
 
-const StudentDashboard = lazy(() => import("./pages/StudentDashboard"));
+const StudentDashboard = lazyWithRetry(() => import("./pages/StudentDashboard"), "StudentDashboardPage");
 
-const TeacherDashboard = lazy(() => import("./pages/TeacherDashboard"));
-const TeacherChangePassword = lazy(() => import("./pages/TeacherChangePassword"));
-const StudentAnalyticsDashboard = lazy(() => import("./pages/StudentAnalyticsDashboard"));
+const TeacherDashboard = lazyWithRetry(() => import("./pages/TeacherDashboard"), "TeacherDashboardPage");
+const TeacherChangePassword = lazyWithRetry(() => import("./pages/TeacherChangePassword"), "TeacherChangePasswordPage");
+const StudentAnalyticsDashboard = lazyWithRetry(
+  () => import("./pages/StudentAnalyticsDashboard"),
+  "StudentAnalyticsDashboardPage"
+);
 
-const DeveloperLogin = lazy(() => import("./pages/DeveloperLogin"));
-const DeveloperDashboard = lazy(() => import("./pages/DeveloperDashboard"));
-const DevSchoolsList = lazy(() => import("./pages/DevSchoolsList"));
-const DevSchoolDetails = lazy(() => import("./pages/DevSchoolDetails"));
+const DeveloperLogin = lazyWithRetry(() => import("./pages/DeveloperLogin"), "DeveloperLoginPage");
+const DeveloperDashboard = lazyWithRetry(() => import("./pages/DeveloperDashboard"), "DeveloperDashboardPage");
+const DevSchoolsList = lazyWithRetry(() => import("./pages/DevSchoolsList"), "DevSchoolsListPage");
+const DevSchoolDetails = lazyWithRetry(() => import("./pages/DevSchoolDetails"), "DevSchoolDetailsPage");
 
 const preloadLikelyRoutes = () => {
   import("./pages/AdminDashboard");
@@ -33,8 +37,18 @@ const preloadLikelyRoutes = () => {
   import("./pages/StudentAnalyticsDashboard");
 };
 
+const shouldSkipPreload = () => {
+  if (typeof navigator === "undefined") return false;
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const saveData = Boolean(connection?.saveData);
+  const slowNetwork = ["slow-2g", "2g", "3g"].includes(String(connection?.effectiveType || "").toLowerCase());
+  const lowMemory = typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 4;
+  return saveData || slowNetwork || lowMemory;
+};
+
 export default function App() {
   useEffect(() => {
+    if (shouldSkipPreload()) return undefined;
     const scheduler = window.requestIdleCallback || ((cb) => setTimeout(cb, 1200));
     const handle = scheduler(() => preloadLikelyRoutes());
     return () => {
@@ -71,6 +85,14 @@ export default function App() {
             element={
               <ProtectedRoute role="student">
                 <StudentDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/student-analytics"
+            element={
+              <ProtectedRoute role="student">
+                <StudentAnalyticsDashboard />
               </ProtectedRoute>
             }
           />

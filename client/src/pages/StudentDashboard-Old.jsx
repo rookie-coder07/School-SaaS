@@ -235,13 +235,13 @@ export default function StudentDashboard() {
               <>
                 {/* Build subjects and rows (exam+date) */}
                 {(() => {
-                  const subjects = Array.from(new Set(marks.map(m => m.subject ?? "Other"))).sort();
+                  const subjects = Array.from(new Set(marks.map(m => m.subject ? "Other"))).sort();
 
                   const rowMap = {};
                   marks.forEach(m => {
-                    const key = `${m.exam ?? "Exam"}|${m.date ?? ""}`;
-                    if (!rowMap[key]) rowMap[key] = { exam: m.exam ?? "Exam", date: m.date ?? null, marks: {} };
-                    rowMap[key].marks[m.subject ?? "Other"] = m.score ?? null;
+                    const key = `${m.exam ? "Exam"}|${m.date ? ""}`;
+                    if (!rowMap[key]) rowMap[key] = { exam: m.exam ? "Exam", date: m.date ? null, marks: {} };
+                    rowMap[key].marks[m.subject ? "Other"] = m.score ? null;
                   });
 
                   const rows = Object.values(rowMap).sort((a, b) => {
@@ -292,16 +292,16 @@ export default function StudentDashboard() {
         {activeTab === "dashboard" && (
           <>
             <h1 style={styles.title}>Student Dashboard</h1>
-            <p style={styles.subtitle}>Welcome {student?.name ?? "Student"}</p>
+            <p style={styles.subtitle}>Welcome {student?.name ? "Student"}</p>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 8 }}>
               <div style={{ ...styles.card, minWidth: 180 }}>
                 <span style={styles.cardLabel}>Class</span>
-                <b style={styles.cardValue}>{student?.class ?? "—"}</b>
+                <b style={styles.cardValue}>{student?.class ? "—"}</b>
               </div>
               <div style={{ ...styles.card, minWidth: 220 }}>
                 <span style={styles.cardLabel}>Assigned Teacher</span>
-                <b style={styles.cardValue}>{teacher?.name ?? "Not assigned"}</b>
+                <b style={styles.cardValue}>{teacher?.name ? "Not assigned"}</b>
                 {teacher?.subject && <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>{teacher.subject}</div>}
               </div>
             </div>
@@ -413,11 +413,11 @@ export default function StudentDashboard() {
 
             <div style={styles.card}>
               <span style={styles.cardLabel}>Name</span>
-              <b style={styles.cardValue}>{student?.name ?? "Student Name"}</b>
+              <b style={styles.cardValue}>{student?.name ? "Student Name"}</b>
             </div>
             <div style={{ ...styles.card, marginTop: 12 }}>
               <span style={styles.cardLabel}>Class / Section</span>
-              <b style={styles.cardValue}>{(student?.class ?? "—") + " / " + (student?.section ?? "—")}</b>
+              <b style={styles.cardValue}>{(student?.class ? "—") + " / " + (student?.section ? "—")}</b>
             </div>
             {student?.rollNo && (
               <div style={{ ...styles.card, marginTop: 12 }}>
@@ -439,7 +439,7 @@ export default function StudentDashboard() {
             )}
             <div style={{ ...styles.card, marginTop: 12 }}>
               <span style={styles.cardLabel}>Teacher</span>
-              <b style={styles.cardValue}>{teacher?.name ?? "Not assigned"}</b>
+              <b style={styles.cardValue}>{teacher?.name ? "Not assigned"}</b>
             </div>
           </>
         )}

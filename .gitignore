@@ -4,5 +4,6 @@ uploads/
 dist/
 build/
 *.log
+logs/
 .vscode/
 .DS_Store

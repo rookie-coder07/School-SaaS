@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import compression from "compression";
@@ -14,6 +14,7 @@ import MockDatabase from "./mockDb.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { createQaObservabilityMiddleware } from "./middleware/qaObservability.js";
 
 // Load environment variables from .env file in server directory
 // We'll load the .env after __dirname is defined below
@@ -58,6 +59,7 @@ app.use(cors({
 
 app.use(compression());
 app.use(express.json());
+app.use(createQaObservabilityMiddleware());
 
 app.use((req, res, next) => {
   const startedAt = Date.now();
@@ -82,6 +84,14 @@ dotenv.config({ path: envPath });
 console.log(`📁 Loading .env from: ${envPath}`);
 console.log(`✅ JWT_SECRET loaded: ${process.env.JWT_SECRET ? "YES" : "NO"}`);
 console.log(`✅ MONGO_URI loaded: ${process.env.MONGO_URI ? "YES (first 50 chars): " + process.env.MONGO_URI.substring(0, 50) : "NO"}`);
+
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED_REJECTION:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("UNCAUGHT_EXCEPTION:", error);
+});
 
 // 🎙️ Serve uploaded files (voice recordings, documents, etc)
 // This makes /uploads/{filename} accessible publicly
@@ -120,6 +130,31 @@ const parseObjectIds = (ids = []) =>
 
 const parseStudentObjectIds = (studentIds = []) => parseObjectIds(studentIds);
 const parseTeacherObjectIds = (teacherIds = []) => parseObjectIds(teacherIds);
+const MONGO_DUPLICATE_KEY_CODE = 11000;
+
+const isMongoDuplicateKeyError = (error) => Number(error?.code) === MONGO_DUPLICATE_KEY_CODE;
+
+const normalizeStudentIdentity = ({ classValue, sectionValue, rollNo }) => ({
+  class: String(classValue ?? "").trim(),
+  section: String(sectionValue ?? "").trim(),
+  rollNo: String(rollNo ?? "").trim(),
+});
+
+async function findStudentIdentityConflict({ schoolId, classValue, sectionValue, rollNo, excludeStudentId = null }) {
+  const identity = normalizeStudentIdentity({ classValue, sectionValue, rollNo });
+  if (!schoolId || !identity.class || !identity.section || !identity.rollNo) return null;
+
+  const query = {
+    schoolId,
+    class: identity.class,
+    section: identity.section,
+    rollNo: identity.rollNo,
+  };
+  if (excludeStudentId) {
+    query._id = { $ne: excludeStudentId };
+  }
+  return db.collection("students").findOne(query, { projection: { _id: 1, name: 1, class: 1, section: 1, rollNo: 1 } });
+}
 
 const publicRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -519,7 +554,6 @@ async function ensureMongoIndexes() {
       ]),
       db.collection("students").createIndexes([
         { key: { schoolId: 1, class: 1, section: 1, isDeleted: 1 }, name: "students_school_class_section_deleted_idx" },
-        { key: { schoolId: 1, class: 1, section: 1, rollNo: 1 }, name: "students_school_class_section_roll_idx" },
       ]),
       db.collection("teachers").createIndexes([
         { key: { schoolId: 1, class: 1, section: 1, isDeleted: 1 }, name: "teachers_school_class_section_deleted_idx" },
@@ -544,9 +578,51 @@ async function ensureMongoIndexes() {
         { key: { schoolId: 1, status: 1, userType: 1, handlerId: 1 }, name: "resetreq_school_status_type_handler_idx" },
       ]),
     ]);
-    console.log("✅ MongoDB indexes ensured");
+
+    const usersCollection = db.collection("users");
+    try {
+      await usersCollection.createIndex(
+        { email: 1 },
+        { unique: true, name: "users_email_unique_idx" }
+      );
+      console.log("Users unique index ensured (email)");
+    } catch (userIndexErr) {
+      if (isMongoDuplicateKeyError(userIndexErr)) {
+        console.warn("Users unique index not created: duplicate emails exist.");
+      } else {
+        throw userIndexErr;
+      }
+    }
+
+    const studentsCollection = db.collection("students");
+    try {
+      const existingIndexes = await studentsCollection.indexes();
+      const legacyIndex = existingIndexes.find((idx) => idx.name === "students_school_class_section_roll_idx");
+      if (legacyIndex) {
+        await studentsCollection.dropIndex("students_school_class_section_roll_idx");
+        console.log("Dropped legacy non-unique students roll index");
+      }
+    } catch (dropErr) {
+      console.warn("Failed to drop legacy students roll index:", dropErr.message);
+    }
+
+    try {
+      await studentsCollection.createIndex(
+        { schoolId: 1, class: 1, section: 1, rollNo: 1 },
+        { unique: true, name: "students_school_class_section_roll_unique_idx" }
+      );
+      console.log("Students unique index ensured (schoolId+class+section+rollNo)");
+    } catch (indexErr) {
+      if (isMongoDuplicateKeyError(indexErr)) {
+        console.warn("Students unique index not created: duplicate records exist. Run duplicate cleanup first.");
+      } else {
+        throw indexErr;
+      }
+    }
+
+    console.log("MongoDB indexes ensured");
   } catch (err) {
-    console.warn("⚠️ Failed to ensure indexes:", err.message);
+    console.warn("Failed to ensure indexes:", err.message);
   }
 }
 
@@ -659,8 +735,25 @@ function requireAuth(req, res, next) {
 }
 function requireRole(role) {
   return (req, res, next) => {
-    console.log("ROLE CHECK - Required:", role, "Actual:", req.user?.role);
+    console.log(
+      JSON.stringify({
+        tag: "QA_ROLE_CHECK",
+        requestId: req.qaRequestId || null,
+        requiredRole: role,
+        actualRole: req.user?.role || null,
+        path: req.originalUrl,
+      })
+    );
     if (!req.user || req.user.role !== role) {
+      console.warn(
+        JSON.stringify({
+          tag: "QA_ROLE_DENY",
+          requestId: req.qaRequestId || null,
+          requiredRole: role,
+          actualRole: req.user?.role || null,
+          path: req.originalUrl,
+        })
+      );
       return res.status(403).json({ error: "Access denied" });
     }
     next();
@@ -748,6 +841,57 @@ app.get("/api/health", publicRateLimit, async (req, res) => {
     },
     timestamp: new Date().toISOString(),
   });
+});
+
+app.get("/api/debug/health", publicRateLimit, async (req, res) => {
+  try {
+    const memory = process.memoryUsage();
+    let mongoStatus = isMongoConnected ? "connected" : "disconnected";
+    if (isMongoConnected && db) {
+      try {
+        await db.command({ ping: 1 });
+        mongoStatus = "connected";
+      } catch {
+        mongoStatus = "degraded";
+      }
+    }
+
+    let teacherCount = 0;
+    let studentCount = 0;
+    if (db && mongoStatus === "connected") {
+      [teacherCount, studentCount] = await Promise.all([
+        db.collection("teachers").countDocuments({ isDeleted: { $ne: true } }),
+        db.collection("students").countDocuments({ isDeleted: { $ne: true } }),
+      ]);
+    }
+
+    let jwtWorking = false;
+    try {
+      const probe = jwt.sign({ probe: true }, process.env.JWT_SECRET, { expiresIn: "1m" });
+      const decoded = jwt.verify(probe, process.env.JWT_SECRET);
+      jwtWorking = Boolean(decoded?.probe);
+    } catch {
+      jwtWorking = false;
+    }
+
+    return res.json({
+      uptime: process.uptime(),
+      memoryUsage: {
+        rss: memory.rss,
+        heapUsed: memory.heapUsed,
+        heapTotal: memory.heapTotal,
+        external: memory.external,
+      },
+      mongoStatus,
+      jwtWorking,
+      teacherCount,
+      studentCount,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("DEBUG_HEALTH_ERROR:", error);
+    return res.status(500).json({ error: "Failed to fetch debug health" });
+  }
 });
 
 /* ================================
@@ -1690,8 +1834,11 @@ app.get("/api/student/attendance", requireAuth, requireRole("STUDENT"), requireT
     // ✅ TENANT SCOPED: Only SUBMITTED attendance from this school
     const query = {
       schoolId: schoolObjectId,
-      studentId: studentId,
       submissionStatus: "SUBMITTED",
+      $or: [
+        { studentId: studentId },
+        { studentUserId: userObjectId },
+      ],
     };
 
     console.log("✅ STUDENT ATTENDANCE QUERY - schoolId:", schoolObjectId, "studentId:", studentId);
@@ -1892,6 +2039,10 @@ app.get("/api/student/marks", requireAuth, requireRole("STUDENT"), requireTenant
    ================================= */
 app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
   try {
+    if (String(req.user?.role || "").toUpperCase() !== "STUDENT") {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
     const userObjectId = safeObjectId(req.user?.userId);
     const schoolId = req.user.schoolIdObj; // From requireTenantId middleware
 
@@ -2073,11 +2224,42 @@ app.get(
       const schoolId = req.user.schoolIdObj;
       if (!className) return res.status(400).json({ error: "Missing className" });
 
-      const match = {
+      const classFilter = {
+        schoolId,
         class: String(className),
         ...(section ? { section: String(section) } : {}),
+      };
+
+      const activeStudents = await db.collection("students")
+        .find(activeStudentFilter(classFilter))
+        .project({ _id: 1, userId: 1 })
+        .toArray();
+
+      if (!activeStudents.length) {
+        return res.json([]);
+      }
+
+      const attendanceKeyToStudentId = new Map();
+      const validAttendanceKeys = [];
+      for (const student of activeStudents) {
+        const studentIdStr = String(student._id);
+        attendanceKeyToStudentId.set(studentIdStr, studentIdStr);
+        validAttendanceKeys.push(student._id);
+
+        if (student.userId) {
+          const userIdStr = String(student.userId);
+          attendanceKeyToStudentId.set(userIdStr, studentIdStr);
+          validAttendanceKeys.push(student.userId);
+        }
+      }
+
+      const match = {
+        ...classFilter,
         submissionStatus: "SUBMITTED",
-        ...(schoolId ? { schoolId } : {}),
+        $or: [
+          { studentId: { $in: validAttendanceKeys } },
+          { studentUserId: { $in: validAttendanceKeys } },
+        ],
       };
 
       // normalize status (trim + toUpper) then group by student key
@@ -2106,10 +2288,21 @@ app.get(
 
       const agg = await db.collection("attendance").aggregate(pipeline).toArray();
 
-      const out = (agg || []).map((r) => ({
-        studentId: r._id ? String(r._id) : null,
-        total: r.total || 0,
-        present: r.present || 0,
+      const merged = new Map();
+      for (const row of agg || []) {
+        const attendanceKey = row?._id ? String(row._id) : "";
+        const canonicalStudentId = attendanceKeyToStudentId.get(attendanceKey);
+        if (!canonicalStudentId) continue;
+        const current = merged.get(canonicalStudentId) || { total: 0, present: 0 };
+        current.total += Number(row?.total) || 0;
+        current.present += Number(row?.present) || 0;
+        merged.set(canonicalStudentId, current);
+      }
+
+      const out = Array.from(merged.entries()).map(([studentId, stats]) => ({
+        studentId,
+        total: stats.total,
+        present: stats.present,
       }));
 
       return res.json(out);
@@ -2286,8 +2479,13 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
           try {
             const classValue = row.class ?? row.className;
             const { parentName, parentPhone } = extractParentContact(row);
-            if (!row.name || !classValue || !row.section || !parentName || !parentPhone) {
-              throw new Error("Missing required fields: name, class/className, section, parentName, parentPhone");
+            const identity = normalizeStudentIdentity({
+              classValue,
+              sectionValue: row.section,
+              rollNo: row.rollNo,
+            });
+            if (!row.name || !identity.class || !identity.section || !identity.rollNo || !parentName || !parentPhone) {
+              throw new Error("Missing required fields: name, class/className, section, rollNo, parentName, parentPhone");
             }
             if (!isValidParentPhone(parentPhone)) {
               throw new Error("Invalid parentPhone format");
@@ -2296,8 +2494,9 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
             const email =
               row.email ||
               `${row.name.replace(/\s+/g, "").toLowerCase()}@school.com`;
+            const normalizedEmail = String(email || "").trim().toLowerCase();
 
-            let user = await db.collection("users").findOne({ email });
+            let user = await db.collection("users").findOne({ email: normalizedEmail });
 
             if (!user) {
               const hash = await bcrypt.hash("student123", 10);
@@ -2312,6 +2511,17 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
               console.log("CREATED USER:", user._id);
             }
 
+            const duplicate = await db.collection("students").findOne({
+              schoolId,
+              class: identity.class,
+              section: identity.section,
+              rollNo: identity.rollNo,
+              userId: { $ne: user._id },
+            });
+            if (duplicate) {
+              throw new Error("Duplicate student identity found in school for class/section/rollNo");
+            }
+
             await db.collection("students").updateOne(
               { userId: user._id, schoolId: schoolId },
               {
@@ -2319,16 +2529,19 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
                   userId: user._id,
                   email: email,
                   name: row.name,
-                  class: String(classValue),
-                  className: String(classValue),
-                  section: String(row.section),
-                  rollNo: row.rollNo || "",
+                  class: identity.class,
+                  className: identity.class,
+                  section: identity.section,
+                  rollNo: identity.rollNo,
                   parentName,
                   parentPhone,
                   phone: parentPhone,
                   assignedTeacher: null,
                   isDeleted: false,
                   schoolId: schoolId,
+                  updatedAt: new Date(),
+                },
+                $setOnInsert: {
                   createdAt: new Date(),
                 },
               },
@@ -2337,12 +2550,15 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
 
             successCount++;
           } catch (rowError) {
+            const safeMessage = isMongoDuplicateKeyError(rowError)
+              ? "Student already exists for this class/section/rollNo in this school"
+              : rowError.message;
             errorCount++;
             errors.push({
               row: row.name || "Unknown",
-              error: rowError.message,
+              error: safeMessage,
             });
-            console.error("ROW ERROR:", rowError.message, row);
+            console.error("ROW ERROR:", safeMessage, row);
           }
         })
       );
@@ -2420,7 +2636,7 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
               const hash = await bcrypt.hash("teacher123", 10);
 
               const result = await db.collection("users").insertOne({
-                email,
+                email: normalizedEmail,
                 passwordHash: hash,
                 role: "TEACHER",
                 schoolId: schoolId,
@@ -2436,7 +2652,7 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
               {
                 $set: {
                   userId: user._id,
-                  email: email,
+                  email: normalizedEmail,
                   name: row.name,
                   subject: row.subject || "",
                   class: classValue,
@@ -2454,12 +2670,15 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
 
             successCount++;
           } catch (rowError) {
+            const safeMessage = isMongoDuplicateKeyError(rowError)
+              ? "Duplicate user or teacher identity"
+              : rowError.message;
             errorCount++;
             errors.push({
               row: row.name || "Unknown",
-              error: rowError.message,
+              error: safeMessage,
             });
-            console.error("ROW ERROR:", rowError.message, row);
+            console.error("ROW ERROR:", safeMessage, row);
           }
         })
       );
@@ -2825,7 +3044,7 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
     const percentageForDate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
 
     console.log("✅ ATTENDANCE SUBMITTED - records finalized:", result.modifiedCount, "total students in class:", totalStudents, "present:", presentCount, "absent:", absentCount, "leave:", leaveCount, "percentage:", percentageForDate + "%");
-    res.json({ 
+    res.json({
       success: true, 
       message: "Attendance submitted",
       recordsFinalized: result.modifiedCount,
@@ -2921,25 +3140,29 @@ app.post("/api/teacher/marks/save", requireAuth, requireRole("TEACHER"), require
       return res.status(400).json({ error: "Missing required fields: subject, exam, className, section, records" });
     }
 
-    const schoolId = req.user.schoolIdObj; // From requireTenantId middleware
+    const schoolId = req.user.schoolIdObj;
     const teacherId = safeObjectId(req.user.userId);
-
     if (!teacherId) {
       return res.status(400).json({ error: "Invalid teacherId in token" });
     }
 
-    // ✅ VALIDATE: Teacher's class/section matches request
     if (req.user.class !== className || req.user.section !== section) {
-      console.error("❌ MARKS SAVE REJECTED: Teacher class/section mismatch");
+      console.error("MARKS SAVE REJECTED: Teacher class/section mismatch");
       return res.status(403).json({ error: "You can only enter marks for your own class/section" });
     }
+
+    const validStudents = await db.collection("students")
+      .find(activeStudentFilter({ schoolId, class: String(className), section: String(section) }))
+      .project({ _id: 1 })
+      .toArray();
+    const validStudentIds = new Set(validStudents.map((s) => String(s._id)));
 
     const docs = (records || [])
       .map((r) => {
         const studentId = safeObjectId(r.studentId || r.studentUserId);
-        if (!studentId) return null;
+        if (!studentId || !validStudentIds.has(String(studentId))) return null;
         return {
-          schoolId, // ✅ TENANT SCOPED
+          schoolId,
           studentId,
           teacherId,
           subject,
@@ -2953,9 +3176,8 @@ app.post("/api/teacher/marks/save", requireAuth, requireRole("TEACHER"), require
       })
       .filter(Boolean);
 
-    console.log("✅ MARKS SAVE - schoolId:", schoolId, "subject:", subject, "records:", docs.length);
+    console.log("MARKS SAVE - schoolId:", schoolId, "subject:", subject, "records:", docs.length);
 
-    // ✅ TENANT SCOPED: Only delete marks from this school
     const deleteFilter = {
       schoolId,
       subject,
@@ -2968,16 +3190,15 @@ app.post("/api/teacher/marks/save", requireAuth, requireRole("TEACHER"), require
 
     if (docs.length) {
       await db.collection("marks").insertMany(docs);
-      console.log("✅ MARKS INSERTED:", docs.length);
+      console.log("MARKS INSERTED:", docs.length);
     }
 
     res.json({ success: true, count: docs.length });
   } catch (err) {
-    console.error("❌ SAVE MARKS ERROR:", err);
+    console.error("SAVE MARKS ERROR:", err);
     res.status(500).json({ error: "Failed to save marks" });
   }
 });
-
 /* ================================
    IMPORT MULTI-SUBJECT MARKS (TEACHER)
    ================================= */
@@ -3004,6 +3225,11 @@ app.post("/api/teacher/marks/import-multi", requireAuth, requireRole("TEACHER"),
     const schoolId = req.user.schoolIdObj;
     const teacherId = safeObjectId(req.user.userId);
     if (!teacherId) return res.status(400).json({ error: "Invalid teacher ID" });
+    const validStudents = await db.collection("students")
+      .find(activeStudentFilter({ schoolId, class: className, section }))
+      .project({ _id: 1 })
+      .toArray();
+    const validStudentIds = new Set(validStudents.map((s) => String(s._id)));
 
     const examDocs = await db.collection("exams")
       .find({
@@ -3029,6 +3255,10 @@ app.post("/api/teacher/marks/import-multi", requireAuth, requireRole("TEACHER"),
       const studentId = safeObjectId(row?.studentId || row?.studentUserId);
       if (!studentId) {
         errors.push({ row, reason: "studentId missing/invalid" });
+        continue;
+      }
+      if (!validStudentIds.has(String(studentId))) {
+        errors.push({ row, reason: "Invalid studentId for this class/section" });
         continue;
       }
       const scores = row?.scores || {};
@@ -3353,11 +3583,11 @@ app.post("/api/teacher/marks/import", requireAuth, requireRole("TEACHER"), requi
       return res.status(400).json({ error: "No import rows found. Upload an Excel or CSV file." });
     }
 
-    const students = await db.collection("students").find(
-      activeStudentFilter({ schoolId, class: teacherClass, section: teacherSection })
-    ).toArray();
-    const studentByRoll = new Map(students.map((s) => [String(s.rollNo || "").trim(), s]));
-    const studentByName = new Map(students.map((s) => [String(s.name || "").trim().toLowerCase(), s]));
+    const students = await db.collection("students")
+      .find(activeStudentFilter({ schoolId, class: teacherClass, section: teacherSection }))
+      .project({ _id: 1 })
+      .toArray();
+    const validStudentIds = new Set(students.map((s) => String(s._id)));
 
     let savedCount = 0;
     const errors = [];
@@ -3365,11 +3595,9 @@ app.post("/api/teacher/marks/import", requireAuth, requireRole("TEACHER"), requi
 
     for (let idx = 0; idx < normalizedRows.length; idx += 1) {
       const row = normalizedRows[idx] || {};
-      const rollNo = String(row.RollNo ?? row.rollNo ?? row["Roll No"] ?? "").trim();
-      const studentName = String(row.StudentName ?? row.studentName ?? row.name ?? "").trim().toLowerCase();
-      const student = (rollNo && studentByRoll.get(rollNo)) || (studentName && studentByName.get(studentName));
-      if (!student) {
-        errors.push({ rowNumber: idx + 2, reason: "Student not found by RollNo/StudentName", row });
+      const studentId = safeObjectId(row.studentId ?? row.studentUserId ?? row.StudentId ?? row.StudentID);
+      if (!studentId || !validStudentIds.has(String(studentId))) {
+        errors.push({ rowNumber: idx + 2, reason: "Valid studentId is required for this class/section", row });
         continue;
       }
 
@@ -3409,7 +3637,7 @@ app.post("/api/teacher/marks/import", requireAuth, requireRole("TEACHER"), requi
           examId,
           class: teacherClass,
           section: teacherSection,
-          studentId: student._id,
+          studentId,
         },
         {
           $set: {
@@ -3418,7 +3646,7 @@ app.post("/api/teacher/marks/import", requireAuth, requireRole("TEACHER"), requi
             examName: exam.name,
             class: teacherClass,
             section: teacherSection,
-            studentId: student._id,
+            studentId,
             teacherId,
             scores,
             updatedAt: new Date(),
@@ -3458,6 +3686,10 @@ app.post("/api/teacher/marks/import", requireAuth, requireRole("TEACHER"), requi
    ================================= */
 app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
   try {
+    if (String(req.user?.role || "").toUpperCase() !== "TEACHER") {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
     const { studentId } = req.params;
     const schoolId = req.user.schoolIdObj;
     
@@ -3623,48 +3855,6 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
 });
 
 /* ================================
-   STUDENT: GET ATTENDANCE
-   ================================= */
-app.get(
-  "/api/student/attendance",
-  requireAuth,
-  requireRole("STUDENT"),
-  requireTenantId,
-  async (req, res) => {
-    try {
-      if (!req.user?.userId || !req.user?.schoolId) {
-        return res.status(400).json({ error: "Missing userId or schoolId in token" });
-      }
-
-      const studentUserId = safeObjectId(req.user.userId);
-      const schoolId = req.user.schoolIdObj;
-
-      const query = {
-        studentUserId: studentUserId, // ✅ matches DB field
-        schoolId: schoolId, // ✅ ObjectId
-        submissionStatus: "SUBMITTED",
-      };
-
-      console.log("ATTENDANCE QUERY:", query);
-
-      const records = await db
-        .collection("attendance")
-        .find(query)
-        .sort({ date: -1 })
-        .toArray();
-
-      console.log("ATTENDANCE COUNT:", records.length);
-
-      res.json(records);
-    } catch (err) {
-      console.error("STUDENT ATTENDANCE ERROR:", err);
-      res.status(500).json({ error: "Failed to fetch attendance" });
-    }
-  }
-);
-
-
-/* ================================
    ADMIN: MANUAL CREATE STUDENT & TEACHER
    ================================= */
 app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
@@ -3677,12 +3867,26 @@ app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTen
     if (!isValidParentPhone(parentPhone)) return res.status(400).json({ error: "Invalid parentPhone format" });
     const schoolId = req.user.schoolIdObj;
     if (!schoolId) return res.status(400).json({ error: "Missing schoolId" });
+    const identity = normalizeStudentIdentity({ classValue: className, sectionValue: section, rollNo });
+    if (!identity.class || !identity.section || !identity.rollNo) {
+      return res.status(400).json({ error: "class, section and rollNo are required" });
+    }
 
     const usersCol = db.collection("users");
     const studentsCol = db.collection("students");
 
     const existing = await usersCol.findOne({ email: String(email).toLowerCase() });
     if (existing) return res.status(400).json({ error: "User with this email already exists" });
+
+    const duplicateStudent = await findStudentIdentityConflict({
+      schoolId,
+      classValue: identity.class,
+      sectionValue: identity.section,
+      rollNo: identity.rollNo,
+    });
+    if (duplicateStudent) {
+      return res.status(400).json({ error: "Student already exists for this class/section/rollNo in this school" });
+    }
 
     const pwd = password || "student123";
     const passwordHash = await bcrypt.hash(pwd, 10);
@@ -3699,10 +3903,10 @@ app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTen
       userId,
       email: String(email).toLowerCase(),
       name,
-      class: String(className ?? ""),
-      className: String(className ?? ""),
-      section: String(section ?? ""),
-      rollNo: rollNo || "",
+      class: identity.class,
+      className: identity.class,
+      section: identity.section,
+      rollNo: identity.rollNo,
       parentName,
       parentPhone,
       phone: parentPhone,
@@ -3710,12 +3914,24 @@ app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTen
       isDeleted: false,
       schoolId,
       createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    await studentsCol.updateOne({ userId }, { $set: studentDoc }, { upsert: true });
+    try {
+      await studentsCol.insertOne(studentDoc);
+    } catch (insertError) {
+      if (isMongoDuplicateKeyError(insertError)) {
+        await usersCol.deleteOne({ _id: userId });
+        return res.status(400).json({ error: "Student already exists for this class/section/rollNo in this school" });
+      }
+      throw insertError;
+    }
 
     res.json({ success: true, userId: String(userId), password: pwd });
   } catch (err) {
+    if (isMongoDuplicateKeyError(err)) {
+      return res.status(400).json({ error: "Duplicate user or student identity" });
+    }
     console.error("ADMIN ADD STUDENT ERROR:", err);
     res.status(500).json({ error: "Failed to add student" });
   }
@@ -3768,6 +3984,9 @@ app.post("/api/admin/add-teacher", requireAuth, requireRole("ADMIN"), requireTen
 
     res.json({ success: true, userId: String(userId), password: pwd });
   } catch (err) {
+    if (isMongoDuplicateKeyError(err)) {
+      return res.status(400).json({ error: "Duplicate user or teacher identity" });
+    }
     console.error("ADMIN ADD TEACHER ERROR:", err);
     res.status(500).json({ error: "Failed to add teacher" });
   }
@@ -4743,11 +4962,49 @@ app.post(
       }
 
       const failed = [];
-      const existingStudents = await db.collection("students").find({ _id: { $in: studentIds }, schoolId }).project({ _id: 1 }).toArray();
+      const existingStudents = await db.collection("students")
+        .find({ _id: { $in: studentIds }, schoolId })
+        .project({ _id: 1, class: 1, section: 1, rollNo: 1 })
+        .toArray();
       const existingSet = new Set(existingStudents.map((s) => String(s._id)));
       studentIds.forEach((id) => {
         if (!existingSet.has(String(id))) failed.push({ id: String(id), reason: "Student not found" });
       });
+
+      if (setDoc.class || setDoc.section) {
+        const keySet = new Set();
+        const keyMeta = [];
+        for (const student of existingStudents) {
+          const nextIdentity = normalizeStudentIdentity({
+            classValue: setDoc.class ?? student.class,
+            sectionValue: setDoc.section ?? student.section,
+            rollNo: student.rollNo,
+          });
+          if (!nextIdentity.class || !nextIdentity.section || !nextIdentity.rollNo) {
+            return res.status(400).json({ error: "All selected students must have class, section and rollNo" });
+          }
+          const dedupeKey = `${String(schoolId)}::${nextIdentity.class}::${nextIdentity.section}::${nextIdentity.rollNo}`;
+          if (keySet.has(dedupeKey)) {
+            return res.status(400).json({ error: "Bulk update would create duplicate class/section/rollNo within this school" });
+          }
+          keySet.add(dedupeKey);
+          keyMeta.push(nextIdentity);
+        }
+
+        const conflictOr = keyMeta.map((item) => ({
+          schoolId,
+          class: item.class,
+          section: item.section,
+          rollNo: item.rollNo,
+          _id: { $nin: studentIds },
+        }));
+        if (conflictOr.length) {
+          const conflict = await db.collection("students").findOne({ $or: conflictOr }, { projection: { _id: 1 } });
+          if (conflict) {
+            return res.status(400).json({ error: "Bulk update conflicts with existing student class/section/rollNo in this school" });
+          }
+        }
+      }
 
       const updateResult = await runBestEffortTransaction("BULK_UPDATE_STUDENTS", async (session) => {
         const options = session ? { session } : {};
@@ -4812,7 +5069,10 @@ app.post(
         failed,
       });
     } catch (err) {
-      console.error("❌ BULK UPDATE STUDENTS ERROR:", err);
+      if (isMongoDuplicateKeyError(err)) {
+        return res.status(400).json({ error: "Bulk update created duplicate class/section/rollNo in this school" });
+      }
+      console.error("BULK UPDATE STUDENTS ERROR:", err);
       return res.status(500).json({ error: "Failed to bulk update students" });
     }
   }
@@ -4949,7 +5209,7 @@ app.put(
 
       const existingStudent = await db.collection("students").findOne(
         activeStudentFilter({ _id: studentId, schoolId }),
-        { projection: { _id: 1, userId: 1, class: 1, section: 1, assignedTeacher: 1 } }
+        { projection: { _id: 1, userId: 1, class: 1, section: 1, rollNo: 1, assignedTeacher: 1 } }
       );
       if (!existingStudent) return res.status(404).json({ error: "Student not found" });
 
@@ -4979,7 +5239,9 @@ app.put(
         setDoc.name = nameValue;
       }
       if (role === "ADMIN" && updates.rollNo !== undefined) {
-        setDoc.rollNo = String(updates.rollNo || "").trim();
+        const rollNoValue = String(updates.rollNo || "").trim();
+        if (!rollNoValue) return res.status(400).json({ error: "rollNo cannot be empty" });
+        setDoc.rollNo = rollNoValue;
       }
       if (role === "ADMIN" && (updates.class !== undefined || updates.className !== undefined)) {
         const classValue = String(updates.class ?? updates.className ?? "").trim();
@@ -5032,6 +5294,25 @@ app.put(
 
       if (!Object.keys(setDoc).length) {
         return res.status(400).json({ error: "No supported updates provided" });
+      }
+
+      const nextIdentity = normalizeStudentIdentity({
+        classValue: setDoc.class ?? existingStudent.class,
+        sectionValue: setDoc.section ?? existingStudent.section,
+        rollNo: setDoc.rollNo ?? existingStudent.rollNo,
+      });
+      if (!nextIdentity.class || !nextIdentity.section || !nextIdentity.rollNo) {
+        return res.status(400).json({ error: "class, section and rollNo are required" });
+      }
+      const identityConflict = await findStudentIdentityConflict({
+        schoolId,
+        classValue: nextIdentity.class,
+        sectionValue: nextIdentity.section,
+        rollNo: nextIdentity.rollNo,
+        excludeStudentId: studentId,
+      });
+      if (identityConflict) {
+        return res.status(400).json({ error: "Student already exists for this class/section/rollNo in this school" });
       }
 
       await runBestEffortTransaction("UPDATE_SINGLE_STUDENT_SHARED", async (session) => {
@@ -5097,11 +5378,303 @@ app.put(
 
       return res.json({ success: true });
     } catch (err) {
-      console.error("❌ UPDATE STUDENT SHARED ERROR:", err);
+      if (isMongoDuplicateKeyError(err)) {
+        return res.status(400).json({ error: "Student already exists for this class/section/rollNo in this school" });
+      }
+      console.error("UPDATE STUDENT SHARED ERROR:", err);
       return res.status(500).json({ error: "Failed to update student" });
     }
   }
 );
+
+/* ================================
+   TEACHER: CLASS ANALYTICS
+   ================================= */
+const teacherClassAnalyticsHandler = async (req, res) => {
+  try {
+    if (String(req.user?.role || "").toUpperCase() !== "TEACHER") {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    const teacherUserId = safeObjectId(req.user.userId);
+    const schoolId = req.user.schoolIdObj;
+    if (!teacherUserId) return res.status(400).json({ error: "Invalid teacher user id" });
+
+    const teacher = await db.collection("teachers").findOne(activeTeacherFilter({ userId: teacherUserId, schoolId }));
+    if (!teacher) return res.status(404).json({ error: "Teacher not found" });
+
+    const className = String(teacher.class || "");
+    const section = String(teacher.section || "");
+    if (!className || !section) {
+      return res.status(400).json({ error: "Teacher class/section not configured" });
+    }
+
+    const examFilter = String(req.query?.exam || "all").trim();
+    const subjectFilter = String(req.query?.subject || "all").trim();
+    const timeRange = String(req.query?.timeRange || "week").trim().toLowerCase();
+    const timeDays = timeRange === "month" ? 30 : timeRange === "term" ? 90 : 7;
+    const fromDate = new Date();
+    fromDate.setHours(0, 0, 0, 0);
+    fromDate.setDate(fromDate.getDate() - (timeDays - 1));
+
+    const students = await db.collection("students")
+      .find(activeStudentFilter({ schoolId, class: className, section }))
+      .project({ _id: 1, userId: 1, name: 1, rollNo: 1 })
+      .toArray();
+
+    const studentMetaMap = new Map();
+    const attendanceKeyToStudentId = new Map();
+    const validAttendanceKeys = [];
+    students.forEach((student) => {
+      const studentIdStr = String(student._id);
+      studentMetaMap.set(studentIdStr, {
+        studentId: student._id,
+        name: student.name || "Student",
+        rollNo: student.rollNo || "",
+      });
+      attendanceKeyToStudentId.set(studentIdStr, studentIdStr);
+      validAttendanceKeys.push(student._id);
+      if (student.userId) {
+        const userIdStr = String(student.userId);
+        attendanceKeyToStudentId.set(userIdStr, studentIdStr);
+        validAttendanceKeys.push(student.userId);
+      }
+    });
+
+    const marksBaseQuery = { schoolId, class: className, section };
+    if (examFilter && examFilter.toLowerCase() !== "all") marksBaseQuery.exam = examFilter;
+    if (subjectFilter && subjectFilter.toLowerCase() !== "all") marksBaseQuery.subject = subjectFilter;
+
+    const marks = await db.collection("marks")
+      .find(marksBaseQuery)
+      .sort({ createdAt: -1 })
+      .limit(800)
+      .toArray();
+
+    const attendance = validAttendanceKeys.length
+      ? await db.collection("attendance")
+          .find({
+            schoolId,
+            class: className,
+            section,
+            submissionStatus: "SUBMITTED",
+            $or: [
+              { studentId: { $in: validAttendanceKeys } },
+              { studentUserId: { $in: validAttendanceKeys } },
+            ],
+          })
+          .sort({ date: -1, createdAt: -1 })
+          .limit(2000)
+          .toArray()
+      : [];
+
+    const markPercentByStudent = new Map();
+    const markTotalsByStudent = new Map();
+    const subjectTotals = new Map();
+
+    marks.forEach((mark) => {
+      const studentKey = String(mark?.studentId || "");
+      if (!studentMetaMap.has(studentKey)) return;
+
+      const scoreRaw = mark?.score ?? mark?.marks;
+      const score = Number(scoreRaw);
+      if (!Number.isFinite(score)) return;
+      const maxMarks = Number(mark?.maxMarks || 100);
+      const percent = maxMarks > 0 ? Math.max(0, Math.min(100, (score / maxMarks) * 100)) : Math.max(0, Math.min(100, score));
+
+      const current = markTotalsByStudent.get(studentKey) || { total: 0, count: 0 };
+      current.total += percent;
+      current.count += 1;
+      markTotalsByStudent.set(studentKey, current);
+      markPercentByStudent.set(studentKey, current.count ? Math.round(current.total / current.count) : 0);
+
+      const subject = String(mark?.subject || "Unknown");
+      const subjectAgg = subjectTotals.get(subject) || { total: 0, count: 0 };
+      subjectAgg.total += percent;
+      subjectAgg.count += 1;
+      subjectTotals.set(subject, subjectAgg);
+    });
+
+    const attendanceByStudent = new Map();
+    const attendanceCountMap = new Map();
+    const dayAttendanceMap = new Map();
+    const trendEnd = new Date();
+    trendEnd.setHours(23, 59, 59, 999);
+
+    attendance.forEach((row) => {
+      const attendanceKey = String(row?.studentId || row?.studentUserId || "");
+      const canonicalStudentId = attendanceKeyToStudentId.get(attendanceKey);
+      if (!canonicalStudentId) return;
+
+      const status = String(row?.status || "").trim().toUpperCase();
+      const current = attendanceCountMap.get(canonicalStudentId) || { total: 0, present: 0 };
+      current.total += 1;
+      if (status === "PRESENT") current.present += 1;
+      attendanceCountMap.set(canonicalStudentId, current);
+
+      const dateValue = row?.date || row?.createdAt;
+      const dateObj = dateValue ? new Date(dateValue) : null;
+      if (!dateObj || Number.isNaN(dateObj.getTime())) return;
+      if (dateObj < fromDate || dateObj > trendEnd) return;
+      const dateKey = dateObj.toISOString().slice(0, 10);
+      const dayCurrent = dayAttendanceMap.get(dateKey) || { total: 0, present: 0 };
+      dayCurrent.total += 1;
+      if (status === "PRESENT") dayCurrent.present += 1;
+      dayAttendanceMap.set(dateKey, dayCurrent);
+    });
+
+    attendanceCountMap.forEach((value, key) => {
+      const percent = value.total > 0 ? Math.round((value.present / value.total) * 100) : 0;
+      attendanceByStudent.set(key, percent);
+    });
+
+    const allStudentRows = students.map((student) => {
+      const key = String(student._id);
+      const marksAverage = markPercentByStudent.get(key) || 0;
+      const attendancePercent = attendanceByStudent.get(key) || 0;
+      const meta = studentMetaMap.get(key) || { name: "Student", rollNo: "" };
+      return {
+        studentId: key,
+        name: meta.name,
+        rollNo: meta.rollNo,
+        averageMarks: marksAverage,
+        attendance: attendancePercent,
+      };
+    });
+
+    const avgAttendance = allStudentRows.length
+      ? Math.round(allStudentRows.reduce((sum, row) => sum + row.attendance, 0) / allStudentRows.length)
+      : 0;
+    const avgMarks = allStudentRows.length
+      ? Math.round(allStudentRows.reduce((sum, row) => sum + row.averageMarks, 0) / allStudentRows.length)
+      : 0;
+
+    const marksDistribution = [
+      { label: "90-100", count: 0 },
+      { label: "70-89", count: 0 },
+      { label: "50-69", count: 0 },
+      { label: "Below 50", count: 0 },
+    ];
+    allStudentRows.forEach((row) => {
+      if (row.averageMarks >= 90) marksDistribution[0].count += 1;
+      else if (row.averageMarks >= 70) marksDistribution[1].count += 1;
+      else if (row.averageMarks >= 50) marksDistribution[2].count += 1;
+      else marksDistribution[3].count += 1;
+    });
+
+    const subjectPerformance = Array.from(subjectTotals.entries())
+      .map(([subject, agg]) => ({
+        subject,
+        averageMarks: agg.count ? Math.round(agg.total / agg.count) : 0,
+      }))
+      .sort((a, b) => b.averageMarks - a.averageMarks);
+
+    const topStudents = [...allStudentRows]
+      .sort((a, b) => b.averageMarks - a.averageMarks)
+      .slice(0, 3);
+
+    const weakStudents = [...allStudentRows]
+      .filter((row) => row.averageMarks < 40 || row.attendance < 70)
+      .sort((a, b) => (a.attendance + a.averageMarks) - (b.attendance + b.averageMarks))
+      .slice(0, 5)
+      .map((row) => ({
+        ...row,
+        issue:
+          row.attendance < 70
+            ? `Attendance: ${row.attendance}%`
+            : row.averageMarks < 40
+            ? `Score below 40% (${row.averageMarks}%)`
+            : "Low engagement",
+      }));
+
+    const attendanceTrend = [];
+    for (let i = timeDays - 1; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString("en-US", { weekday: "short" });
+      const row = dayAttendanceMap.get(key) || { total: 0, present: 0 };
+      const percentage = row.total > 0 ? Math.round((row.present / row.total) * 100) : 0;
+      attendanceTrend.push({ label, date: key, attendance: percentage });
+    }
+
+    const quickInsights = [];
+    if (attendanceTrend.length > 1) {
+      const first = Number(attendanceTrend[0]?.attendance || 0);
+      const last = Number(attendanceTrend[attendanceTrend.length - 1]?.attendance || 0);
+      const diff = last - first;
+      if (diff < 0) quickInsights.push(`Class attendance dropped ${Math.abs(diff)}% in selected period.`);
+      else if (diff > 0) quickInsights.push(`Class attendance improved ${diff}% in selected period.`);
+      else quickInsights.push("Class attendance is stable in selected period.");
+    }
+
+    if (subjectPerformance.length) {
+      const weakestSubject = [...subjectPerformance].sort((a, b) => a.averageMarks - b.averageMarks)[0];
+      if (weakestSubject?.averageMarks < avgMarks) {
+        quickInsights.push(`${weakestSubject.subject} is below class average (${weakestSubject.averageMarks}%).`);
+      }
+      const bestSubject = subjectPerformance[0];
+      if (bestSubject) {
+        quickInsights.push(`${bestSubject.subject} is currently the strongest subject (${bestSubject.averageMarks}%).`);
+      }
+    }
+
+    const classHealth = Math.round((avgMarks * 0.55) + (avgAttendance * 0.45));
+    const classHealthStatus = classHealth >= 80 ? "Excellent" : classHealth >= 65 ? "Average" : "Needs Support";
+
+    const [examOptionsRaw, subjectOptionsRaw] = await Promise.all([
+      db.collection("marks").distinct("exam", { schoolId, class: className, section }),
+      db.collection("marks").distinct("subject", { schoolId, class: className, section }),
+    ]);
+
+    const examOptions = (Array.isArray(examOptionsRaw) ? examOptionsRaw : [])
+      .map((v) => String(v || "").trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    const subjectOptions = (Array.isArray(subjectOptionsRaw) ? subjectOptionsRaw : [])
+      .map((v) => String(v || "").trim())
+      .filter(Boolean)
+      .slice(0, 20);
+
+    return res.json({
+      class: className,
+      section,
+      filters: {
+        exam: examFilter || "all",
+        subject: subjectFilter || "all",
+        timeRange: timeRange || "week",
+      },
+      options: {
+        exams: examOptions,
+        subjects: subjectOptions,
+        timeRanges: ["week", "month", "term"],
+      },
+      overview: {
+        totalStudents: students.length,
+        averageClassScore: avgMarks,
+        attendancePercent: avgAttendance,
+        needsAttention: weakStudents.length,
+      },
+      attendanceTrend: attendanceTrend.slice(-30),
+      marksDistribution,
+      subjectPerformance,
+      weakStudents,
+      topStudents,
+      quickInsights: quickInsights.slice(0, 5),
+      classHealth: {
+        score: classHealth,
+        status: classHealthStatus,
+      },
+    });
+  } catch (err) {
+    console.error("TEACHER CLASS ANALYTICS ERROR:", err);
+    return res.status(500).json({ error: "Failed to fetch teacher analytics" });
+  }
+};
+
+app.get("/api/teacher/class-analytics", requireAuth, requireRole("TEACHER"), requireTenantId, teacherClassAnalyticsHandler);
+app.get("/api/teacher/analytics", requireAuth, requireRole("TEACHER"), requireTenantId, teacherClassAnalyticsHandler);
 
 /* ================================
    ADMIN: UPDATE SINGLE STUDENT
@@ -5121,7 +5694,7 @@ app.put(
 
       const existingStudent = await db.collection("students").findOne(
         activeStudentFilter({ _id: studentId, schoolId }),
-        { projection: { _id: 1, class: 1, section: 1, assignedTeacher: 1 } }
+        { projection: { _id: 1, class: 1, section: 1, rollNo: 1, assignedTeacher: 1 } }
       );
       if (!existingStudent) return res.status(404).json({ error: "Student not found" });
 
@@ -5131,7 +5704,11 @@ app.put(
         if (!nameValue) return res.status(400).json({ error: "name cannot be empty" });
         setDoc.name = nameValue;
       }
-      if (updates.rollNo !== undefined) setDoc.rollNo = String(updates.rollNo || "").trim();
+      if (updates.rollNo !== undefined) {
+        const rollNoValue = String(updates.rollNo || "").trim();
+        if (!rollNoValue) return res.status(400).json({ error: "rollNo cannot be empty" });
+        setDoc.rollNo = rollNoValue;
+      }
       if (updates.class !== undefined || updates.className !== undefined) {
         const classValue = String(updates.class ?? updates.className ?? "").trim();
         if (!classValue) return res.status(400).json({ error: "class cannot be empty" });
@@ -5172,6 +5749,25 @@ app.put(
 
       if (!Object.keys(setDoc).length) {
         return res.status(400).json({ error: "No supported updates provided" });
+      }
+
+      const nextIdentity = normalizeStudentIdentity({
+        classValue: setDoc.class ?? existingStudent.class,
+        sectionValue: setDoc.section ?? existingStudent.section,
+        rollNo: setDoc.rollNo ?? existingStudent.rollNo,
+      });
+      if (!nextIdentity.class || !nextIdentity.section || !nextIdentity.rollNo) {
+        return res.status(400).json({ error: "class, section and rollNo are required" });
+      }
+      const identityConflict = await findStudentIdentityConflict({
+        schoolId,
+        classValue: nextIdentity.class,
+        sectionValue: nextIdentity.section,
+        rollNo: nextIdentity.rollNo,
+        excludeStudentId: studentId,
+      });
+      if (identityConflict) {
+        return res.status(400).json({ error: "Student already exists for this class/section/rollNo in this school" });
       }
 
       await runBestEffortTransaction("UPDATE_SINGLE_STUDENT", async (session) => {
@@ -5229,7 +5825,10 @@ app.put(
 
       return res.json({ success: true });
     } catch (err) {
-      console.error("❌ UPDATE STUDENT ERROR:", err);
+      if (isMongoDuplicateKeyError(err)) {
+        return res.status(400).json({ error: "Student already exists for this class/section/rollNo in this school" });
+      }
+      console.error("UPDATE STUDENT ERROR:", err);
       return res.status(500).json({ error: "Failed to update student" });
     }
   }
@@ -5303,21 +5902,19 @@ app.post(
   requireTenantId,
   async (req, res) => {
     try {
-      const { fromClass, fromSection, toClass, toSection, studentIds, migrateAll } = req.body;
+      const { fromClass, fromSection, toClass, toSection, studentIds } = req.body;
       const schoolId = req.user.schoolIdObj;
 
       if (!fromClass || !fromSection || !toClass || !toSection) {
         return res.status(400).json({ error: "Missing required fields: fromClass, fromSection, toClass, toSection" });
       }
 
-      // Build filter for students to migrate
       const filter = {
         schoolId,
         class: String(fromClass),
         section: String(fromSection),
       };
 
-      // If specific studentIds provided, add to filter
       if (studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
         const validIds = studentIds.map((id) => safeObjectId(id)).filter(Boolean);
         if (validIds.length > 0) {
@@ -5325,21 +5922,56 @@ app.post(
         }
       }
 
-      // Migrate students
+      const migrationCandidates = await db.collection("students")
+        .find(activeStudentFilter(filter))
+        .project({ _id: 1, rollNo: 1 })
+        .toArray();
+      if (!migrationCandidates.length) {
+        return res.status(404).json({ error: "No students found to migrate" });
+      }
+
+      const targetClass = String(toClass);
+      const targetSection = String(toSection);
+      const candidateIds = migrationCandidates.map((s) => s._id);
+      const candidateRollNos = migrationCandidates.map((s) => String(s.rollNo || "").trim());
+
+      const seenTargetKeys = new Set();
+      for (const rollNoValue of candidateRollNos) {
+        if (!rollNoValue) {
+          return res.status(400).json({ error: "All students being migrated must have rollNo" });
+        }
+        const key = `${targetClass}::${targetSection}::${rollNoValue}`;
+        if (seenTargetKeys.has(key)) {
+          return res.status(400).json({ error: "Migration would create duplicate class/section/rollNo in target section" });
+        }
+        seenTargetKeys.add(key);
+      }
+
+      const conflict = await db.collection("students").findOne({
+        schoolId,
+        class: targetClass,
+        section: targetSection,
+        _id: { $nin: candidateIds },
+        rollNo: { $in: candidateRollNos },
+      });
+      if (conflict) {
+        return res.status(400).json({ error: "Migration conflicts with existing student rollNo in target class/section" });
+      }
+
       const result = await db.collection("students").updateMany(
         filter,
         {
           $set: {
-            class: String(toClass),
-            section: String(toSection),
+            class: targetClass,
+            section: targetSection,
             migratedAt: new Date(),
           },
           $push: {
             migrationHistory: {
               fromClass: String(fromClass),
               fromSection: String(fromSection),
-              toClass: String(toClass),
-              toSection: String(toSection),
+              toClass: targetClass,
+              toSection: targetSection,
               migratedAt: new Date(),
               migratedBy: safeObjectId(req.user.userId),
             },
@@ -5347,7 +5979,6 @@ app.post(
         }
       );
 
-      // Log action
       await db.collection("adminLogs").insertOne({
         schoolId,
         adminId: safeObjectId(req.user.userId),
@@ -5361,19 +5992,21 @@ app.post(
         },
       });
 
-      console.log("✅ STUDENTS MIGRATED - Count:", result.modifiedCount);
+      console.log("STUDENTS MIGRATED - Count:", result.modifiedCount);
       res.json({
         success: true,
         message: `${result.modifiedCount} student(s) migrated`,
         migratedCount: result.modifiedCount,
       });
     } catch (err) {
-      console.error("❌ STUDENT MIGRATION ERROR:", err);
+      if (isMongoDuplicateKeyError(err)) {
+        return res.status(400).json({ error: "Migration created duplicate class/section/rollNo in target section" });
+      }
+      console.error("STUDENT MIGRATION ERROR:", err);
       res.status(500).json({ error: "Failed to migrate students" });
     }
   }
 );
-
 /* ================================
    ADMIN: REASSIGN TEACHER (CLASS/SECTION CHANGE)
    ================================= */
@@ -6480,7 +7113,15 @@ app.get(
   async (req, res) => {
     try {
       const schoolId = req.user.schoolIdObj;
-      const [studentCount, teacherCount, attendanceStats, recentNotifications] = await Promise.all([
+      const [
+        studentCount,
+        teacherCount,
+        attendanceStats,
+        recentNotifications,
+        studentClassSections,
+        teacherClassSections,
+        subjectClassSections,
+      ] = await Promise.all([
         db.collection("students").countDocuments(activeStudentFilter({ schoolId })),
         db.collection("teachers").countDocuments(activeTeacherFilter({ schoolId })),
         db.collection("attendance").aggregate([
@@ -6500,12 +7141,75 @@ app.get(
           .limit(10)
           .project({ title: 1, message: 1, type: 1, createdAt: 1, isRead: 1, targetRole: 1 })
           .toArray(),
+        db.collection("students").aggregate([
+          { $match: activeStudentFilter({ schoolId }) },
+          {
+            $project: {
+              className: {
+                $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } },
+              },
+              section: {
+                $trim: { input: { $toString: { $ifNull: ["$section", ""] } } },
+              },
+            },
+          },
+          { $match: { className: { $ne: "" }, section: { $ne: "" } } },
+          { $group: { _id: { className: "$className", section: "$section" } } },
+        ]).toArray(),
+        db.collection("teachers").aggregate([
+          { $match: activeTeacherFilter({ schoolId }) },
+          {
+            $project: {
+              className: {
+                $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } },
+              },
+              section: {
+                $trim: { input: { $toString: { $ifNull: ["$section", ""] } } },
+              },
+            },
+          },
+          { $match: { className: { $ne: "" }, section: { $ne: "" } } },
+          { $group: { _id: { className: "$className", section: "$section" } } },
+        ]).toArray(),
+        db.collection("subjects").aggregate([
+          { $match: { schoolId, isDeleted: { $ne: true } } },
+          {
+            $project: {
+              className: {
+                $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } },
+              },
+              section: {
+                $trim: { input: { $toString: { $ifNull: ["$section", ""] } } },
+              },
+            },
+          },
+          { $match: { className: { $ne: "" }, section: { $ne: "" } } },
+          { $group: { _id: { className: "$className", section: "$section" } } },
+        ]).toArray(),
       ]);
 
       const stats = attendanceStats[0] || { total: 0, present: 0, absent: 0 };
+      const classSectionSet = new Set();
+      const classSet = new Set();
+      const sectionLabelSet = new Set();
+      [studentClassSections, teacherClassSections, subjectClassSections].forEach((rows) => {
+        (rows || []).forEach((row) => {
+          const className = String(row?._id?.className || "").trim();
+          const section = String(row?._id?.section || "").trim();
+          if (className) classSet.add(className);
+          if (section) sectionLabelSet.add(section);
+          if (className && section) classSectionSet.add(`${className}::${section}`);
+        });
+      });
       return res.json({
         studentCount,
         teacherCount,
+        classCount: classSet.size,
+        // "Total Sections" should represent class-wise sections (e.g. 1-A and 2-A are two sections).
+        sectionCount: classSectionSet.size,
+        // Keep label-wise count for diagnostics if needed by future UI.
+        sectionLabelCount: sectionLabelSet.size,
+        classSectionCount: classSectionSet.size,
         attendanceStats: {
           total: stats.total || 0,
           present: stats.present || 0,
@@ -7024,7 +7728,7 @@ app.post("/api/dev/users", requireAuth, async (req, res) => {
       return res.status(403).json({ error: "Developer access required" });
     }
 
-    const { schoolId, name, email, role, password, className, section, subject } = req.body;
+    const { schoolId, name, email, role, password, className, section, subject, rollNo } = req.body;
     const teacherPhone = extractTeacherPhone(req.body);
     if (!schoolId || !name || !email || !role) {
       return res.status(400).json({ error: "Missing required fields: schoolId, name, email, role" });
@@ -7084,24 +7788,37 @@ app.post("/api/dev/users", requireAuth, async (req, res) => {
         { upsert: true }
       );
     } else if (role === "STUDENT") {
-      await db.collection("students").updateOne(
-        { userId },
-        {
-          $set: {
-            name,
-            class: className || "",
-            section: section || "",
-            rollNo: "",
-            schoolId: schoolObjectId,
-            createdAt: new Date(),
-          },
-        },
-        { upsert: true }
-      );
+      const identity = normalizeStudentIdentity({ classValue: className, sectionValue: section, rollNo });
+      if (!identity.class || !identity.section || !identity.rollNo) {
+        return res.status(400).json({ error: "className, section and rollNo are required for STUDENT" });
+      }
+
+      const duplicateStudent = await findStudentIdentityConflict({
+        schoolId: schoolObjectId,
+        classValue: identity.class,
+        sectionValue: identity.section,
+        rollNo: identity.rollNo,
+      });
+      if (duplicateStudent) {
+        return res.status(400).json({ error: "Student already exists for this class/section/rollNo in this school" });
+      }
+
+      await db.collection("students").insertOne({
+        userId,
+        email: email.toLowerCase(),
+        name,
+        class: identity.class,
+        className: identity.class,
+        section: identity.section,
+        rollNo: identity.rollNo,
+        schoolId: schoolObjectId,
+        isDeleted: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
     }
 
-    console.log("✅ DEV: User created -", email, "Role:", role, "School:", schoolId);
-
+    console.log("DEV: User created -", email, "Role:", role, "School:", schoolId);
     res.json({
       success: true,
       user: {
@@ -7112,7 +7829,10 @@ app.post("/api/dev/users", requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("❌ DEV CREATE USER ERROR:", err);
+    if (isMongoDuplicateKeyError(err)) {
+      return res.status(400).json({ error: "Duplicate user or student identity" });
+    }
+    console.error("DEV CREATE USER ERROR:", err);
     res.status(500).json({ error: "Failed to create user" });
   }
 });
@@ -7430,16 +8150,18 @@ app.post("/api/dev/users/delete", requireAuth, requireRole("DEVELOPER"), async (
 /* ================================
    ADMIN PASSWORD RESET (for troubleshooting)
    ================================= */
-app.post("/api/admin/reset-password", async (req, res) => {
+app.post("/api/admin/reset-password", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
   try {
     const { email, newPassword } = req.body;
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    const schoolId = req.user.schoolIdObj;
     
-    if (!email || !newPassword) {
+    if (!normalizedEmail || !newPassword) {
       return res.status(400).json({ error: "Email and newPassword required" });
     }
     
     const usersCol = db.collection("users");
-    const user = await usersCol.findOne({ email, role: "ADMIN" });
+    const user = await usersCol.findOne({ email: normalizedEmail, role: "ADMIN", schoolId });
     
     if (!user) {
       return res.status(404).json({ error: "Admin user not found" });
@@ -7453,7 +8175,7 @@ app.post("/api/admin/reset-password", async (req, res) => {
     
     if (result.modifiedCount > 0) {
       console.log(`✅ Password reset for ${email}`);
-      return res.json({ success: true, message: `Password reset to: ${newPassword}` });
+      return res.json({ success: true, message: "Password reset successful" });
     } else {
       return res.status(500).json({ error: "Failed to update password" });
     }
@@ -10440,11 +11162,12 @@ app.get("/api/student/voice-announces", requireAuth, requireRole("STUDENT"), req
    ================================= */
 
 // ✅ GET /api/notifications - Get notifications for current user
-app.get("/api/notifications", requireAuth, async (req, res) => {
+app.get("/api/notifications", requireAuth, requireTenantId, async (req, res) => {
   try {
     const userId = req.user.userId;
     const role = req.user.role;
-    const schoolId = req.user.schoolId;
+    const schoolId = req.user.schoolIdObj;
+    const userObjectId = safeObjectId(userId);
     const { page, limit, skip } = getPagination(req.query, { limit: 20 });
 
     // Get all notifications for this user (role-based filtering)
@@ -10464,20 +11187,15 @@ app.get("/api/notifications", requireAuth, async (req, res) => {
           {
             $or: [
               // New schema
-              { targetUser: safeObjectId(userId) },
+              { targetUser: userObjectId },
               { targetUser: null },
               // Old schema
-              { userId: safeObjectId(userId) },
+              { userId: userObjectId },
             ],
           },
-          schoolId ? {
-            $or: [
-              { schoolId: safeObjectId(schoolId) },
-              { schoolId: null },
-            ]
-          } : {},
+          { schoolId },
           { isDeleted: { $ne: true } },
-        ].filter(q => Object.keys(q).length > 0),
+        ],
       })
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -10496,19 +11214,14 @@ app.get("/api/notifications", requireAuth, async (req, res) => {
           },
           {
             $or: [
-              { targetUser: safeObjectId(userId) },
+              { targetUser: userObjectId },
               { targetUser: null },
-              { userId: safeObjectId(userId) },
+              { userId: userObjectId },
             ],
           },
-          schoolId ? {
-            $or: [
-              { schoolId: safeObjectId(schoolId) },
-              { schoolId: null },
-            ]
-          } : {},
+          { schoolId },
           { isDeleted: { $ne: true } },
-        ].filter(q => Object.keys(q).length > 0),
+        ],
       });
 
     // Get unread count (support both old and new schema)
@@ -10527,21 +11240,16 @@ app.get("/api/notifications", requireAuth, async (req, res) => {
           {
             $or: [
               // New schema
-              { targetUser: safeObjectId(userId) },
+              { targetUser: userObjectId },
               { targetUser: null },
               // Old schema
-              { userId: safeObjectId(userId) },
+              { userId: userObjectId },
             ],
           },
           { isRead: false },
-          schoolId ? {
-            $or: [
-              { schoolId: safeObjectId(schoolId) },
-              { schoolId: null },
-            ]
-          } : {},
+          { schoolId },
           { isDeleted: { $ne: true } },
-        ].filter(q => Object.keys(q).length > 0),
+        ],
       });
 
     // Convert ObjectId to string for JSON response
@@ -10567,7 +11275,7 @@ app.get("/api/notifications", requireAuth, async (req, res) => {
 });
 
 // ✅ POST /api/notifications - Create a new notification
-app.post("/api/notifications", requireAuth, async (req, res) => {
+app.post("/api/notifications", requireAuth, requireTenantId, async (req, res) => {
   try {
     const { title, message, type, targetRole, targetUser, metadata } = req.body;
 
@@ -10585,7 +11293,7 @@ app.post("/api/notifications", requireAuth, async (req, res) => {
       type: type || "info",
       targetRole,
       targetUser: targetUser ? safeObjectId(targetUser) : null,
-      schoolId: req.user.schoolId ? safeObjectId(req.user.schoolId) : null,
+      schoolId: req.user.schoolIdObj,
       createdBy: safeObjectId(req.user.userId),
       metadata: metadata || {},
       isRead: false,
@@ -10613,17 +11321,40 @@ app.post("/api/notifications", requireAuth, async (req, res) => {
 });
 
 // ✅ PUT /api/notifications/:id/read - Mark notification as read
-app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
+app.put("/api/notifications/:id/read", requireAuth, requireTenantId, async (req, res) => {
   try {
     const { id } = req.params;
     const notificationId = safeObjectId(id);
+    const userObjectId = safeObjectId(req.user.userId);
+    const role = req.user.role;
+    const schoolId = req.user.schoolIdObj;
 
     if (!notificationId) {
       return res.status(400).json({ error: "Invalid notification ID" });
     }
 
     const result = await db.collection("notifications").updateOne(
-      { _id: notificationId, isDeleted: { $ne: true } },
+      {
+        _id: notificationId,
+        schoolId,
+        isDeleted: { $ne: true },
+        $and: [
+          {
+            $or: [
+              { targetRole: role },
+              { targetRole: null },
+              { role },
+            ],
+          },
+          {
+            $or: [
+              { targetUser: userObjectId },
+              { targetUser: null },
+              { userId: userObjectId },
+            ],
+          },
+        ],
+      },
       { $set: { isRead: true, readAt: new Date() } }
     );
 
@@ -10639,11 +11370,12 @@ app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
 });
 
 // ✅ PUT /api/notifications/mark-all-read - Mark all notifications as read
-app.put("/api/notifications/mark-all-read", requireAuth, async (req, res) => {
+app.put("/api/notifications/mark-all-read", requireAuth, requireTenantId, async (req, res) => {
   try {
     const userId = req.user.userId;
     const role = req.user.role;
-    const schoolId = req.user.schoolId;
+    const schoolId = req.user.schoolIdObj;
+    const userObjectId = safeObjectId(userId);
 
     const filter = {
       $and: [
@@ -10656,20 +11388,15 @@ app.put("/api/notifications/mark-all-read", requireAuth, async (req, res) => {
         },
         {
           $or: [
-            { targetUser: safeObjectId(userId) },
+            { targetUser: userObjectId },
             { targetUser: null },
-            { userId: safeObjectId(userId) },
+            { userId: userObjectId },
           ],
         },
         { isRead: false },
-        schoolId ? {
-          $or: [
-            { schoolId: safeObjectId(schoolId) },
-            { schoolId: null },
-          ]
-        } : {},
+        { schoolId },
         { isDeleted: { $ne: true } },
-      ].filter(q => Object.keys(q).length > 0),
+      ],
     };
 
     const result = await db.collection("notifications").updateMany(filter, {
@@ -10688,11 +11415,12 @@ app.put("/api/notifications/mark-all-read", requireAuth, async (req, res) => {
 });
 
 // ✅ GET /api/notifications/unread-count - Get unread notification count
-app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
+app.get("/api/notifications/unread-count", requireAuth, requireTenantId, async (req, res) => {
   try {
     const userId = req.user.userId;
     const role = req.user.role;
-    const schoolId = req.user.schoolId;
+    const schoolId = req.user.schoolIdObj;
+    const userObjectId = safeObjectId(userId);
 
     // Support both old schema (userId/role) and new schema (targetRole/targetUser)
     const unreadCount = await db.collection("notifications")
@@ -10710,21 +11438,16 @@ app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
           {
             $or: [
               // New schema
-              { targetUser: safeObjectId(userId) },
+              { targetUser: userObjectId },
               { targetUser: null },
               // Old schema
-              { userId: safeObjectId(userId) },
+              { userId: userObjectId },
             ],
           },
           { isRead: false },
-          schoolId ? {
-            $or: [
-              { schoolId: safeObjectId(schoolId) },
-              { schoolId: null },
-            ]
-          } : {},
+          { schoolId },
           { isDeleted: { $ne: true } },
-        ].filter(q => Object.keys(q).length > 0),
+        ],
       });
 
     res.json({ unreadCount });
@@ -10735,17 +11458,40 @@ app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
 });
 
 // ✅ DELETE /api/notifications/:id - Delete a notification
-app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
+app.delete("/api/notifications/:id", requireAuth, requireTenantId, async (req, res) => {
   try {
     const { id } = req.params;
     const notificationId = safeObjectId(id);
+    const userObjectId = safeObjectId(req.user.userId);
+    const role = req.user.role;
+    const schoolId = req.user.schoolIdObj;
 
     if (!notificationId) {
       return res.status(400).json({ error: "Invalid notification ID" });
     }
 
     const result = await db.collection("notifications").updateOne(
-      { _id: notificationId },
+      {
+        _id: notificationId,
+        schoolId,
+        isDeleted: { $ne: true },
+        $and: [
+          {
+            $or: [
+              { targetRole: role },
+              { targetRole: null },
+              { role },
+            ],
+          },
+          {
+            $or: [
+              { targetUser: userObjectId },
+              { targetUser: null },
+              { userId: userObjectId },
+            ],
+          },
+        ],
+      },
       { $set: { isDeleted: true, deletedAt: new Date() } }
     );
 
@@ -11408,6 +12154,259 @@ app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requi
 });
 
 /* ================================
+   ADMIN: CONSOLIDATED ANALYTICS
+   ================================= */
+
+app.get("/api/admin/analytics", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+
+    const studentMatch = activeStudentFilter({ schoolId });
+    const teacherMatch = activeTeacherFilter({ schoolId });
+
+    const [totalStudents, totalTeachers, classStudentRows, attendanceRows, marksRows] = await Promise.all([
+      db.collection("students").countDocuments(studentMatch),
+      db.collection("teachers").countDocuments(teacherMatch),
+      db.collection("students").aggregate([
+        { $match: studentMatch },
+        {
+          $group: {
+            _id: {
+              className: { $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } } },
+              sectionName: { $trim: { input: { $toString: { $ifNull: ["$section", ""] } } } },
+            },
+            totalStudents: { $sum: 1 },
+          },
+        },
+        { $match: { "_id.className": { $ne: "" } } },
+        {
+          $project: {
+            _id: 0,
+            className: "$_id.className",
+            sectionName: "$_id.sectionName",
+            totalStudents: 1,
+          },
+        },
+      ]).toArray(),
+      db.collection("attendance").aggregate([
+        { $match: { schoolId, submissionStatus: "SUBMITTED" } },
+        {
+          $group: {
+            _id: {
+              className: { $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } } },
+              sectionName: { $trim: { input: { $toString: { $ifNull: ["$section", ""] } } } },
+            },
+            totalRecords: { $sum: 1 },
+            present: {
+              $sum: {
+                $cond: [{ $eq: [{ $toUpper: { $ifNull: ["$status", ""] } }, "PRESENT"] }, 1, 0],
+              },
+            },
+            absent: {
+              $sum: {
+                $cond: [{ $eq: [{ $toUpper: { $ifNull: ["$status", ""] } }, "ABSENT"] }, 1, 0],
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            className: "$_id.className",
+            sectionName: "$_id.sectionName",
+            totalRecords: 1,
+            present: 1,
+            absent: 1,
+            avgAttendancePercent: {
+              $cond: [{ $gt: ["$totalRecords", 0] }, { $multiply: [{ $divide: ["$present", "$totalRecords"] }, 100] }, 0],
+            },
+          },
+        },
+      ]).toArray(),
+      db.collection("marks").aggregate([
+        { $match: { schoolId } },
+        {
+          $addFields: {
+            scoreNumeric: {
+              $convert: {
+                input: "$score",
+                to: "double",
+                onError: null,
+                onNull: null,
+              },
+            },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              className: { $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } } },
+              sectionName: { $trim: { input: { $toString: { $ifNull: ["$section", ""] } } } },
+            },
+            sumScore: {
+              $sum: {
+                $cond: [{ $ne: ["$scoreNumeric", null] }, "$scoreNumeric", 0],
+              },
+            },
+            totalEntries: {
+              $sum: {
+                $cond: [{ $ne: ["$scoreNumeric", null] }, 1, 0],
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            className: "$_id.className",
+            sectionName: "$_id.sectionName",
+            sumScore: 1,
+            totalEntries: 1,
+            avgMarksPercent: {
+              $cond: [{ $gt: ["$totalEntries", 0] }, { $divide: ["$sumScore", "$totalEntries"] }, 0],
+            },
+          },
+        },
+      ]).toArray(),
+    ]);
+
+    const classMap = new Map();
+    const getClassKey = (className, sectionName) => `${String(className || "").trim()}::${String(sectionName || "").trim()}`;
+
+    for (const row of classStudentRows) {
+      const className = String(row?.className || "").trim();
+      const sectionName = String(row?.sectionName || "").trim();
+      if (!className) continue;
+      const key = getClassKey(className, sectionName);
+      classMap.set(key, {
+        className,
+        sectionName,
+        totalStudents: Number(row?.totalStudents || 0),
+        avgAttendancePercent: 0,
+        avgMarksPercent: 0,
+      });
+    }
+
+    for (const row of attendanceRows) {
+      const className = String(row?.className || "").trim();
+      const sectionName = String(row?.sectionName || "").trim();
+      if (!className) continue;
+      const key = getClassKey(className, sectionName);
+      const existing = classMap.get(key) || {
+        className,
+        sectionName,
+        totalStudents: 0,
+        avgAttendancePercent: 0,
+        avgMarksPercent: 0,
+      };
+      existing.avgAttendancePercent = Number(row?.avgAttendancePercent || 0);
+      existing.present = Number(row?.present || 0);
+      existing.absent = Number(row?.absent || 0);
+      existing.attendanceRecords = Number(row?.totalRecords || 0);
+      classMap.set(key, existing);
+    }
+
+    for (const row of marksRows) {
+      const className = String(row?.className || "").trim();
+      const sectionName = String(row?.sectionName || "").trim();
+      if (!className) continue;
+      const key = getClassKey(className, sectionName);
+      const existing = classMap.get(key) || {
+        className,
+        sectionName,
+        totalStudents: 0,
+        avgAttendancePercent: 0,
+        avgMarksPercent: 0,
+      };
+      existing.avgMarksPercent = Number(row?.avgMarksPercent || 0);
+      existing.markEntries = Number(row?.totalEntries || 0);
+      classMap.set(key, existing);
+    }
+
+    const classes = Array.from(classMap.values())
+      .map((row) => ({
+        className: row.className,
+        sectionName: row.sectionName,
+        totalStudents: Math.max(0, Number(row.totalStudents || 0)),
+        avgAttendancePercent: Math.max(0, Math.min(100, Number(row.avgAttendancePercent || 0))),
+        avgMarksPercent: Math.max(0, Math.min(100, Number(row.avgMarksPercent || 0))),
+        present: Math.max(0, Number(row.present || 0)),
+        absent: Math.max(0, Number(row.absent || 0)),
+        attendanceRecords: Math.max(0, Number(row.attendanceRecords || 0)),
+        markEntries: Math.max(0, Number(row.markEntries || 0)),
+      }))
+      .sort((a, b) => {
+        const classCmp = a.className.localeCompare(b.className, undefined, { numeric: true, sensitivity: "base" });
+        if (classCmp !== 0) return classCmp;
+        return a.sectionName.localeCompare(b.sectionName, undefined, { numeric: true, sensitivity: "base" });
+      });
+
+    const attendanceTotals = classes.reduce(
+      (acc, row) => {
+        acc.totalRecords += row.attendanceRecords;
+        acc.present += row.present;
+        acc.absent += row.absent;
+        return acc;
+      },
+      { totalRecords: 0, present: 0, absent: 0 }
+    );
+
+    const marksTotals = classes.reduce(
+      (acc, row) => {
+        acc.totalEntries += row.markEntries;
+        acc.sum += row.avgMarksPercent * row.markEntries;
+        return acc;
+      },
+      { totalEntries: 0, sum: 0 }
+    );
+
+    const alerts = classes
+      .filter((row) => row.avgAttendancePercent < 75 || row.avgMarksPercent < 60)
+      .map((row) => {
+        const attendanceLow = row.avgAttendancePercent < 75;
+        const marksLow = row.avgMarksPercent < 60;
+        return {
+          className: row.className,
+          sectionName: row.sectionName,
+          type: attendanceLow && marksLow ? "attendance_marks" : attendanceLow ? "attendance" : "marks",
+          message:
+            attendanceLow && marksLow
+              ? `Low attendance (${row.avgAttendancePercent.toFixed(1)}%) and marks (${row.avgMarksPercent.toFixed(1)}%).`
+              : attendanceLow
+              ? `Low attendance (${row.avgAttendancePercent.toFixed(1)}%).`
+              : `Low marks (${row.avgMarksPercent.toFixed(1)}%).`,
+        };
+      })
+      .slice(0, 30);
+
+    return res.json({
+      totalStudents,
+      totalTeachers,
+      classes,
+      attendanceStats: {
+        totalRecords: attendanceTotals.totalRecords,
+        present: attendanceTotals.present,
+        absent: attendanceTotals.absent,
+        overallPercent:
+          attendanceTotals.totalRecords > 0
+            ? Number(((attendanceTotals.present / attendanceTotals.totalRecords) * 100).toFixed(1))
+            : 0,
+      },
+      marksStats: {
+        totalEntries: marksTotals.totalEntries,
+        overallAverage:
+          marksTotals.totalEntries > 0 ? Number((marksTotals.sum / marksTotals.totalEntries).toFixed(1)) : 0,
+      },
+      alerts,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("ADMIN ANALYTICS ERROR:", error);
+    return res.status(500).json({ error: "Failed to fetch admin analytics" });
+  }
+});
+
+/* ================================
    ADMIN: CLASS PERFORMANCE COMPARISON
    ================================= */
 
@@ -11685,6 +12684,21 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
   }
 });
 
+app.use((err, req, res, _next) => {
+  console.error(
+    JSON.stringify({
+      tag: "QA_EXPRESS_ERROR",
+      requestId: req.qaRequestId || null,
+      method: req.method,
+      path: req.originalUrl,
+      message: err?.message || "Unhandled error",
+      stack: err?.stack || null,
+    })
+  );
+  if (res.headersSent) return;
+  res.status(500).json({ error: "Internal server error" });
+});
+
 /* ================================
    SPA FALLBACK - Serve index.html for client-side routing
    ================================= */
@@ -11705,3 +12719,4 @@ app.get("*", (req, res) => {
     }
   });
 });
+

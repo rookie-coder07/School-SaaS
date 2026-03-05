@@ -98,7 +98,8 @@ export default function TeacherExamsMarksV2({ token, className, section, student
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch exams");
-      setExams(Array.isArray(data) ? data : []);
+      const exams = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      setExams(exams);
     } catch (err) {
       toast.error(err.message || "Failed to load exams");
       setExams([]);
@@ -255,7 +256,13 @@ export default function TeacherExamsMarksV2({ token, className, section, student
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Failed to ${isEdit ? "update" : "create"} exam`);
+      if (!res.ok) {
+        if (res.status === 409) {
+          await fetchExams();
+          throw new Error(data.error || "Exam already exists. Use a different name or delete the existing exam.");
+        }
+        throw new Error(data.error || `Failed to ${isEdit ? "update" : "create"} exam`);
+      }
 
       toast.success(isEdit ? "Exam updated successfully" : "Exam created successfully");
       resetExamForm();

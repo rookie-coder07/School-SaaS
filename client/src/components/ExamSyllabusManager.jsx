@@ -30,7 +30,8 @@ export default function ExamSyllabusManager({ token, teacher }) {
       });
       if (!res.ok) throw new Error("Failed to fetch exams");
       const data = await res.json();
-      setExams(Array.isArray(data) ? data : []);
+      const examList = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      setExams(examList);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load exam syllabuses");

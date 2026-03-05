@@ -17,4 +17,3 @@ export const normalizeTeacherPayload = (payload = {}) => {
 export default function TeacherModel(db) {
   return db.collection("teachers");
 }
-

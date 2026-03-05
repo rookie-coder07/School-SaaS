@@ -378,7 +378,7 @@ DB → Updated voiceCallTriggered, voiceCallId, voiceCallError
 ```env
 # Must be set (from Exotel)
 EXOTEL_API_KEY=806ee79e5ff648a991420cf2bf60748c0ff7773e0b42418e
-EXOTEL_API_TOKEN=b50f86323cb3cebece411a3d6a3870d9a20948d73bb47912
+EXOTEL_API_TOKEN=your_exotel_api_token_here
 EXOTEL_APP_ID=1186696
 
 # Optional (with defaults)

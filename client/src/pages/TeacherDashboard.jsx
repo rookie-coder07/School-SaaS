@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
 import VoiceRecorder from "../components/VoiceRecorder";
 import VoiceAnnouncements from "../components/VoiceAnnouncements";
@@ -13,6 +12,7 @@ import ExamTimetableManager from "../components/ExamTimetableManager";
 import TeacherExamsMarksV2 from "../components/TeacherExamsMarksV2";
 import TeacherSubjectsManager from "../components/TeacherSubjectsManager";
 import TimetableGrid from "../components/TimetableGrid";
+import TeacherAnalyticsDashboard from "../components/analytics/TeacherAnalyticsDashboard";
 import PageContainer from "../components/ui/PageContainer";
 import { Card, StatCard } from "../components/ui/Card";
 import ListItemCard from "../components/ui/ListItemCard";
@@ -142,14 +142,6 @@ export default function TeacherDashboard({ routeTab = "" }) {
   const [contentUndoing, setContentUndoing] = useState(false);
 
   // ===== ANALYTICS STATE =====
-  const [analyticsData, setAnalyticsData] = useState({
-    marksData: [],
-    attendanceData: [],
-    classAverage: 0,
-    topper: null,
-    lowScorer: null,
-    averageAttendance: 0,
-  });
   const [marksRefreshTrigger, setMarksRefreshTrigger] = useState(0);
   const [showEditStudentModal, setShowEditStudentModal] = useState(false);
   const [editStudentLoading, setEditStudentLoading] = useState(false);
@@ -946,113 +938,6 @@ useEffect(() => {
     fetchSummary();
     return () => controller.abort();
   }, [className, section, token, students.length]);
-
-  /* ===== FETCH ANALYTICS DATA ===== */
-  useEffect(() => {
-    if (activeTab !== "analytics" || !students.length) return;
-    const controller = new AbortController();
-
-    const fetchAnalytics = async () => {
-      try {
-        // Fetch marks data
-        const marksRes = await fetch(`${API_URL}/api/teacher/marks`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        const marksArray = marksRes.ok ? await marksRes.json() : [];
-        console.log("📊 MARKS FETCHED:", marksArray.length, marksArray.slice(0, 2));
-
-        // Fetch attendance summary
-        const attRes = await fetch(
-          `${API_URL}/api/teacher/attendance/summary?className=${encodeURIComponent(className)}&section=${encodeURIComponent(section || "")}`,
-          { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
-        );
-        const attData = attRes.ok ? await attRes.json() : [];
-
-        // Process marks data
-        const studentMarksMap = {};
-        const subjectsSet = new Set();
-        
-        marksArray.forEach((m) => {
-          const studentId = String(m.studentId); // Convert to string for consistent key
-          if (!studentMarksMap[studentId]) {
-            studentMarksMap[studentId] = { name: "", marks: [] };
-          }
-          studentMarksMap[studentId].marks.push({ subject: m.subject, marks: m.marks, exam: m.exam });
-          subjectsSet.add(m.subject);
-        });
-
-        // Combine with student names
-        const enrichedMarks = students.map((s) => ({
-          name: s.name,
-          id: s._id,
-          ...(studentMarksMap[String(s._id)]?.marks || []).reduce((acc, m) => {
-            acc[`${m.subject} (${m.exam})`] = m.marks;
-            return acc;
-          }, {}),
-        }));
-
-        // Calculate statistics
-        const allMarksValues = marksArray.filter(m => m.marks).map(m => m.marks);
-        const classAverage = allMarksValues.length > 0 ? Math.round(allMarksValues.reduce((a, b) => a + b, 0) / allMarksValues.length) : 0;
-        const topper = marksArray.length > 0 ? marksArray.reduce((prev, current) => {
-          const matched = students.find(s => String(s._id) === String(current.studentId));
-          const currentWithName = { ...current, name: matched?.name || "Unknown" };
-          if (!prev) return currentWithName;
-          return current.marks > prev.marks ? currentWithName : prev;
-        }, null) : null;
-        console.log("🏆 TOPPER:", topper);
-        const lowScorer = marksArray.length > 0 ? marksArray.reduce((prev, current) => {
-          const matched = students.find(s => String(s._id) === String(current.studentId));
-          const currentWithName = { ...current, name: matched?.name || "Unknown" };
-          if (!prev) return currentWithName;
-          return current.marks < prev.marks ? currentWithName : prev;
-        }, null) : null;
-        console.log("📉 LOW SCORER:", lowScorer);
-
-        // Process attendance data
-        const attPercentages = {};
-        attData.forEach((d) => {
-          const id = String(d.studentId ?? d._id ?? "");
-          const total = Number(d.total) || 0;
-          const present = Number(d.present) || 0;
-          attPercentages[id] = total > 0 ? Math.round((present / total) * 100) : 0;
-        });
-
-        const attendanceData = students.map((s) => ({
-          name: s.name,
-          attendance: attPercentages[s._id] || 0,
-        }));
-
-        const averageAttendance = attendanceData.length > 0 
-          ? Math.round(attendanceData.reduce((sum, d) => sum + d.attendance, 0) / attendanceData.length)
-          : 0;
-
-        setAnalyticsData({
-          marksData: enrichedMarks,
-          attendanceData,
-          classAverage,
-          topper,
-          lowScorer,
-          averageAttendance,
-        });
-      } catch (err) {
-        if (err?.name === "AbortError") return;
-        console.error("ANALYTICS FETCH ERROR:", err);
-        setAnalyticsData({
-          marksData: [],
-          attendanceData: [],
-          classAverage: 0,
-          topper: null,
-          lowScorer: null,
-          averageAttendance: 0,
-        });
-      }
-    };
-
-    fetchAnalytics();
-    return () => controller.abort();
-}, [activeTab, students, token, className, section, marksRefreshTrigger]);
 
 /* ===== FETCH VOICE MESSAGES ===== */
 useEffect(() => {
@@ -1876,6 +1761,7 @@ useEffect(() => {
     { id: "dashboard", label: "Dashboard" },
     { id: "attendance", label: "Attendance" },
     { id: "summary", label: "Students" },
+    { id: "analytics", label: "Class Analytics" },
     { id: "marks-entry", label: "Add Marks" },
     { id: "view-marks", label: "Results" },
     { id: "homework", label: "Homework" },
@@ -1887,12 +1773,17 @@ useEffect(() => {
     { id: "exams", label: "Exams" },
     { id: "exam-syllabus", label: "Exam Syllabus" },
     { id: "exam-timetable", label: "Exam Timetable" },
-    { id: "analytics", label: "Analytics" },
     { id: "password-resets", label: "Password Resets" },
   ];
 
   return (
-    <div className={`h-screen ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"} flex flex-col lg:flex-row bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 font-sans`}>
+    <div
+      className={`h-screen ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"} flex flex-col lg:flex-row font-sans ${
+        activeTab === "analytics"
+          ? "bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b]"
+          : "bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100"
+      }`}
+    >
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -1975,22 +1866,30 @@ useEffect(() => {
       {/* ===== MAIN CONTENT ===== */}
       <div className={`flex-1 w-full lg:w-auto min-w-0 flex flex-col ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"}`}>
         {/* Header */}
-        <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3">
+        <div
+          className={`backdrop-blur-md px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3 ${
+            activeTab === "analytics"
+              ? "bg-slate-950/65 border-b border-slate-700/70"
+              : "bg-white/80 border-b border-slate-200"
+          }`}
+        >
           <div className="flex items-center min-w-0">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
+              className={`lg:hidden mr-3 p-2 rounded-lg transition ${activeTab === "analytics" ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
               title="Toggle sidebar"
             >
-              <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-6 h-6 ${activeTab === "analytics" ? "text-slate-100" : "text-slate-900"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl md:text-3xl font-black text-slate-900 break-words">
+              <h1 className={`text-xl md:text-3xl font-black break-words ${activeTab === "analytics" ? "text-slate-100" : "text-slate-900"}`}>
                 {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
               </h1>
-              <p className="text-xs md:text-sm text-slate-500 mt-1 break-words">Class {className} • Section {section}</p>
+              <p className={`text-xs md:text-sm mt-1 break-words ${activeTab === "analytics" ? "text-slate-300" : "text-slate-500"}`}>
+                Class {className} • Section {section}
+              </p>
             </div>
           </div>
           
@@ -2025,8 +1924,14 @@ useEffect(() => {
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 lg:p-8 pb-20 md:pb-6 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100">
-          <div className={activeTab === "timetable" ? "w-full" : "mx-auto w-full max-w-7xl"}>
+        <div
+          className={`flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-6 ${
+            activeTab === "analytics"
+              ? "p-0 bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b]"
+              : "p-3 md:p-6 lg:p-8 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100"
+          }`}
+        >
+          <div className={activeTab === "analytics" ? "w-full" : activeTab === "timetable" ? "w-full" : "mx-auto w-full max-w-7xl"}>
           {/* ===== DASHBOARD ===== */}
           {activeTab === "dashboard" && (
             <PageContainer className="space-y-4">
@@ -2236,88 +2141,12 @@ useEffect(() => {
             </PageContainer>
           )}
 
-          {/* ===== ANALYTICS ===== */}
+                    {/* ===== ANALYTICS ===== */}
           {activeTab === "analytics" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Student Analytics</h2>
-                <p className="text-sm text-slate-600 mt-1">Advanced insights for individual student performance</p>
-              </div>
-
-              {/* Welcome Card */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-8 text-center">
-                <div className="text-5xl mb-4">📊</div>
-                <h3 className="text-xl font-bold text-blue-900 mb-2">Advanced Student Analytics System</h3>
-                <p className="text-blue-800 mb-6">Get comprehensive performance insights for each student including attendance trends, subject-wise performance, and actionable recommendations.</p>
-                <button
-                  onClick={() => {
-                    console.log("Navigating to students list");
-                    navigate("/teacher/dashboard?section=summary");
-                  }}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition inline-block cursor-pointer disabled:cursor-not-allowed"
-                >
-                  Go to Students List →
-                </button>
-              </div>
-
-              {/* Features Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="rounded-2xl border border-blue-200 bg-blue-50 text-blue-900 shadow-sm transition hover:shadow-md p-3 md:p-5">
-                  <div className="text-3xl mb-3">📈</div>
-                  <h4 className="font-bold text-slate-900 mb-2">Performance Trends</h4>
-                  <p className="text-sm text-slate-600">Track marks across exams and identify improvement patterns</p>
-                </div>
-
-                <div className="rounded-2xl border border-green-200 bg-green-50 text-green-900 shadow-sm transition hover:shadow-md p-3 md:p-5">
-                  <div className="text-3xl mb-3">📚</div>
-                  <h4 className="font-bold text-slate-900 mb-2">Subject Analysis</h4>
-                  <p className="text-sm text-slate-600">Compare subject-wise performance and identify weak areas</p>
-                </div>
-
-                <div className="rounded-2xl border border-purple-200 bg-purple-50 text-purple-900 shadow-sm transition hover:shadow-md p-3 md:p-5">
-                  <div className="text-3xl mb-3">📅</div>
-                  <h4 className="font-bold text-slate-900 mb-2">Attendance Tracking</h4>
-                  <p className="text-sm text-slate-600">Monitor attendance patterns and identify risks early</p>
-                </div>
-
-                <div className="rounded-2xl border border-orange-200 bg-orange-50 text-orange-900 shadow-sm transition hover:shadow-md p-3 md:p-5">
-                  <div className="text-3xl mb-3">⚠️</div>
-                  <h4 className="font-bold text-slate-900 mb-2">Risk Indicators</h4>
-                  <p className="text-sm text-slate-600">Auto-detect students needing academic support</p>
-                </div>
-
-                <div className="rounded-2xl border border-cyan-200 bg-cyan-50 text-cyan-900 shadow-sm transition hover:shadow-md p-3 md:p-5">
-                  <div className="text-3xl mb-3">💡</div>
-                  <h4 className="font-bold text-slate-900 mb-2">AI Insights</h4>
-                  <p className="text-sm text-slate-600">Get auto-generated suggestions based on data</p>
-                </div>
-
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 text-rose-900 shadow-sm transition hover:shadow-md p-3 md:p-5">
-                  <div className="text-3xl mb-3">📊</div>
-                  <h4 className="font-bold text-slate-900 mb-2">Visual Charts</h4>
-                  <p className="text-sm text-slate-600">Beautiful interactive charts for easy analysis</p>
-                </div>
-              </div>
-
-              {/* How to Use */}
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
-                <h4 className="font-bold text-amber-900 mb-4">How to Use:</h4>
-                <ol className="space-y-3 text-amber-900 text-sm">
-                  <li className="flex gap-3">
-                    <span className="font-bold min-w-fit">1. Go to Students Tab</span>
-                    <span>Click the "Summary" tab to see your class students</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="font-bold min-w-fit">2. Click Any Student</span>
-                    <span>Click on any student row to open their analytics dashboard</span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="font-bold min-w-fit">3. View Insights</span>
-                    <span>Explore performance trends, marks, attendance, and get actionable recommendations</span>
-                  </li>
-                </ol>
-              </div>
-            </div>
+            <TeacherAnalyticsDashboard
+              refreshKey={marksRefreshTrigger}
+              onGoToStudents={() => navigate("/teacher/dashboard?section=summary")}
+            />
           )}
 
           {/* ===== SUBJECTS ===== */}
@@ -3028,6 +2857,13 @@ useEffect(() => {
     </div>
   );
 }
+
+
+
+
+
+
+
 
 
 
