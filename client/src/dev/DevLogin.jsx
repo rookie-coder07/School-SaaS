@@ -27,15 +27,34 @@ export default function DevLogin() {
     setLoading(true);
 
     try {
-      const { data: payload } = await safeFetchJson(`${API_URL}/api/dev/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase() || "dev@school.local",
-          accessCode: accessCode.trim() || "supersecretdevkey",
-        }),
-        requestLabel: "dev-login",
-      });
+      const normalizedEmail = email.trim().toLowerCase() || "dev@school.local";
+      const normalizedCode = accessCode.trim() || "supersecretdevkey";
+
+      let payload;
+      try {
+        const response = await safeFetchJson(`${API_URL}/api/dev/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            accessCode: normalizedCode,
+          }),
+          requestLabel: "dev-login-primary",
+        });
+        payload = response.data;
+      } catch (primaryErr) {
+        if (Number(primaryErr?.status) !== 404) throw primaryErr;
+        const fallback = await safeFetchJson(`${API_URL}/api/auth/developer/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            password: normalizedCode,
+          }),
+          requestLabel: "dev-login-fallback",
+        });
+        payload = fallback.data;
+      }
 
       if (!payload?.token) {
         setError("Access denied. Please check your credentials.");
