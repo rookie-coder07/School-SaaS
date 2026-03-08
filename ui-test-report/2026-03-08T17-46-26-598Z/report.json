@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-03-08T17:46:26.604Z",
+  "baseUrl": "http://localhost:5174",
+  "config": {
+    "allowDangerousClicks": false,
+    "quickMode": true,
+    "noClickMode": false,
+    "portals": [
+      "teacher"
+    ]
+  },
+  "pagesTested": [
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/teacher/dashboard"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/teacher/dashboard?section=attendance"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/teacher/dashboard?section=homework"
+    }
+  ],
+  "pageScreenshots": [
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-46-26-598Z\\screenshots\\teacher-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-46-26-598Z\\screenshots\\teacher-Attendance.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-46-26-598Z\\screenshots\\teacher-Homework.png"
+  ],
+  "consoleErrors": [
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "CLASS SUMMARY ERROR: TypeError: Failed to fetch\n    at fetchClassSummary (http://localhost:5174/src/pages/TeacherDashboard.jsx?t=1772989967003:372:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx?t=1772989967003:388:14\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:46:28.327Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "STUDENTS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx?t=1772989967003:679:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx?t=1772989967003:802:38\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:46:28.327Z"
+    }
+  ],
+  "reactWarnings": [],
+  "networkErrors": [],
+  "failedApis": [],
+  "uiIssues": [],
+  "portalLoginFailures": []
+}

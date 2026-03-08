@@ -9,7 +9,11 @@ export default function ProtectedRoute({ children, role }) {
   if (role === "developer") token = localStorage.getItem("developerToken");
 
   if (!token) {
-    return <Navigate to={`/${role === "developer" ? "dev" : role}/login`} replace />;
+    // Redirect to appropriate login page based on role
+    if (role === "developer") {
+      return <Navigate to="/system-core/dev-access" replace />;
+    }
+    return <Navigate to={`/${role}/login`} replace />;
   }
 
   return children;

@@ -75,19 +75,6 @@ export default function AttendanceCalendar({ attendanceData = [] }) {
     }
   };
 
-  const getStatusBgColor = (status) => {
-    switch (status) {
-      case "PRESENT":
-        return "bg-emerald-50";
-      case "ABSENT":
-        return "bg-rose-50";
-      case "LEAVE":
-        return "bg-amber-50";
-      default:
-        return "bg-slate-50";
-    }
-  };
-
   const getStatusTextColor = (status) => {
     switch (status) {
       case "PRESENT":

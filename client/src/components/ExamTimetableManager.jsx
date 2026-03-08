@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "./ToastProvider";
 import DateFilterBar from "./DateFilterBar";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
@@ -41,11 +41,7 @@ export default function ExamTimetableManager({ token, teacher }) {
     return params.toString();
   }, [teacherClass, teacherSection, dateFilter]);
 
-  useEffect(() => {
-    fetchExams();
-  }, [queryString]);
-
-  const fetchExams = async () => {
+  const fetchExams = useCallback(async () => {
     setLoading(true);
     try {
       const url = `${API_URL}/api/teacher/exams${queryString ? `?${queryString}` : ""}`;
@@ -63,7 +59,11 @@ export default function ExamTimetableManager({ token, teacher }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [queryString, token, toast]);
+
+  useEffect(() => {
+    fetchExams();
+  }, [fetchExams]);
 
   const openAddModal = () => {
     setMode("add");

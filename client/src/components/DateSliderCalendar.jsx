@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 /**
  * DateSliderCalendar Component - Interactive date range slider for filtering

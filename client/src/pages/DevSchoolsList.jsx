@@ -1,154 +1,148 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { useToast } from "../components/ToastProvider";
-import ConfirmationModal from "../components/ConfirmationModal";
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import DevPortalLayout from "../components/DevPortalLayout";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 export default function DevSchoolsList() {
-  const navigate = useNavigate();
-  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [schools, setSchools] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [confirming, setConfirming] = useState(null);
-  const [deleting, setDeleting] = useState(false);
   const token = localStorage.getItem("developerToken");
 
-  useEffect(() => {
-    if (!token) {
-      navigate("/dev/login", { replace: true });
-      return;
-    }
-    fetchSchools();
-  }, [token, navigate]);
-
-  const fetchSchools = async () => {
+  const loadSchools = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError("");
     try {
-      setLoading(true);
-      const response = await axios.get(`${API_URL}/api/dev/schools`, {
+      const response = await fetch(`${API_URL}/api/dev/schools?page=1&limit=100`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setSchools(response.data || []);
-    } catch (err) {
-      console.error("Error fetching schools:", err);
-      toast?.error?.("Failed to load schools");
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "Failed to load schools");
+      const list = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+      setSchools(list);
+    } catch (requestError) {
+      setError(requestError?.message || "Failed to load schools");
     } finally {
       setLoading(false);
     }
+  }, [token]);
+
+  useEffect(() => {
+    loadSchools();
+  }, [loadSchools]);
+
+  const toggleSchool = async (schoolId, isEnabled) => {
+    try {
+      const response = await fetch(`${API_URL}/api/dev/schools/${schoolId}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ isEnabled }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.message || payload?.error || "Failed to update school");
+      }
+      setSchools((prev) => prev.map((s) => (s._id === schoolId ? { ...s, isEnabled } : s)));
+    } catch (requestError) {
+      setError(requestError?.message || "Failed to update school");
+    }
   };
 
-  const handleDeleteSchool = async () => {
-    if (!confirming?.schoolId) return;
-
+  const deleteSchool = async (schoolId, schoolName) => {
+    const allowed = window.confirm(`Delete "${schoolName}" and all related data? This cannot be undone.`);
+    if (!allowed) return;
     try {
-      setDeleting(true);
-      await axios.delete(`${API_URL}/api/dev/schools/${confirming.schoolId}`, {
+      const response = await fetch(`${API_URL}/api/dev/schools/${schoolId}`, {
+        method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      setSchools((prev) => prev.filter((s) => s._id !== confirming.schoolId));
-      toast?.success?.(`School "${confirming.schoolName}" and all related data deleted`);
-      setConfirming(null);
-    } catch (err) {
-      console.error("Error deleting school:", err);
-      toast?.error?.(err.response?.data?.error || "Failed to delete school");
-    } finally {
-      setDeleting(false);
+      const payload = await response.json();
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.message || payload?.error || "Failed to delete school");
+      }
+      setSchools((prev) => prev.filter((school) => school._id !== schoolId));
+    } catch (requestError) {
+      setError(requestError?.message || "Failed to delete school");
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-black text-slate-900">Schools</h1>
-        <p className="text-slate-600 mt-2">Manage all schools across the platform</p>
-      </div>
-
-      {/* Loading State */}
-      {loading && (
-        <div className="text-center py-12">
-          <div className="inline-block text-slate-500">Loading schools...</div>
+    <DevPortalLayout
+      title="Schools Management"
+      subtitle="List schools, view counts, toggle school access, and remove schools."
+    >
+      {error ? (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
         </div>
-      )}
+      ) : null}
 
-      {/* Schools Grid */}
-      {!loading && schools.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {schools.map((school) => (
-            <div
-              key={school._id}
-              className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition p-6 flex flex-col"
-            >
-              {/* School Name */}
-              <h3 className="text-lg font-bold text-slate-900 mb-2">{school.name}</h3>
+      {loading ? <p className="text-sm text-slate-200">Loading schools...</p> : null}
 
-              {/* School Code */}
-              {school.code && (
-                <p className="text-xs text-slate-500 mb-4">Code: {school.code}</p>
-              )}
-
-              {/* Stats Grid */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-blue-50 rounded-lg p-3">
-                  <div className="text-2xl font-black text-blue-600">{school.totalStudents}</div>
-                  <div className="text-xs text-slate-600 mt-1">Students</div>
-                </div>
-                <div className="bg-green-50 rounded-lg p-3">
-                  <div className="text-2xl font-black text-green-600">{school.totalTeachers}</div>
-                  <div className="text-xs text-slate-600 mt-1">Teachers</div>
-                </div>
-                <div className="bg-purple-50 rounded-lg p-3">
-                  <div className="text-2xl font-black text-purple-600">{school.totalAdmins}</div>
-                  <div className="text-xs text-slate-600 mt-1">Admins</div>
-                </div>
-                <div className="bg-slate-100 rounded-lg p-3">
-                  <div className="text-sm font-semibold text-slate-700">
-                    {new Date(school.createdAt).toLocaleDateString()}
-                  </div>
-                  <div className="text-xs text-slate-600 mt-1">Created</div>
-                </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {schools.map((school) => (
+          <article key={school._id} className="rounded-2xl border border-white/20 bg-gradient-to-br from-cyan-500/20 to-blue-700/20 p-5 shadow-xl backdrop-blur-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-black text-white">{school.name}</h3>
+                <p className="text-xs text-slate-200">Code: {school.code || "N/A"}</p>
+                {school.duplicateCount > 1 ? (
+                  <p className="text-[11px] font-semibold text-amber-100">Merged duplicates: {school.duplicateCount}</p>
+                ) : null}
               </div>
+              <span
+                className={[
+                  "rounded-full px-2.5 py-1 text-xs font-bold",
+                  school.isEnabled === false ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800",
+                ].join(" ")}
+              >
+                {school.isEnabled === false ? "Disabled" : "Enabled"}
+              </span>
+            </div>
 
-              {/* Actions */}
-              <div className="flex gap-2 mt-auto">
-                <button
-                  onClick={() => navigate(`/dev/schools/${school._id}`)}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition text-sm"
-                >
-                  View Details
-                </button>
-                <button
-                  onClick={() => setConfirming({ schoolId: school._id, schoolName: school.name })}
-                  className="px-4 py-2 bg-red-50 text-red-600 font-semibold rounded-lg hover:bg-red-100 transition text-sm"
-                >
-                  Delete
-                </button>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-white/15 p-3">
+                <p className="text-xl font-black text-white">{school.totalStudents || 0}</p>
+                <p className="text-xs font-semibold text-slate-100">Students</p>
+              </div>
+              <div className="rounded-xl bg-white/15 p-3">
+                <p className="text-xl font-black text-white">{school.totalTeachers || 0}</p>
+                <p className="text-xs font-semibold text-slate-100">Teachers</p>
               </div>
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* Empty State */}
-      {!loading && schools.length === 0 && (
-        <div className="text-center py-12">
-          <div className="text-slate-500 text-lg">No schools found</div>
-        </div>
-      )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => toggleSchool(school._id, !(school.isEnabled !== false))}
+                className="rounded-xl border border-white/30 bg-white/15 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/25"
+              >
+                {school.isEnabled === false ? "Enable School" : "Disable School"}
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteSchool(school._id, school.name)}
+                className="rounded-xl border border-rose-200/40 bg-rose-400/20 px-3 py-2 text-xs font-bold text-rose-100 transition hover:bg-rose-400/30"
+              >
+                Delete School
+              </button>
+              <Link
+                to={`/dev/schools/${school._id}`}
+                className="rounded-xl border border-cyan-200/40 bg-cyan-400/20 px-3 py-2 text-xs font-bold text-cyan-100 transition hover:bg-cyan-400/30"
+              >
+                View Details
+              </Link>
+            </div>
+          </article>
+        ))}
+      </div>
 
-      {/* Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={!!confirming}
-        title="Delete School"
-        message={`Are you sure you want to delete "${confirming?.schoolName}"? All students, teachers, and data will be permanently removed.`}
-        warning="This action is irreversible"
-        confirmText="Delete School"
-        isLoading={deleting}
-        onConfirm={handleDeleteSchool}
-        onCancel={() => setConfirming(null)}
-      />
-    </div>
+      {!loading && schools.length === 0 ? <p className="text-sm text-slate-200">No schools found.</p> : null}
+    </DevPortalLayout>
   );
 }

@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-03-08T17:47:09.643Z",
+  "baseUrl": "http://localhost:5174",
+  "config": {
+    "allowDangerousClicks": false,
+    "quickMode": true,
+    "noClickMode": false,
+    "portals": [
+      "teacher"
+    ]
+  },
+  "pagesTested": [
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/teacher/dashboard"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/teacher/dashboard?section=attendance"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/teacher/dashboard?section=homework"
+    }
+  ],
+  "pageScreenshots": [
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-47-09-640Z\\screenshots\\teacher-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-47-09-640Z\\screenshots\\teacher-Attendance.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-47-09-640Z\\screenshots\\teacher-Homework.png"
+  ],
+  "consoleErrors": [],
+  "reactWarnings": [],
+  "networkErrors": [],
+  "failedApis": [],
+  "uiIssues": [],
+  "portalLoginFailures": []
+}

@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-03-08T17:39:56.083Z",
+  "baseUrl": "http://localhost:5174",
+  "config": {
+    "allowDangerousClicks": false,
+    "quickMode": true,
+    "noClickMode": false,
+    "portals": [
+      "admin",
+      "teacher",
+      "developer"
+    ]
+  },
+  "pagesTested": [],
+  "pageScreenshots": [],
+  "consoleErrors": [],
+  "reactWarnings": [],
+  "networkErrors": [],
+  "failedApis": [],
+  "uiIssues": [],
+  "portalLoginFailures": [
+    {
+      "portal": "admin",
+      "error": "page.waitForURL: Timeout 15000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+      "timestamp": "2026-03-08T17:40:12.695Z"
+    },
+    {
+      "portal": "teacher",
+      "error": "page.waitForURL: Timeout 15000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+      "timestamp": "2026-03-08T17:40:28.416Z"
+    },
+    {
+      "portal": "developer",
+      "error": "page.waitForURL: Timeout 15000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+      "timestamp": "2026-03-08T17:40:44.156Z"
+    }
+  ]
+}

@@ -28,13 +28,15 @@ const SUBJECTS_CACHE_TTL_MS = 15000;
 const MARKS_EXAMS_CACHE_TTL_MS = 15000;
 const subjectsCache = new Map();
 const marksExamsCache = new Map();
+const isTransientFetchError = (err) =>
+  err?.name === "AbortError" || String(err?.message || "").toLowerCase().includes("failed to fetch");
 
 const toRollNumber = (value) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 };
 
-const sortStudentsByRollNo = (a, b) => {
+const _sortStudentsByRollNo = (a, b) => {
   const aNum = toRollNumber(a?.rollNo);
   const bNum = toRollNumber(b?.rollNo);
   if (aNum !== null && bNum !== null) return aNum - bNum;
@@ -52,25 +54,26 @@ export default function TeacherDashboard({ routeTab = "" }) {
   const [classInfo, setClassInfo] = useState(null);
   const [homework, setHomework] = useState([]);
   const [events, setEvents] = useState([]);
-  const [marks, setMarks] = useState({});
+  const [_marks, _setMarks] = useState({});
   const [percentages, setPercentages] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [schoolId, setSchoolId] = useState("");
+  const [_schoolId, setSchoolId] = useState("");
   const [schoolName, setSchoolName] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const skipQuerySectionSyncRef = useRef(false);
   const [date, setDate] = useState("");
-  const [search, setSearch] = useState("");
+  const [_search, _setSearch] = useState("");
   const [locked, setLocked] = useState(false);
   const [isFinalized, setIsFinalized] = useState(false);
   const [isFutureDate, setIsFutureDate] = useState(false);
   const [presentCount, setApiPresentCount] = useState(0);
   const [absentCount, setApiAbsentCount] = useState(0);
-  const [datePercentage, setDatePercentage] = useState(0);
+  const [_datePercentage, setDatePercentage] = useState(0);
   const [studentOverallPercentages, setStudentOverallPercentages] = useState({});
   const [lockMessage, setLockMessage] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, _setMessage] = useState("");
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [unreadCount, setUnreadCount] = useState(0);
@@ -85,6 +88,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
   }, []);
   const className = teacher?.class;
   const section = teacher?.section;
+  const schoolFeatures = teacher?.school?.features || teacher?.features || {};
   const token = localStorage.getItem("teacherToken");
   const toast = useToast();
 
@@ -96,40 +100,40 @@ export default function TeacherDashboard({ routeTab = "" }) {
   const [hwLoading, setHwLoading] = useState(false);
 
   // ===== MARKS FORM STATE =====
-  const [subject, setSubject] = useState("");
-  const [exam, setExam] = useState("");
+  const [_subject, _setSubject] = useState("");
+  const [_exam, _setExam] = useState("");
   const [marksData, setMarksData] = useState({});
   const [availableExams, setAvailableExams] = useState([]);
-  const [selectedExamId, setSelectedExamId] = useState("");
-  const [subjectsLoading, setSubjectsLoading] = useState(false);
-  const [examsLoading, setExamsLoading] = useState(false);
+  const [selectedExamId, _setSelectedExamId] = useState("");
+  const [_subjectsLoading, setSubjectsLoading] = useState(false);
+  const [_examsLoading, setExamsLoading] = useState(false);
   const [subjectNameInput, setSubjectNameInput] = useState("");
   const [subjectEditingId, setSubjectEditingId] = useState("");
-  const [subjectSaving, setSubjectSaving] = useState(false);
+  const [_subjectSaving, setSubjectSaving] = useState(false);
   const [examNameInput, setExamNameInput] = useState("");
   const [examSubjectIdInput, setExamSubjectIdInput] = useState("");
   const [examMaxMarksInput, setExamMaxMarksInput] = useState("");
-  const [examSaving, setExamSaving] = useState(false);
-  const [marksMode, setMarksMode] = useState("single");
+  const [_examSaving, setExamSaving] = useState(false);
+  const [_marksMode, _setMarksMode] = useState("single");
   const [multiExamName, setMultiExamName] = useState("");
   const [multiSelectedSubjects, setMultiSelectedSubjects] = useState([]);
   const [multiExcelFile, setMultiExcelFile] = useState(null);
   const [multiMarksData, setMultiMarksData] = useState({});
-  const [multiExcelLoading, setMultiExcelLoading] = useState(false);
-  const [multiManualLoading, setMultiManualLoading] = useState(false);
-  const [singleImportRowsPreview, setSingleImportRowsPreview] = useState([]);
-  const [singleImportDetectedType, setSingleImportDetectedType] = useState("");
-  const [multiImportRowsPreview, setMultiImportRowsPreview] = useState([]);
-  const [multiImportDetectedType, setMultiImportDetectedType] = useState("");
-  const [importExampleMode, setImportExampleMode] = useState("table");
-  const [allMarks, setAllMarks] = useState([]);
-  const [availableSubjects, setAvailableSubjects] = useState([]);
+  const [_multiExcelLoading, setMultiExcelLoading] = useState(false);
+  const [_multiManualLoading, setMultiManualLoading] = useState(false);
+  const [_singleImportRowsPreview, setSingleImportRowsPreview] = useState([]);
+  const [_singleImportDetectedType, setSingleImportDetectedType] = useState("");
+  const [_multiImportRowsPreview, setMultiImportRowsPreview] = useState([]);
+  const [_multiImportDetectedType, setMultiImportDetectedType] = useState("");
+  const [_importExampleMode, _setImportExampleMode] = useState("table");
+  const [_allMarks, setAllMarks] = useState([]);
+  const [_availableSubjects, setAvailableSubjects] = useState([]);
 
   // ===== EXCEL UPLOAD STATE =====
   const [excelFile, setExcelFile] = useState(null);
   const [excelSubject, setExcelSubject] = useState("");
   const [excelExam, setExcelExam] = useState("");
-  const [excelLoading, setExcelLoading] = useState(false);
+  const [_excelLoading, setExcelLoading] = useState(false);
 
   // ===== EVENTS FORM STATE =====
   const [eventName, setEventName] = useState("");
@@ -168,14 +172,14 @@ export default function TeacherDashboard({ routeTab = "" }) {
   const [voicePage, setVoicePage] = useState(1);
   const [voiceTotalPages, setVoiceTotalPages] = useState(1);
   const [voiceMessageDeletingId, setVoiceMessageDeletingId] = useState(null);
-  const [audioFile, setAudioFile] = useState(null);
-  const [voiceLoading, setVoiceLoading] = useState(false);
+  const [_audioFile, setAudioFile] = useState(null);
+  const [_voiceLoading, setVoiceLoading] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [broadcastToClass, setBroadcastToClass] = useState(true);
 
   // ===== TIMETABLE STATE =====
-  const [timetable, setTimetable] = useState([]);
-  const [timetableForm, setTimetableForm] = useState({
+  const [_timetable, setTimetable] = useState([]);
+  const [_timetableForm, _setTimetableForm] = useState({
     day: "",
     period: "",
     subject: "",
@@ -183,7 +187,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
     endTime: "",
     timetableId: null,
   });
-  const [timetableLoading, setTimetableLoading] = useState(false);
+  const [_timetableLoading, _setTimetableLoading] = useState(false);
   const [homeworkDateFilter, setHomeworkDateFilter] = useState({ from: "", to: "" });
   const [eventsDateFilter, setEventsDateFilter] = useState({ from: "", to: "" });
   const [voiceDateFilter, setVoiceDateFilter] = useState({ from: "", to: "" });
@@ -295,6 +299,10 @@ export default function TeacherDashboard({ routeTab = "" }) {
 
   // Handle navigation from notification clicks via query params
   useEffect(() => {
+    if (skipQuerySectionSyncRef.current) {
+      skipQuerySectionSyncRef.current = false;
+      return;
+    }
     if (
       location.pathname === "/teacher/subjects" ||
       location.pathname === "/teacher/exams" ||
@@ -309,12 +317,19 @@ export default function TeacherDashboard({ routeTab = "" }) {
         exams: "exam-timetable",
       };
       const mapped = sectionMap[sectionParam] || sectionParam;
-      if (mapped !== activeTab) {
+      setActiveTab((prev) => {
+        if (mapped === prev) return prev;
         console.log("📍 Teacher Dashboard: Navigating to section from query param:", mapped);
-        setActiveTab(mapped);
-      }
+        return mapped;
+      });
     }
-  }, [searchParams, activeTab, location.pathname]);
+  }, [searchParams, location.pathname]);
+
+  const handleBackToDashboard = useCallback(() => {
+    skipQuerySectionSyncRef.current = true;
+    navigate("/teacher/dashboard", { replace: true });
+    setActiveTab("dashboard");
+  }, [navigate]);
 
   // Fetch unread notification count on mount and periodically
   useEffect(() => {
@@ -384,7 +399,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
         const data = await res.json();
         setClassInfo(data);
       } catch (err) {
-        if (err?.name === "AbortError") return;
+        if (isTransientFetchError(err)) return;
         console.error("CLASS SUMMARY ERROR:", err);
         setClassInfo(null);
       }
@@ -413,15 +428,14 @@ export default function TeacherDashboard({ routeTab = "" }) {
         const data = await res.json();
         setHomework(Array.isArray(data) ? data : []);
       } catch (err) {
-        if (err?.name === "AbortError") return;
-        console.error("HOMEWORK FETCH ERROR:", err);
+        if (isTransientFetchError(err)) return;
         setHomework([]);
       }
     };
 
     fetchHomework();
     return () => controller.abort();
-  }, [activeTab, token, homeworkDateFilter.from, homeworkDateFilter.to]);
+  }, [activeTab, token, homeworkDateFilter]);
 
   /* ===== FETCH EVENTS ===== */
   useEffect(() => {
@@ -450,7 +464,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
 
     fetchEvents();
     return () => controller.abort();
-  }, [activeTab, token, eventsDateFilter.from, eventsDateFilter.to]);
+  }, [activeTab, token, eventsDateFilter]);
 
   const pushUndoContent = (model, data) => {
     if (!data?._id) return;
@@ -565,11 +579,10 @@ export default function TeacherDashboard({ routeTab = "" }) {
         }
         const data = await res.json();
         setAllMarks(Array.isArray(data) ? data : []);
-      } catch (err) {
-        if (err?.name === "AbortError") return;
-        console.error("MARKS FETCH ERROR:", err);
-        setAllMarks([]);
-      }
+    } catch (err) {
+      if (isTransientFetchError(err)) return;
+      setAllMarks([]);
+    }
     };
 
     fetchAllMarks();
@@ -600,8 +613,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
       subjectsCache.set(cacheKey, { data: subjects, timestamp: Date.now() });
       lastSubjectsFetchKeyRef.current = fetchKey;
     } catch (err) {
-      if (err?.name === "AbortError") return;
-      console.error("SUBJECTS FETCH ERROR:", err);
+      if (isTransientFetchError(err)) return;
       setAvailableSubjects([]);
     } finally {
       subjectsFetchInFlightRef.current = false;
@@ -634,8 +646,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
       marksExamsCache.set(cacheKey, { data: exams, timestamp: Date.now() });
       lastExamsFetchKeyRef.current = fetchKey;
     } catch (err) {
-      if (err?.name === "AbortError") return;
-      console.error("MARKS EXAMS FETCH ERROR:", err);
+      if (isTransientFetchError(err)) return;
       setAvailableExams([]);
     } finally {
       examsFetchInFlightRef.current = false;
@@ -658,7 +669,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
     return () => controller.abort();
   }, [activeTab, className, section, token, fetchSubjects, fetchExamsForMarks]);
 
-  const reloadStudents = async ({ signal } = {}) => {
+  const reloadStudents = useCallback(async ({ signal } = {}) => {
   try {
     const res = await fetch(
       `${API_URL}/api/teacher/students?className=${className}&section=${section}`,
@@ -673,11 +684,11 @@ export default function TeacherDashboard({ routeTab = "" }) {
     });
     setAttendance(init);
   } catch (err) {
-    if (err?.name === "AbortError") return;
+    if (isTransientFetchError(err)) return;
     console.error("STUDENTS FETCH ERROR:", err);
     setStudents([]);
   }
-};
+}, [className, section, token]);
 
 const openEditStudentModal = (student) => {
   if (!student?._id) return;
@@ -723,7 +734,7 @@ const saveEditedStudent = async () => {
   }
 };
 
-const fetchResetRequests = async ({ signal } = {}) => {
+const fetchResetRequests = useCallback(async ({ signal } = {}) => {
   setResetRequestsLoading(true);
   try {
     const res = await fetch(`${API_URL}/api/teacher/password-reset-requests`, {
@@ -744,7 +755,7 @@ const fetchResetRequests = async ({ signal } = {}) => {
   } finally {
     setResetRequestsLoading(false);
   }
-};
+}, [token, toast]);
 
 const resolveResetRequest = async (request) => {
   const newPassword = String(resetRequestPasswords[request._id] || "");
@@ -780,7 +791,7 @@ useEffect(() => {
   const controller = new AbortController();
   if (className && section && token) reloadStudents({ signal: controller.signal });
   return () => controller.abort();
-}, [className, section, token]);
+}, [className, section, token, reloadStudents]);
 
 useEffect(() => {
   const controller = new AbortController();
@@ -788,7 +799,7 @@ useEffect(() => {
     fetchResetRequests({ signal: controller.signal });
   }
   return () => controller.abort();
-}, [activeTab, token]);
+}, [activeTab, token, fetchResetRequests]);
 
   /* ===== FETCH ATTENDANCE STATUS & LOCK STATE ===== */
   useEffect(() => {
@@ -929,8 +940,7 @@ useEffect(() => {
 
         setPercentages(map);
       } catch (err) {
-        if (err?.name === "AbortError") return;
-        console.error("SUMMARY FETCH ERROR:", err);
+        if (isTransientFetchError(err)) return;
         setPercentages({});
       }
     };
@@ -968,7 +978,7 @@ useEffect(() => {
 
   fetchVoiceMessages();
   return () => controller.abort();
-}, [activeTab, token, voiceDateFilter.from, voiceDateFilter.to]);
+}, [activeTab, token, voiceDateFilter]);
 
 const loadMoreVoiceMessages = async () => {
   if (voiceMessagesLoadingMore || voicePage >= voiceTotalPages) return;
@@ -1255,14 +1265,14 @@ useEffect(() => {
       });
       const data = await res2.json();
       setHomework(Array.isArray(data) ? data : []);
-    } catch (err) {
+    } catch {
       toast.error("Failed to add homework");
     } finally {
       setHwLoading(false);
     }
   };
 
-  const saveSubjectItem = async () => {
+  const _saveSubjectItem = async () => {
     if (!subjectNameInput.trim()) {
       toast.warning("Subject name is required");
       return;
@@ -1298,12 +1308,12 @@ useEffect(() => {
     }
   };
 
-  const editSubjectItem = (subj) => {
+  const _editSubjectItem = (subj) => {
     setSubjectEditingId(subj._id);
     setSubjectNameInput(subj.subjectName || subj.name || "");
   };
 
-  const deleteSubjectItem = async (subj) => {
+  const _deleteSubjectItem = async (subj) => {
     if (!subj?._id) return;
     if (!window.confirm("Delete this subject?")) return;
     try {
@@ -1321,7 +1331,7 @@ useEffect(() => {
     }
   };
 
-  const saveExamDefinition = async () => {
+  const _saveExamDefinition = async () => {
     if (!examNameInput.trim() || !examSubjectIdInput || !Number(examMaxMarksInput)) {
       toast.warning("Exam name, subject and max marks are required");
       return;
@@ -1356,7 +1366,7 @@ useEffect(() => {
     }
   };
 
-  const deleteExamDefinition = async (examRow) => {
+  const _deleteExamDefinition = async (examRow) => {
     if (!examRow?._id) return;
     if (!window.confirm("Delete this exam?")) return;
     try {
@@ -1404,17 +1414,17 @@ useEffect(() => {
     return { type: "Excel", rows };
   };
 
-  const copyToClipboard = async (text) => {
+  const _copyToClipboard = async (text) => {
     try {
       await navigator.clipboard.writeText(text);
       toast.success("Copied");
-    } catch (err) {
+    } catch {
       toast.error("Copy failed");
     }
   };
 
   /* ===== SAVE MARKS ===== */
-  const saveMarks = async () => {
+  const _saveMarks = async () => {
     if (!selectedExamId || !(selectedExamMaxMarks > 0)) {
       toast.warning("Select exam first");
       return;
@@ -1455,7 +1465,7 @@ useEffect(() => {
   };
 
   /* ===== EXCEL UPLOAD HANDLERS ===== */
-  const handleExcelFileSelect = (e) => {
+  const _handleExcelFileSelect = (e) => {
     const file = e.target.files[0];
     if (file) {
       setExcelFile(file);
@@ -1463,7 +1473,7 @@ useEffect(() => {
     }
   };
 
-  const uploadMarksFromExcel = async () => {
+  const _uploadMarksFromExcel = async () => {
     if (!excelFile) {
       toast.warning("Please select an Excel file");
       return;
@@ -1572,19 +1582,19 @@ useEffect(() => {
     if (input) input.value = "";
   };
 
-  const handleToggleMultiSubject = (subjectName) => {
+  const _handleToggleMultiSubject = (subjectName) => {
     setMultiSelectedSubjects((prev) => {
       if (prev.includes(subjectName)) return prev.filter((s) => s !== subjectName);
       return [...prev, subjectName];
     });
   };
 
-  const handleMultiExcelFileSelect = (e) => {
+  const _handleMultiExcelFileSelect = (e) => {
     const file = e.target.files[0];
     if (file) setMultiExcelFile(file);
   };
 
-  const uploadMultiMarksFromExcel = async () => {
+  const _uploadMultiMarksFromExcel = async () => {
     if (!multiExcelFile) {
       toast.warning("Please select an Excel file");
       return;
@@ -1681,7 +1691,7 @@ useEffect(() => {
     }
   };
 
-  const saveMultiMarksManual = async () => {
+  const _saveMultiMarksManual = async () => {
     if (!multiExamName || multiSelectedSubjects.length === 0) {
       toast.warning("Please enter exam name and select subjects");
       return;
@@ -1773,8 +1783,58 @@ useEffect(() => {
     { id: "exams", label: "Exams" },
     { id: "exam-syllabus", label: "Exam Syllabus" },
     { id: "exam-timetable", label: "Exam Timetable" },
+    { id: "password-resets", label: "Password Resets", feature: null },
+  ]
+  .filter((item) => {
+    // If no feature requirement or no schoolFeatures loaded yet, show it
+    if (!item.feature || !schoolFeatures) return true;
+    // Hide if feature is explicitly disabled
+    return schoolFeatures[item.feature] !== false;
+  });
+
+  // Check if current tab is disabled
+  const _activeTabConfig = [
+    { id: "dashboard", feature: null },
+    { id: "attendance", feature: "attendance" },
+    { id: "summary", feature: null },
+    { id: "analytics", label: "Class Analytics" },
+    { id: "marks-entry", label: "Add Marks" },
+    { id: "view-marks", label: "Results" },
+    { id: "homework", label: "Homework" },
+    { id: "announcements", label: "Admin Announcements" },
+    { id: "voice", label: "Teacher Voice Messages" },
+    { id: "events", label: "Events" },
+    { id: "timetable", label: "Timetable" },
+    { id: "subjects", label: "Subjects" },
+    { id: "exams", label: "Exams" },
+    { id: "exam-syllabus", label: "Exam Syllabus" },
+    { id: "exam-timetable", label: "Exam Timetable" },
     { id: "password-resets", label: "Password Resets" },
-  ];
+  ].find((item) => item.id === activeTab);
+
+  const isAnalyticsView = activeTab === "analytics";
+
+  if (isAnalyticsView) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] p-4 md:p-8 font-sans">
+        <div className="w-full">
+          <button
+            onClick={handleBackToDashboard}
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition"
+          >
+            <span aria-hidden="true">←</span>
+            Back to Dashboard
+          </button>
+          <div className="w-full min-h-[280px]">
+            <TeacherAnalyticsDashboard
+              refreshKey={marksRefreshTrigger}
+              onGoToStudents={() => navigate("/teacher/dashboard?section=summary")}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1817,6 +1877,7 @@ useEffect(() => {
             <button
               key={item.id}
               onClick={() => {
+                skipQuerySectionSyncRef.current = true;
                 setActiveTab(item.id);
                 setSidebarOpen(false);
                 if (item.id === "subjects") {
@@ -1833,6 +1894,11 @@ useEffect(() => {
                 }
                 if (item.id === "view-marks") {
                   navigate("/teacher/view-marks");
+                  return;
+                }
+                if (item.id === "dashboard") {
+                  navigate("/teacher/dashboard", { replace: true });
+                  setActiveTab("dashboard");
                   return;
                 }
                 navigate(`/teacher/dashboard?section=${item.id}`);
@@ -1874,16 +1940,27 @@ useEffect(() => {
           }`}
         >
           <div className="flex items-center min-w-0">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className={`lg:hidden mr-3 p-2 rounded-lg transition ${activeTab === "analytics" ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
-              title="Toggle sidebar"
-            >
-              <svg className={`w-6 h-6 ${activeTab === "analytics" ? "text-slate-100" : "text-slate-900"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
+            {activeTab !== "analytics" && (
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className={`lg:hidden mr-3 p-2 rounded-lg transition ${activeTab === "analytics" ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
+                title="Toggle sidebar"
+              >
+                <svg className={`w-6 h-6 ${activeTab === "analytics" ? "text-slate-100" : "text-slate-900"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
             <div className="flex-1 min-w-0">
+              {activeTab === "analytics" && (
+                <button
+                  onClick={handleBackToDashboard}
+                  className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white hover:underline transition"
+                >
+                  <span aria-hidden="true">←</span>
+                  Back to Dashboard
+                </button>
+              )}
               <h1 className={`text-xl md:text-3xl font-black break-words ${activeTab === "analytics" ? "text-slate-100" : "text-slate-900"}`}>
                 {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
               </h1>

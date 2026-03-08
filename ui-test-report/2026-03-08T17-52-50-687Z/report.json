@@ -1,0 +1,108 @@
+{
+  "generatedAt": "2026-03-08T17:52:50.691Z",
+  "baseUrl": "http://localhost:5174",
+  "config": {
+    "allowDangerousClicks": false,
+    "quickMode": true,
+    "noClickMode": false,
+    "portals": [
+      "admin",
+      "teacher",
+      "developer"
+    ]
+  },
+  "pagesTested": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5174/admin/dashboard"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5174/admin/dashboard?section=students"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "url": "http://localhost:5174/admin/dashboard?section=teachers"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "url": "http://localhost:5174/admin/dashboard?section=analytics"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/teacher/dashboard"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/teacher/dashboard?section=attendance"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/teacher/dashboard?section=homework"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5174/dev-console/dashboard"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5174/dev-console/errors"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5174/dev-console/users"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5174/dev-console/data-explorer"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5174/dev-console/system-controls"
+    }
+  ],
+  "pageScreenshots": [
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\admin-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\admin-Students.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\admin-Teachers.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\admin-Analytics.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\teacher-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\teacher-Attendance.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\teacher-Homework.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\developer-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\developer-Errors.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\developer-Users.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\developer-Data_Explorer.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-52-50-687Z\\screenshots\\developer-System_Controls.png"
+  ],
+  "consoleErrors": [],
+  "reactWarnings": [],
+  "networkErrors": [],
+  "failedApis": [],
+  "uiIssues": [],
+  "portalLoginFailures": []
+}

@@ -12,7 +12,6 @@ const getStatusTone = (pct) => {
 export default function TeacherExamsMarksV2({ token, className, section, students: studentsProp = [], mode = "all" }) {
   const toast = useToast();
   const [students, setStudents] = useState(Array.isArray(studentsProp) ? studentsProp : []);
-  const [subjectRecords, setSubjectRecords] = useState([]);
   const [subjectOptions, setSubjectOptions] = useState([]);
   const [subjectsLoading, setSubjectsLoading] = useState(false);
 
@@ -74,13 +73,11 @@ export default function TeacherExamsMarksV2({ token, className, section, student
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch subjects");
       const rows = Array.isArray(data) ? data : [];
-      setSubjectRecords(rows);
       const names = rows
         .map((s) => String(s?.name || s?.subjectName || "").trim())
         .filter(Boolean);
       setSubjectOptions(Array.from(new Set(names)));
     } catch (err) {
-      setSubjectRecords([]);
       setSubjectOptions([]);
       toast.error(err.message || "Failed to load subjects");
     } finally {

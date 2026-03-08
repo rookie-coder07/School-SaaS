@@ -1,12 +1,31 @@
 import { Suspense, useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DevProtectedRoute from "./components/DevProtectedRoute";
+import DeveloperRoute from "./components/DeveloperRoute";
 import { FullPageLoader } from "./components/ui/Loaders";
 import AdminLogin from "./pages/AdminLogin";
 import StudentLogin from "./pages/StudentLogin";
 import TeacherLogin from "./pages/TeacherLogin";
+import DevLogin from "./dev/DevLogin";
+import DevLayout from "./dev/DevLayout";
+import DevDashboardPage from "./dev/pages/DevDashboardPage";
+import DevSchoolsPage from "./dev/pages/DevSchoolsPage";
+import DevUsersPage from "./dev/pages/DevUsersPage";
+import DevVoiceMessagesPage from "./dev/pages/DevVoiceMessagesPage";
+import DevDataExplorerPage from "./dev/pages/DevDataExplorerPage";
+import DevSystemControlsPage from "./dev/pages/DevSystemControlsPage";
+import DevAuditLogsPage from "./dev/pages/DevAuditLogsPage";
+import DevSystemPage from "./dev/pages/DevSystemPage";
+import DevErrorsPage from "./dev/pages/DevErrorsPage";
+import DevLogsPage from "./dev/pages/DevLogsPage";
+import DevApiPage from "./dev/pages/DevApiPage";
+import DevActivityPage from "./dev/pages/DevActivityPage";
+import DevFeaturesPage from "./dev/pages/DevFeaturesPage";
+import DevTracesPage from "./dev/pages/DevTracesPage";
+import DevToolsPage from "./dev/pages/DevToolsPage";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 
 const Home = lazyWithRetry(() => import("./pages/Home"), "HomePage");
@@ -25,11 +44,6 @@ const StudentAnalyticsDashboard = lazyWithRetry(
   "StudentAnalyticsDashboardPage"
 );
 
-const DeveloperLogin = lazyWithRetry(() => import("./pages/DeveloperLogin"), "DeveloperLoginPage");
-const DeveloperDashboard = lazyWithRetry(() => import("./pages/DeveloperDashboard"), "DeveloperDashboardPage");
-const DevSchoolsList = lazyWithRetry(() => import("./pages/DevSchoolsList"), "DevSchoolsListPage");
-const DevSchoolDetails = lazyWithRetry(() => import("./pages/DevSchoolDetails"), "DevSchoolDetailsPage");
-
 const preloadLikelyRoutes = () => {
   import("./pages/AdminDashboard");
   import("./pages/TeacherDashboard");
@@ -47,6 +61,13 @@ const shouldSkipPreload = () => {
 };
 
 export default function App() {
+  const location = useLocation();
+  const hideNavbar =
+    location.pathname.startsWith("/admin/dashboard") ||
+    location.pathname.startsWith("/teacher/") && location.pathname !== "/teacher/login" ||
+    location.pathname.startsWith("/student/dashboard") ||
+    location.pathname.startsWith("/dev-console");
+
   useEffect(() => {
     if (shouldSkipPreload()) return undefined;
     const scheduler = window.requestIdleCallback || ((cb) => setTimeout(cb, 1200));
@@ -60,7 +81,7 @@ export default function App() {
 
   return (
     <>
-      <Navbar />
+      {!hideNavbar ? <Navbar /> : null}
 
       <Suspense fallback={<FullPageLoader />}>
         <Routes>
@@ -70,6 +91,17 @@ export default function App() {
           <Route path="/contact" element={<Contact />} />
 
           <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/login" element={<Navigate to="/dev-login" replace />} />
+          <Route
+            path="/dashboard"
+            element={(() => {
+              const role = String(localStorage.getItem("userRole") || "").toLowerCase();
+              if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
+              if (role === "teacher") return <Navigate to="/teacher/dashboard" replace />;
+              if (role === "developer") return <Navigate to="/dev-console/dashboard" replace />;
+              return <Navigate to="/student/dashboard" replace />;
+            })()}
+          />
           <Route
             path="/admin/dashboard"
             element={
@@ -156,31 +188,43 @@ export default function App() {
             }
           />
 
-          <Route path="/dev/login" element={<DeveloperLogin />} />
+          {/* ═══════════════════════════════════════════════════════════ */}
+          {/* 🔐 DEVELOPER PORTAL (ISOLATED IMPLEMENTATION) */}
+          {/* ═══════════════════════════════════════════════════════════ */}
+          <Route path="/dev-login" element={<DevLogin />} />
+          
+          {/* Developer Console with Nested Routes */}
           <Route
-            path="/dev"
+            path="/dev-console"
             element={
-              <ProtectedRoute role="developer">
-                <DeveloperDashboard />
-              </ProtectedRoute>
+              <DevProtectedRoute>
+                <DeveloperRoute>
+                  <DevLayout />
+                </DeveloperRoute>
+              </DevProtectedRoute>
             }
-          />
-          <Route
-            path="/dev/schools"
-            element={
-              <ProtectedRoute role="developer">
-                <DevSchoolsList />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dev/schools/:schoolId"
-            element={
-              <ProtectedRoute role="developer">
-                <DevSchoolDetails />
-              </ProtectedRoute>
-            }
-          />
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<DevDashboardPage />} />
+            <Route path="schools" element={<DevSchoolsPage />} />
+            <Route path="users" element={<DevUsersPage />} />
+            <Route path="voice-messages" element={<DevVoiceMessagesPage />} />
+            <Route path="data-explorer" element={<DevDataExplorerPage />} />
+            <Route path="system-controls" element={<DevSystemControlsPage />} />
+            <Route path="audit-logs" element={<DevAuditLogsPage />} />
+
+            {/* Legacy aliases kept for backward compatibility */}
+            <Route path="system" element={<DevSystemPage />} />
+            <Route path="errors" element={<DevErrorsPage />} />
+            <Route path="logs" element={<DevLogsPage />} />
+            <Route path="api-usage" element={<DevApiPage />} />
+            <Route path="live-activity" element={<DevActivityPage />} />
+            <Route path="api" element={<DevApiPage />} />
+            <Route path="activity" element={<DevActivityPage />} />
+            <Route path="features" element={<DevFeaturesPage />} />
+            <Route path="traces" element={<DevTracesPage />} />
+            <Route path="tools" element={<DevToolsPage />} />
+          </Route>
 
           <Route
             path="*"
@@ -195,7 +239,11 @@ export default function App() {
                 const role = localStorage.getItem("userRole") || "student";
                 return (
                   <Navigate
-                    to={`/${role === "admin" ? "admin" : role === "teacher" ? "teacher" : role === "developer" ? "dev" : "student"}/dashboard`}
+                    to={
+                      role === "admin" ? "/admin/dashboard" : 
+                      role === "teacher" ? "/teacher/dashboard" : 
+                      "/student/dashboard"
+                    }
                     replace
                   />
                 );

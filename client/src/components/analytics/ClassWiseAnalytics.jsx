@@ -4,6 +4,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
 import './glassmorphism.css';
 
+void motion;
+
 /**
  * ClassWiseAnalytics Component - OPTIMIZED
  * 

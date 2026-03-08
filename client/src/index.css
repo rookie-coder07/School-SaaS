@@ -39,4 +39,32 @@ body {
   .saas-section-title {
     @apply text-lg md:text-xl font-black text-slate-900 tracking-tight;
   }
+
+  /* Developer Console: global dropdown readability fix */
+  .dev-console-shell select {
+    background-color: #1f2937 !important;
+    color: #e5e7eb !important;
+    border-color: rgb(71 85 105 / 0.9) !important;
+    position: relative;
+    z-index: 30;
+  }
+
+  .dev-console-shell select:focus {
+    outline: none;
+    border-color: #22d3ee !important;
+    box-shadow: 0 0 0 1px rgb(34 211 238 / 0.45);
+  }
+
+  .dev-console-shell select option,
+  .dev-console-shell select optgroup {
+    background-color: #1f2937;
+    color: #e5e7eb;
+  }
+
+  .dev-console-shell select option:hover,
+  .dev-console-shell select option:focus,
+  .dev-console-shell select option:checked {
+    background-color: #374151;
+    color: #e5e7eb;
+  }
 }

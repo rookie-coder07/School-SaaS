@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -22,23 +22,12 @@ export default function NotificationDropdown({
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [lastRefresh, setLastRefresh] = useState(0);
   const [undoStack, setUndoStack] = useState([]);
   const [undoing, setUndoing] = useState(false);
   const navigate = useNavigate();
 
   // Fetch notifications when dropdown opens
-  useEffect(() => {
-    if (isOpen && token) {
-      fetchNotifications(1, true);
-      
-      // Auto-refresh every 10 seconds while dropdown is open
-      const interval = setInterval(() => fetchNotifications(1, true), 10000);
-      return () => clearInterval(interval);
-    }
-  }, [isOpen, token]);
-
-  const fetchNotifications = async (nextPage = 1, replace = false) => {
+  const fetchNotifications = useCallback(async (nextPage = 1, replace = false) => {
     try {
       if (replace) setLoading(true);
       else setLoadingMore(true);
@@ -56,7 +45,6 @@ export default function NotificationDropdown({
       setNotifications((prev) => (replace ? incoming : [...prev, ...incoming]));
       setPage(response.data.page || nextPage);
       setTotalPages(response.data.totalPages || 1);
-      setLastRefresh(Date.now());
       
       // Immediately notify parent about the unread count
       if (onNotificationsUpdated) {
@@ -69,7 +57,16 @@ export default function NotificationDropdown({
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [token, onNotificationsUpdated]);
+
+  useEffect(() => {
+    if (!isOpen || !token) return undefined;
+    fetchNotifications(1, true);
+
+    // Auto-refresh every 10 seconds while dropdown is open
+    const interval = setInterval(() => fetchNotifications(1, true), 10000);
+    return () => clearInterval(interval);
+  }, [isOpen, token, fetchNotifications]);
 
   const handleMarkAsRead = async (notificationId) => {
     try {

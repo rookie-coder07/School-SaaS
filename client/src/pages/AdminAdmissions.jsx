@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AdminSidebar from "../components/AdminSidebar";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -10,15 +10,7 @@ export default function AdminAdmissions() {
 
   const token = localStorage.getItem("adminToken");
 
-  useEffect(() => {
-    if (!token) {
-      window.location.href = "/admin-login";
-      return;
-    }
-    fetchAdmissions();
-  }, []);
-
-  function fetchAdmissions() {
+  const fetchAdmissions = useCallback(() => {
     fetch(`${API_URL}/api/admissions`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -30,7 +22,15 @@ export default function AdminAdmissions() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
+      window.location.href = "/admin-login";
+      return;
+    }
+    fetchAdmissions();
+  }, [fetchAdmissions, token]);
 
   async function deleteAdmission(id) {
     if (!window.confirm("Delete this admission?")) return;

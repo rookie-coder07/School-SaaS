@@ -1,8 +1,17 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import TeacherComparisonChartStatic from "./analytics/TeacherComparisonChart";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const PAGE_SIZE = 10;
 const ATTENTION_PAGE_SIZE = 4;
+const IS_DEV = Boolean(import.meta.env.DEV);
+const TeacherComparisonChart = IS_DEV
+  ? TeacherComparisonChartStatic
+  : lazy(() =>
+      import("./analytics/TeacherComparisonChart").catch(() => ({
+        default: TeacherComparisonChartStatic,
+      }))
+    );
 
 const GlassCard = memo(function GlassCard({ children, className = "" }) {
   return (
@@ -137,7 +146,8 @@ const AttentionCard = memo(function AttentionCard({ item }) {
   );
 });
 
-const AdminAnalyticsContent = memo(function AdminAnalyticsContent({ token, schoolId, teachers = [] }) {
+const AdminAnalyticsContent = memo(function AdminAnalyticsContent({ token, teachers = [] }) {
+  const [activeSection, setActiveSection] = useState("class");
   const [overview, setOverview] = useState({
     totalStudents: 0,
     totalTeachers: 0,
@@ -146,6 +156,9 @@ const AdminAnalyticsContent = memo(function AdminAnalyticsContent({ token, schoo
   });
   const [classes, setClasses] = useState([]);
   const [error, setError] = useState("");
+  const [teacherError, setTeacherError] = useState("");
+  const [teacherLoading, setTeacherLoading] = useState(false);
+  const [teacherAnalytics, setTeacherAnalytics] = useState(null);
   const [page, setPage] = useState(1);
   const [attentionPage, setAttentionPage] = useState(1);
   const [stages, setStages] = useState({
@@ -168,7 +181,7 @@ const AdminAnalyticsContent = memo(function AdminAnalyticsContent({ token, schoo
     clearStageTimers();
 
     const load = async () => {
-      if (!token || !schoolId) {
+      if (!token) {
         if (mounted) {
           setError("Missing admin session.");
           setStages({ overview: false, classes: false, attention: false });
@@ -249,7 +262,48 @@ const AdminAnalyticsContent = memo(function AdminAnalyticsContent({ token, schoo
       clearStageTimers();
       controller.abort();
     };
-  }, [token, schoolId, teacherMap, clearStageTimers]);
+  }, [token, teacherMap, clearStageTimers]);
+
+  useEffect(() => {
+    if (activeSection !== "teacher") return;
+    if (!token) {
+      setTeacherError("Missing admin session.");
+      setTeacherAnalytics(null);
+      setTeacherLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let mounted = true;
+
+    const loadTeacherAnalytics = async () => {
+      try {
+        setTeacherLoading(true);
+        setTeacherError("");
+        const res = await fetch(`${API_URL}/api/admin/analytics/teachers`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`Teacher analytics request failed (${res.status})`);
+        const payload = await res.json().catch(() => ({}));
+        if (!mounted || controller.signal.aborted) return;
+        setTeacherAnalytics(payload || {});
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        if (!mounted) return;
+        setTeacherError(err?.message || "Failed to load teacher analytics.");
+        setTeacherAnalytics(null);
+      } finally {
+        if (mounted) setTeacherLoading(false);
+      }
+    };
+
+    loadTeacherAnalytics();
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
+  }, [activeSection, token]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(classes.length / PAGE_SIZE)), [classes.length]);
 
@@ -302,6 +356,72 @@ const AdminAnalyticsContent = memo(function AdminAnalyticsContent({ token, schoo
     setAttentionPage((prev) => Math.min(prev, attentionTotalPages));
   }, [attentionTotalPages]);
 
+  const teacherRows = useMemo(
+    () => (Array.isArray(teacherAnalytics?.teachers) ? teacherAnalytics.teachers : []),
+    [teacherAnalytics]
+  );
+
+  const teacherOverview = useMemo(() => {
+    const fallback = {
+      totalTeachers: 0,
+      avgTeacherPerformance: 0,
+      avgClassAttendance: 0,
+      classesNeedingSupport: 0,
+    };
+    const src = teacherAnalytics?.overview || {};
+    return {
+      totalTeachers: toNum(src.totalTeachers ?? fallback.totalTeachers),
+      avgTeacherPerformance: clampPercent(src.avgTeacherPerformance ?? fallback.avgTeacherPerformance),
+      avgClassAttendance: clampPercent(src.avgClassAttendance ?? fallback.avgClassAttendance),
+      classesNeedingSupport: toNum(src.classesNeedingSupport ?? fallback.classesNeedingSupport),
+    };
+  }, [teacherAnalytics]);
+
+  const teacherPerformanceChartRows = useMemo(
+    () =>
+      teacherRows
+        .slice()
+        .sort((a, b) => toNum(b.performanceScore) - toNum(a.performanceScore))
+        .slice(0, 12)
+        .map((row) => ({
+          teacherName: row.teacherName,
+          teacherScore: clampPercent(row.performanceScore),
+          classAverageScore: clampPercent(row.classAverageScore),
+        })),
+    [teacherRows]
+  );
+
+  const teacherAttendanceRows = useMemo(
+    () =>
+      teacherRows
+        .slice()
+        .sort((a, b) => toNum(b.classAttendancePercent) - toNum(a.classAttendancePercent))
+        .slice(0, 12)
+        .map((row) => ({
+          teacherName: row.teacherName,
+          attendancePercent: clampPercent(row.classAttendancePercent),
+        })),
+    [teacherRows]
+  );
+
+  const teacherAttentionRows = useMemo(
+    () =>
+      teacherRows
+        .slice()
+        .sort((a, b) => toNum(b.studentsNeedingAttention) - toNum(a.studentsNeedingAttention))
+        .slice(0, 12),
+    [teacherRows]
+  );
+
+  const topTeacherRows = useMemo(
+    () =>
+      (Array.isArray(teacherAnalytics?.topTeachers) ? teacherAnalytics.topTeachers : teacherRows)
+        .slice()
+        .sort((a, b) => toNum(b.performanceScore) - toNum(a.performanceScore))
+        .slice(0, 5),
+    [teacherAnalytics, teacherRows]
+  );
+
   return (
     <div className="relative min-h-screen w-full bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] px-4 py-5 md:p-6 font-sans tracking-tight antialiased overflow-hidden">
       <div className="pointer-events-none absolute -top-20 -left-20 h-72 w-72 rounded-full bg-fuchsia-500/20 blur-3xl" />
@@ -314,6 +434,33 @@ const AdminAnalyticsContent = memo(function AdminAnalyticsContent({ token, schoo
           <p className="mt-2 text-base text-slate-300">Premium school performance overview with class-level insight cards.</p>
         </div>
 
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setActiveSection("class")}
+            className={`rounded-full border px-5 py-2 text-sm font-semibold transition ${
+              activeSection === "class"
+                ? "border-cyan-300/60 bg-cyan-500/25 text-cyan-100"
+                : "border-white/20 bg-slate-900/50 text-slate-200 hover:bg-slate-800/70"
+            }`}
+          >
+            Class Analytics
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSection("teacher")}
+            className={`rounded-full border px-5 py-2 text-sm font-semibold transition ${
+              activeSection === "teacher"
+                ? "border-cyan-300/60 bg-cyan-500/25 text-cyan-100"
+                : "border-white/20 bg-slate-900/50 text-slate-200 hover:bg-slate-800/70"
+            }`}
+          >
+            Teacher Analytics
+          </button>
+        </div>
+
+        {activeSection === "class" && (
+        <>
         {error ? (
           <GlassCard className="rounded-[24px] p-5 border-rose-300/40 bg-rose-500/15">
             <p className="text-base font-semibold text-rose-100">{error}</p>
@@ -457,6 +604,180 @@ const AdminAnalyticsContent = memo(function AdminAnalyticsContent({ token, schoo
             </div>
           )}
         </section>
+        </>
+        )}
+
+        {activeSection === "teacher" && (
+          <>
+            {teacherError ? (
+              <GlassCard className="rounded-[24px] p-5 border-rose-300/40 bg-rose-500/15">
+                <p className="text-base font-semibold text-rose-100">{teacherError}</p>
+              </GlassCard>
+            ) : null}
+
+            <section>
+              <div className="mb-5">
+                <h3 className="text-2xl font-bold text-white">Teacher Analytics</h3>
+                <p className="mt-1 text-base text-slate-300">Separate teacher performance and class health insights</p>
+              </div>
+              {teacherLoading ? (
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+                  <SkeletonCard />
+                  <SkeletonCard />
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+                  <OverviewCard icon="TCH" title="Total Teachers" value={teacherOverview.totalTeachers} subtitle="Active teaching staff" valueTone="text-cyan-200" />
+                  <OverviewCard icon="PRF" title="Avg Teacher Performance" value={`${teacherOverview.avgTeacherPerformance.toFixed(1)}%`} subtitle="Based on class average marks" valueTone="text-emerald-200" />
+                  <OverviewCard icon="ATT" title="Avg Class Attendance" value={`${teacherOverview.avgClassAttendance.toFixed(1)}%`} subtitle="Teacher-wise class attendance" valueTone="text-amber-200" />
+                  <OverviewCard icon="SUP" title="Classes Needing Support" value={teacherOverview.classesNeedingSupport} subtitle="Marks < 40 or attendance < 60" valueTone="text-rose-200" />
+                </div>
+              )}
+            </section>
+
+            <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <GlassCard className="rounded-[24px] p-5">
+                <h3 className="text-xl font-bold text-white">Teacher Performance Comparison</h3>
+                <p className="mt-1 text-sm text-slate-300">Teacher score vs class average score</p>
+                <div className="mt-4 flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 md:grid md:grid-cols-1 md:gap-3 md:overflow-visible md:pb-0 md:mx-0 md:px-0">
+                  {teacherPerformanceChartRows.length === 0 ? (
+                    <p className="text-sm text-slate-300">No teacher performance data available.</p>
+                  ) : (
+                    teacherPerformanceChartRows.map((row, idx) => (
+                      <div
+                        key={`${row.teacherName}-${idx}`}
+                        className={`min-w-[260px] md:min-w-0 rounded-xl border p-3 ${
+                          idx % 4 === 0
+                            ? "border-cyan-300/35 bg-gradient-to-br from-cyan-500/25 via-sky-500/15 to-slate-900/50"
+                            : idx % 4 === 1
+                            ? "border-violet-300/35 bg-gradient-to-br from-violet-500/25 via-fuchsia-500/15 to-slate-900/50"
+                            : idx % 4 === 2
+                            ? "border-emerald-300/35 bg-gradient-to-br from-emerald-500/25 via-teal-500/15 to-slate-900/50"
+                            : "border-amber-300/35 bg-gradient-to-br from-amber-500/25 via-orange-500/15 to-slate-900/50"
+                        }`}
+                      >
+                        <p className="truncate text-sm font-semibold text-slate-100">{row.teacherName}</p>
+                        <div className="mt-2 space-y-2">
+                          <div>
+                            <div className="mb-1 flex items-center justify-between text-[11px] text-slate-200">
+                              <span>Teacher Score</span>
+                              <span className="font-bold text-white">{clampPercent(row.teacherScore).toFixed(1)}%</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-slate-800/70">
+                              <div
+                                className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500"
+                                style={{ width: `${clampPercent(row.teacherScore)}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="mb-1 flex items-center justify-between text-[11px] text-slate-200">
+                              <span>Class Avg Score</span>
+                              <span className="font-bold text-white">{clampPercent(row.classAverageScore).toFixed(1)}%</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-slate-800/70">
+                              <div
+                                className="h-2 rounded-full bg-gradient-to-r from-violet-400 to-fuchsia-500"
+                                style={{ width: `${clampPercent(row.classAverageScore)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </GlassCard>
+
+              <GlassCard className="rounded-[24px] p-5">
+                <h3 className="text-xl font-bold text-white">Teacher Attendance</h3>
+                <p className="mt-1 text-sm text-slate-300">Teacher-wise class attendance percentage</p>
+                <div className="mt-4 flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 md:grid md:grid-cols-1 md:gap-3 md:overflow-visible md:pb-0 md:mx-0 md:px-0">
+                  {teacherAttendanceRows.length === 0 ? (
+                    <p className="text-sm text-slate-300">No teacher attendance data available.</p>
+                  ) : (
+                    teacherAttendanceRows.map((row, idx) => (
+                      <div
+                        key={`${row.teacherName}-${idx}`}
+                        className={`min-w-[260px] md:min-w-0 rounded-xl border p-3 ${
+                          idx % 3 === 0
+                            ? "border-emerald-300/35 bg-gradient-to-br from-emerald-500/25 via-lime-500/15 to-slate-900/50"
+                            : idx % 3 === 1
+                            ? "border-cyan-300/35 bg-gradient-to-br from-cyan-500/25 via-blue-500/15 to-slate-900/50"
+                            : "border-pink-300/35 bg-gradient-to-br from-pink-500/25 via-rose-500/15 to-slate-900/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="truncate text-sm font-semibold text-slate-100">{row.teacherName}</p>
+                          <span className="text-sm font-black text-emerald-100">{clampPercent(row.attendancePercent).toFixed(1)}%</span>
+                        </div>
+                        <div className="mt-2 h-2 rounded-full bg-slate-800/70">
+                          <div
+                            className="h-2 rounded-full bg-gradient-to-r from-emerald-400 to-teal-500"
+                            style={{ width: `${clampPercent(row.attendancePercent)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </GlassCard>
+            </section>
+
+            <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <GlassCard className="rounded-[24px] p-5">
+                <h3 className="text-xl font-bold text-white">Students Needing Attention</h3>
+                <p className="mt-1 text-sm text-slate-300">Students with marks &lt; 40 OR attendance &lt; 60</p>
+                <ul className="mt-4 space-y-2">
+                  {teacherAttentionRows.length === 0 ? (
+                    <li className="text-sm text-slate-300">No flagged students.</li>
+                  ) : (
+                    teacherAttentionRows.map((row, idx) => (
+                      <li key={`${row.teacherId || idx}`} className="flex items-center justify-between rounded-lg border border-white/15 bg-slate-900/45 px-3 py-2 text-sm">
+                        <span className="font-semibold text-slate-100">{row.teacherName}</span>
+                        <span className="font-black text-rose-200">{toNum(row.studentsNeedingAttention)}</span>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </GlassCard>
+
+              <GlassCard className="rounded-[24px] p-5">
+                <h3 className="text-xl font-bold text-white">Top Performing Teachers</h3>
+                <p className="mt-1 text-sm text-slate-300">Ranked by class marks + attendance</p>
+                <ul className="mt-4 space-y-2">
+                  {topTeacherRows.length === 0 ? (
+                    <li className="text-sm text-slate-300">No teacher data available.</li>
+                  ) : (
+                    topTeacherRows.map((row, idx) => (
+                      <li key={`${row.teacherId || idx}`} className="flex items-center justify-between rounded-lg border border-white/15 bg-slate-900/45 px-3 py-2 text-sm">
+                        <span className="flex items-center gap-2 font-semibold text-slate-100">
+                          <span
+                            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm ${
+                              idx === 0
+                                ? "border-amber-300/60 bg-amber-500/25 text-amber-100"
+                                : idx === 1
+                                ? "border-slate-300/60 bg-slate-400/25 text-slate-100"
+                                : idx === 2
+                                ? "border-orange-300/60 bg-orange-500/25 text-orange-100"
+                                : "border-cyan-300/50 bg-cyan-500/20 text-cyan-100"
+                            }`}
+                          >
+                            {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`}
+                          </span>
+                          <span className="truncate">{row.teacherName}</span>
+                        </span>
+                        <span className="font-black text-emerald-200">{clampPercent(row.performanceScore).toFixed(1)}%</span>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </GlassCard>
+            </section>
+          </>
+        )}
       </div>
     </div>
   );

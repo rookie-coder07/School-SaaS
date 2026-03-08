@@ -1,0 +1,1998 @@
+{
+  "generatedAt": "2026-03-08T17:14:22.069Z",
+  "baseUrl": "http://localhost:5174",
+  "config": {
+    "allowDangerousClicks": false,
+    "quickMode": true,
+    "noClickMode": false,
+    "portals": [
+      "admin",
+      "teacher",
+      "developer"
+    ]
+  },
+  "pagesTested": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5174/admin/dashboard"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5174/admin/dashboard?section=students"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "url": "http://localhost:5174/admin/dashboard?section=teachers"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "url": "http://localhost:5174/admin/dashboard?section=analytics"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/teacher/dashboard"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/teacher/dashboard?section=attendance"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/teacher/dashboard?section=homework"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5174/dev-console/dashboard"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5174/dev-console/errors"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5174/dev-console/users"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5174/dev-console/data-explorer"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5174/dev-console/system-controls"
+    }
+  ],
+  "pageScreenshots": [
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Students.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Teachers.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Analytics.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Attendance.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Homework.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Errors.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Users.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Data_Explorer.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-System_Controls.png"
+  ],
+  "consoleErrors": [],
+  "reactWarnings": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:14:23.391Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:14:23.413Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:19:28.246Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:19:28.261Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:24:32.969Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:24:32.985Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:29:37.709Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:29:37.725Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:29:43.358Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:29:43.373Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:33:47.906Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:33:47.922Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:33:52.500Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:33:52.514Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:33:58.018Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:33:58.033Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:34:01.161Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:34:01.175Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:34:04.423Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:34:04.435Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:34:08.088Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:34:08.102Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:34:11.895Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:34:11.909Z"
+    }
+  ],
+  "networkErrors": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5000/api/tracking/session-log",
+      "method": "POST",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:14:23.343Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5000/api/dashboard/summary",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:19:28.578Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5000/api/dashboard/summary",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:19:28.578Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5000/api/admin/meta/classes-sections",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:19:29.035Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5000/api/admin/meta/classes-sections",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:19:29.035Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5000/api/admin/students?page=1&limit=25",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:19:29.035Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5000/api/admin/students?page=1&limit=25",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:19:29.035Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5000/api/admin/users?type=teachers&page=1&limit=5000",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:19:29.035Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5000/api/admin/users?type=teachers&page=1&limit=5000",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:19:29.035Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "url": "http://localhost:5000/api/dashboard/summary",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:24:33.313Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "url": "http://localhost:5000/api/admin/meta/classes-sections",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:24:33.741Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5000/api/admin/students?page=1&limit=5000",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:24:33.741Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5000/api/admin/students?page=1&limit=5000",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:24:33.741Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "url": "http://localhost:5000/api/admin/students?page=1&limit=5000",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:24:33.741Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5000/api/admin/users?type=teachers&page=1&limit=25",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:24:33.741Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5000/api/admin/users?type=teachers&page=1&limit=25",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:24:33.741Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "url": "http://localhost:5000/api/admin/users?type=teachers&page=1&limit=25",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:24:33.741Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "url": "http://localhost:5000/api/dashboard/summary",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:29:38.054Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/tracking/session-log",
+      "method": "POST",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:29:43.333Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/attendance/summary?className=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:29:43.857Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/marks",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:29:44.864Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/attendance/summary?className=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:48.495Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/marks",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:49.618Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/class-analytics?exam=all&subject=all&timeRange=week",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:50.194Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/class-analytics?exam=all&subject=all&timeRange=week",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:50.194Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/subjects?class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:50.735Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/subjects?class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:50.735Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/exams?scope=marks&class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:50.735Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/exams?scope=marks&class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:50.735Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/uploads/voice/1772365880259-own7j0.webm",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.415Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/uploads/voice/1772365880259-own7j0.webm",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.415Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/analytics/MarksDistributionChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/analytics/MarksDistributionChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/analytics/MarksDistributionChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/student/StudentAnalyticsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/student/StudentAnalyticsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/student/StudentAnalyticsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/AttendanceCalendar.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/AttendanceCalendar.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/AttendanceCalendar.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/analytics/AttendanceTrendChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/analytics/AttendanceTrendChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/analytics/AttendanceTrendChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/analytics/SubjectPerformanceChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/analytics/SubjectPerformanceChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/analytics/SubjectPerformanceChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/AdminAnalyticsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/AdminAnalyticsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/AdminAnalyticsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/StudentExamSyllabus.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/StudentExamSyllabus.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/StudentExamSyllabus.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/StudentExams.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/StudentExams.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/StudentExams.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.476Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/UserTrackingDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/UserTrackingDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/UserTrackingDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/StudentMarksCards.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/StudentMarksCards.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/StudentMarksCards.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/AdminAuditLogsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/AdminAuditLogsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/AdminAuditLogsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/ConfirmationModal.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/ConfirmationModal.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/ConfirmationModal.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.477Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/attendance/summary?className=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:52.876Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/homework",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:53.843Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/homework",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:53.843Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/homework",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:53.843Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/marks",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:54.535Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/class-analytics?exam=all&subject=all&timeRange=week",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:55.090Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/subjects?class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:55.625Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/exams?scope=marks&class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:55.625Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:59.293Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:59.293Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:33:59.854Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:00.105Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:00.105Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:00.105Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/live-activity?limit=80",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:00.369Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/traces?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:00.628Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:00.880Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:01.135Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:01.135Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:01.136Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:01.136Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:02.306Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:04.062Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:05.915Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:05.915Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:05.915Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:05.915Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:05.915Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:05.915Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:05.915Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:05.915Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:05.915Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=200&role=ADMIN&schoolId=6995bf63d34e4a34f7a3ae7e",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:06.161Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=200&role=ADMIN&schoolId=6995bf63d34e4a34f7a3ae7e",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:06.161Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=200&role=ADMIN&schoolId=6995bf63d34e4a34f7a3ae7e",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:06.161Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.536Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.536Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.536Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.536Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.536Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.536Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.536Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.536Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/data/students?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.802Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/data/students?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.802Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/data/students?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.802Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/data/students?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:09.802Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/traces?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:11.357Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/traces?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:11.357Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/traces?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:11.357Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:11.638Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:11.638Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:12.987Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:12.987Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:12.987Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:12.987Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:12.987Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:12.987Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:12.987Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/live-activity?limit=80",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:14.196Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/live-activity?limit=80",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:14.196Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/live-activity?limit=80",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:14.196Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/live-activity?limit=80",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:34:14.196Z"
+    }
+  ],
+  "failedApis": [],
+  "uiIssues": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 16,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:14:24.007Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Dashboard-zero_size_ui_elements-1772990064007.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 3,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(3)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:15:24.710Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Dashboard-button_click_failed-1772990124710.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 4,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(4)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:16:25.371Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Dashboard-button_click_failed-1772990185371.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 5,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(5)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:17:26.001Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Dashboard-button_click_failed-1772990246001.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 6,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(6)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:18:26.653Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Dashboard-button_click_failed-1772990306653.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 7,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(7)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:19:27.275Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Dashboard-button_click_failed-1772990367275.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 16,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:19:28.828Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Students-zero_size_ui_elements-1772990368828.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 3,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(3)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:20:29.480Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Students-button_click_failed-1772990429480.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 4,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(4)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:21:30.110Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Students-button_click_failed-1772990490110.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 5,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(5)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:22:30.736Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Students-button_click_failed-1772990550736.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 6,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(6)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:23:31.367Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Students-button_click_failed-1772990611367.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 7,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(7)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:24:32.011Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Students-button_click_failed-1772990672011.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 16,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:24:33.534Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Teachers-zero_size_ui_elements-1772990673534.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 3,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(3)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:25:34.195Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Teachers-button_click_failed-1772990734195.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 4,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(4)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:26:34.839Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Teachers-button_click_failed-1772990794839.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 5,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(5)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:27:35.476Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Teachers-button_click_failed-1772990855476.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 6,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(6)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:28:36.123Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Teachers-button_click_failed-1772990916123.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 7,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(7)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:29:36.749Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\admin-Teachers-button_click_failed-1772990976749.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 18,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:29:43.959Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Dashboard-zero_size_ui_elements-1772990983959.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 4,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(4)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:30:44.962Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Dashboard-button_click_failed-1772991044962.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 5,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(5)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:31:45.646Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Dashboard-button_click_failed-1772991105646.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 6,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(6)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:32:46.292Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Dashboard-button_click_failed-1772991166292.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 7,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(7)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:33:46.939Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Dashboard-button_click_failed-1772991226939.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 18,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:33:48.501Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Attendance-zero_size_ui_elements-1772991228501.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 18,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:33:53.080Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\teacher-Homework-zero_size_ui_elements-1772991233080.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:33:58.639Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Dashboard-zero_size_ui_elements-1772991238639.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:34:00.955Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Dashboard-zero_size_ui_elements-1772991240955.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:34:01.732Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Errors-zero_size_ui_elements-1772991241732.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:34:04.128Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Errors-zero_size_ui_elements-1772991244128.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "type": "missing_data_table",
+      "details": {
+        "routePath": "/dev-console/errors"
+      },
+      "timestamp": "2026-03-08T17:34:04.282Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Errors-missing_data_table-1772991244282.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 32,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 33,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:34:05.043Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Users-zero_size_ui_elements-1772991245043.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:34:07.857Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Users-zero_size_ui_elements-1772991247857.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:34:08.699Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Data_Explorer-zero_size_ui_elements-1772991248699.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:34:11.712Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-Data_Explorer-zero_size_ui_elements-1772991251712.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:34:12.535Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-System_Controls-zero_size_ui_elements-1772991252535.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 14,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:34:14.782Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-14-22-065Z\\screenshots\\developer-System_Controls-zero_size_ui_elements-1772991254782.png"
+    }
+  ],
+  "portalLoginFailures": []
+}

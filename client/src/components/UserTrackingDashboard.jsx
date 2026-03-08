@@ -1,28 +1,18 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useToast } from "./ToastProvider";
 
-export default function UserTrackingDashboard({ token, schoolId }) {
+export default function UserTrackingDashboard({ token }) {
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const toast = useToast();
 
   const [concurrentUsers, setConcurrentUsers] = useState([]);
   const [dailyStats, setDailyStats] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0]
   );
   const [filterRole, setFilterRole] = useState("all");
 
-  // Fetch concurrent users and daily stats
-  useEffect(() => {
-    fetchTrackingData();
-    // Refresh every 30 seconds for real-time updates
-    const interval = setInterval(fetchTrackingData, 30000);
-    return () => clearInterval(interval);
-  }, [token, selectedDate, filterRole]);
-
-  const fetchTrackingData = async () => {
-    setLoading(true);
+  const fetchTrackingData = useCallback(async () => {
     try {
       const [concurrentRes, statsRes] = await Promise.all([
         fetch(`${API_URL}/api/tracking/concurrent-users`, {
@@ -62,10 +52,16 @@ export default function UserTrackingDashboard({ token, schoolId }) {
     } catch (err) {
       console.error('❌ Tracking Dashboard Error:', err);
       toast.error("Failed to load tracking data");
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [API_URL, filterRole, selectedDate, toast, token]);
+
+  // Fetch concurrent users and daily stats
+  useEffect(() => {
+    fetchTrackingData();
+    // Refresh every 30 seconds for real-time updates
+    const interval = setInterval(fetchTrackingData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchTrackingData]);
 
   const formatDuration = (seconds) => {
     if (seconds < 60) return `${seconds}s`;

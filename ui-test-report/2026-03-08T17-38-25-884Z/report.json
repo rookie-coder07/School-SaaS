@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-03-08T17:38:25.887Z",
+  "baseUrl": "http://localhost:5174",
+  "config": {
+    "allowDangerousClicks": false,
+    "quickMode": true,
+    "noClickMode": false,
+    "portals": [
+      "admin",
+      "teacher",
+      "developer"
+    ]
+  },
+  "pagesTested": [
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5174/dev-console/dashboard"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5174/dev-console/errors"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5174/dev-console/users"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5174/dev-console/data-explorer"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5174/dev-console/system-controls"
+    }
+  ],
+  "pageScreenshots": [
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-38-25-884Z\\screenshots\\developer-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-38-25-884Z\\screenshots\\developer-Errors.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-38-25-884Z\\screenshots\\developer-Users.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-38-25-884Z\\screenshots\\developer-Data_Explorer.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-38-25-884Z\\screenshots\\developer-System_Controls.png"
+  ],
+  "consoleErrors": [],
+  "reactWarnings": [],
+  "networkErrors": [],
+  "failedApis": [],
+  "uiIssues": [],
+  "portalLoginFailures": [
+    {
+      "portal": "admin",
+      "error": "page.waitForURL: Timeout 15000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+      "timestamp": "2026-03-08T17:38:41.665Z"
+    },
+    {
+      "portal": "teacher",
+      "error": "page.waitForURL: Timeout 15000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================",
+      "timestamp": "2026-03-08T17:38:57.372Z"
+    }
+  ]
+}

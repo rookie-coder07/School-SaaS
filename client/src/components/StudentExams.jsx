@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import DateFilterBar from "./DateFilterBar";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
 
@@ -10,11 +10,7 @@ export default function StudentExams({ token }) {
   const [error, setError] = useState("");
   const [dateFilter, setDateFilter] = useState({ from: "", to: "" });
 
-  useEffect(() => {
-    fetchExams();
-  }, [token, dateFilter.from, dateFilter.to]);
-
-  const fetchExams = async () => {
+  const fetchExams = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -33,7 +29,11 @@ export default function StudentExams({ token }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFilter, token]);
+
+  useEffect(() => {
+    fetchExams();
+  }, [fetchExams]);
 
   if (loading) {
     return <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-500">Loading exam timetable...</div>;

@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-03-08T17:45:22.145Z",
+  "baseUrl": "http://localhost:5174",
+  "config": {
+    "allowDangerousClicks": false,
+    "quickMode": true,
+    "noClickMode": false,
+    "portals": [
+      "admin"
+    ]
+  },
+  "pagesTested": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5174/admin/dashboard"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5174/admin/dashboard?section=students"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "url": "http://localhost:5174/admin/dashboard?section=teachers"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "url": "http://localhost:5174/admin/dashboard?section=analytics"
+    }
+  ],
+  "pageScreenshots": [
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-45-22-141Z\\screenshots\\admin-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-45-22-141Z\\screenshots\\admin-Students.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-45-22-141Z\\screenshots\\admin-Teachers.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T17-45-22-141Z\\screenshots\\admin-Analytics.png"
+  ],
+  "consoleErrors": [],
+  "reactWarnings": [],
+  "networkErrors": [],
+  "failedApis": [],
+  "uiIssues": [],
+  "portalLoginFailures": []
+}

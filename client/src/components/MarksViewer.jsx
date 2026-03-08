@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 
 export default function MarksViewer({ token, teacher }) {
@@ -14,11 +14,7 @@ export default function MarksViewer({ token, teacher }) {
   const [selectedMarks, setSelectedMarks] = useState({});
 
   // Fetch marks and students on mount
-  useEffect(() => {
-    fetchData();
-  }, [token]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [marksRes, studentsRes] = await Promise.all([
@@ -50,7 +46,11 @@ export default function MarksViewer({ token, teacher }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL, token, toast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const fetchMarks = async () => {
     setLoading(true);
@@ -373,7 +373,7 @@ export default function MarksViewer({ token, teacher }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {group.marks.map((mark, idx) => (
+                    {group.marks.map((mark) => (
                       <tr key={mark._id} className={`border-b border-slate-100 transition ${selectedMarks[mark._id] ? "bg-blue-50" : "hover:bg-slate-50"}`}>
                         <td className="px-6 py-4 text-sm font-semibold text-slate-900">
                           <label className="flex items-center gap-3 cursor-pointer">

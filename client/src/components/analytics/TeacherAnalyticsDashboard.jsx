@@ -26,6 +26,13 @@ const getInitials = (name) =>
     .toUpperCase();
 
 const cardClass = "rounded-2xl border border-white/15 bg-white/10 p-4 shadow-[0_15px_35px_rgba(2,6,23,0.35)] backdrop-blur-xl";
+const cardTint = {
+  cyan: "bg-gradient-to-br from-cyan-500/20 via-sky-500/10 to-slate-900/45 border-cyan-300/30",
+  violet: "bg-gradient-to-br from-violet-500/20 via-fuchsia-500/10 to-slate-900/45 border-violet-300/30",
+  emerald: "bg-gradient-to-br from-emerald-500/20 via-teal-500/10 to-slate-900/45 border-emerald-300/30",
+  rose: "bg-gradient-to-br from-rose-500/20 via-orange-500/10 to-slate-900/45 border-rose-300/30",
+  amber: "bg-gradient-to-br from-amber-500/20 via-yellow-500/10 to-slate-900/45 border-amber-300/30",
+};
 
 const MiniFallbackChart = ({ data = [], valueKey = "value", labelKey = "label", suffix = "" }) => (
   <div className="space-y-2">
@@ -266,13 +273,13 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
         {!loading && !error ? (
           <>
             <div className="grid grid-cols-2 gap-3">
-              <div className={cardClass}><p className="text-xs text-slate-300">Total Students</p><p className="mt-1 text-2xl font-black text-white">{data.overview.totalStudents}</p></div>
-              <div className={cardClass}><p className="text-xs text-slate-300">Average Class Score</p><p className="mt-1 text-2xl font-black text-violet-200">{data.overview.averageClassScore}%</p></div>
-              <div className={cardClass}><p className="text-xs text-slate-300">Attendance %</p><p className="mt-1 text-2xl font-black text-cyan-200">{data.overview.attendancePercent}%</p></div>
-              <div className={cardClass}><p className="text-xs text-slate-300">Students Needing Attention</p><p className="mt-1 text-2xl font-black text-rose-200">{data.overview.needsAttention}</p></div>
+              <div className={`${cardClass} ${cardTint.cyan}`}><p className="text-xs text-cyan-100/90">Total Students</p><p className="mt-1 text-2xl font-black text-white">{data.overview.totalStudents}</p></div>
+              <div className={`${cardClass} ${cardTint.violet}`}><p className="text-xs text-violet-100/90">Average Class Score</p><p className="mt-1 text-2xl font-black text-violet-100">{data.overview.averageClassScore}%</p></div>
+              <div className={`${cardClass} ${cardTint.emerald}`}><p className="text-xs text-emerald-100/90">Attendance %</p><p className="mt-1 text-2xl font-black text-emerald-100">{data.overview.attendancePercent}%</p></div>
+              <div className={`${cardClass} ${cardTint.rose}`}><p className="text-xs text-rose-100/90">Students Needing Attention</p><p className="mt-1 text-2xl font-black text-rose-100">{data.overview.needsAttention}</p></div>
             </div>
 
-            <div className={cardClass}>
+            <div className={`${cardClass} ${cardTint.cyan}`}>
               <h3 className="mb-3 text-sm font-bold text-blue-100">Attendance Trend</h3>
               <p className="mb-3 text-xs text-slate-300">Last 7 Days Attendance %</p>
               <DeferredRender>
@@ -283,7 +290,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className={cardClass}>
+              <div className={`${cardClass} ${cardTint.violet}`}>
                 <h3 className="mb-3 text-sm font-bold text-violet-100">Marks Distribution</h3>
                 <p className="mb-3 text-xs text-slate-300">Students per marks range</p>
                 <DeferredRender>
@@ -293,7 +300,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
                 </DeferredRender>
               </div>
 
-              <div className={cardClass}>
+              <div className={`${cardClass} ${cardTint.emerald}`}>
                 <h3 className="mb-3 text-sm font-bold text-emerald-100">Subject Performance</h3>
                 <p className="mb-3 text-xs text-slate-300">Average score per subject</p>
                 <DeferredRender>
@@ -305,7 +312,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className={cardClass}>
+              <div className={`${cardClass} ${cardTint.rose}`}>
                 <h3 className="mb-3 text-sm font-bold text-rose-100">Students Needing Attention</h3>
                 <ul className="space-y-2">
                   {data.weakStudents.length === 0 ? (
@@ -328,7 +335,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
                 </ul>
               </div>
 
-              <div className={cardClass}>
+              <div className={`${cardClass} ${cardTint.emerald}`}>
                 <h3 className="mb-3 text-sm font-bold text-emerald-100">Top Performers</h3>
                 <ul className="space-y-2">
                   {data.topStudents.length === 0 ? (
@@ -353,7 +360,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className={cardClass}>
+              <div className={`${cardClass} ${cardTint.cyan}`}>
                 <h3 className="mb-3 text-sm font-bold text-cyan-100">Quick Insights</h3>
                 <ul className="space-y-2 text-sm text-slate-100">
                   {data.quickInsights.length === 0 ? (
@@ -366,7 +373,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
                 </ul>
               </div>
 
-              <div className={cardClass}>
+              <div className={`${cardClass} ${cardTint.amber}`}>
                 <h3 className="mb-3 text-sm font-bold text-amber-100">Class Health Meter</h3>
                 <p className="text-xs text-slate-300">Class Health: {data.classHealth.score}%</p>
                 <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-800/70">
@@ -377,7 +384,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className={cardClass}>
+              <div className={`${cardClass} ${cardTint.rose}`}>
                 <h3 className="mb-2 text-sm font-bold text-rose-100">Weakest Subject Detector</h3>
                 {weakestSubject ? (
                   <>
@@ -390,7 +397,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
                 )}
               </div>
 
-              <div className={cardClass}>
+              <div className={`${cardClass} ${cardTint.emerald}`}>
                 <h3 className="mb-2 text-sm font-bold text-emerald-100">Strongest Subject Detector</h3>
                 {strongestSubject ? (
                   <>
@@ -403,7 +410,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
                 )}
               </div>
 
-              <div className={cardClass}>
+              <div className={`${cardClass} ${cardTint.amber}`}>
                 <h3 className="mb-2 text-sm font-bold text-amber-100">Attendance Risk Predictor</h3>
                 {attendanceRiskStudents.length === 0 ? (
                   <p className="text-xs text-slate-300">No immediate attendance risk detected.</p>

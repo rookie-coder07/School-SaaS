@@ -1,8 +1,10 @@
-﻿import express from "express";
+import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import morgan from "morgan";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import multer from "multer";
@@ -14,15 +16,59 @@ import MockDatabase from "./mockDb.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { exec } from "child_process";
 import { createQaObservabilityMiddleware } from "./middleware/qaObservability.js";
+import devIpGuard from "./middleware/devIpGuard.js";
+import createMaintenanceGuard from "./middleware/maintenanceGuard.js";
+import createUploadGuard from "./middleware/uploadGuard.js";
+import { createAuditLogger } from "./services/auditLogService.js";
+import { createCacheService } from "./services/cacheService.js";
+import { DEVELOPER_ACTION_LOG_INDEXES } from "./models/DeveloperActionLog.js";
+import { startBackupScheduler } from "./jobs/backupScheduler.js";
+import { initAuditLogger } from "./utils/auditLogger.js";
+import { asyncHandler } from "./utils/asyncHandler.js";
+import { validateRequest } from "./middleware/validators/validateRequest.js";
+import { createStudentValidator } from "./middleware/validators/studentValidator.js";
+import { createTeacherValidator } from "./middleware/validators/teacherValidator.js";
+import { createSubjectValidator } from "./middleware/validators/subjectValidator.js";
+import { saveAttendanceValidator } from "./middleware/validators/attendanceValidator.js";
+import { saveMarksValidator } from "./middleware/validators/marksValidator.js";
+import { loginValidator } from "./middleware/validators/authValidator.js";
+import { announcementValidator, homeworkValidator } from "./middleware/validators/contentValidator.js";
+import {
+  developerLoginValidator,
+  studentPasswordResetRequestValidator,
+  teacherForgotPasswordValidator,
+  adminResetPasswordValidator,
+} from "./middleware/validators/accountValidator.js";
+import devRoutes from "./routes/devRoutes.js";
+import admissionRoutes from "./routes/admissionRoutes.js";
 
 // Load environment variables from .env file in server directory
 // We'll load the .env after __dirname is defined below
 
 const app = express();
 
+const wrapRouteHandler = (handler) => {
+  if (typeof handler !== "function") return handler;
+  if (handler.length >= 4) return handler; // keep error middlewares untouched
+  return asyncHandler(handler);
+};
+
+const patchExpressMethod = (target, methodName) => {
+  const original = target[methodName].bind(target);
+  target[methodName] = (pathOrPattern, ...handlers) => {
+    const wrapped = handlers.flat().map(wrapRouteHandler);
+    return original(pathOrPattern, ...wrapped);
+  };
+};
+
+["get", "post", "put", "patch", "delete", "options", "head", "all"].forEach((methodName) => {
+  patchExpressMethod(app, methodName);
+});
+
 // Enable CORS with explicit options (Development + Production)
-// 🔒 Development Origins:
+// ?? Development Origins:
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -32,11 +78,11 @@ const allowedOrigins = [
   "http://127.0.0.1:5175",
 ];
 
-// 🚀 Production Netlify Domain Support
+// ?? Production Netlify Domain Support
 // Add explicit Netlify domain if set in env
 if (process.env.NETLIFY_DOMAIN) {
   allowedOrigins.push(`https://${process.env.NETLIFY_DOMAIN}`);
-  console.log(`✅ CORS enabled for: https://${process.env.NETLIFY_DOMAIN}`);
+  console.log(`? CORS enabled for: https://${process.env.NETLIFY_DOMAIN}`);
 }
 
 app.use(cors({
@@ -44,11 +90,11 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // ✅ Allow if origin is in list OR ends with .netlify.app OR .vercel.app (catches all deployment domains)
+    // ? Allow if origin is in list OR ends with .netlify.app OR .vercel.app (catches all deployment domains)
     if (allowedOrigins.includes(origin) || origin.endsWith('.netlify.app') || origin.endsWith('.vercel.app')) {
       callback(null, true);
     } else {
-      console.warn(`❌ CORS REJECTED: ${origin}`);
+      console.warn(`? CORS REJECTED: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -57,19 +103,303 @@ app.use(cors({
   credentials: true,
 }));
 
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'"],
+        "style-src": ["'self'", "'unsafe-inline'", "https:"],
+        "img-src": ["'self'", "data:", "blob:", "https:"],
+        "connect-src": ["'self'", "https:", "http:", "ws:", "wss:"],
+        "media-src": ["'self'", "data:", "blob:"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+app.use(morgan("combined"));
 app.use(compression());
 app.use(express.json());
 app.use(createQaObservabilityMiddleware());
 
+const requestMetrics = {
+  dayKey: new Date().toISOString().slice(0, 10),
+  count: 0,
+};
+
+const MAX_TELEMETRY_ERRORS = 5000;
+const apiTelemetry = {
+  dayKey: new Date().toISOString().slice(0, 10),
+  endpointStats: new Map(),
+  requestTimelineByHour: new Map(),
+  errors: [],
+};
+
+const ensureTelemetryDay = () => {
+  const dayKey = new Date().toISOString().slice(0, 10);
+  if (apiTelemetry.dayKey !== dayKey) {
+    apiTelemetry.dayKey = dayKey;
+    apiTelemetry.endpointStats = new Map();
+    apiTelemetry.requestTimelineByHour = new Map();
+  }
+  return apiTelemetry.dayKey;
+};
+
+const normalizeMetricPath = (value = "") =>
+  String(value || "/")
+    .replace(/[0-9a-fA-F]{24}/g, ":id")
+    .replace(/[0-9]+/g, ":id")
+    .replace(/[?].*$/, "");
+
+const appendTelemetryError = ({
+  route = "SYSTEM",
+  message = "Unknown error",
+  userRole = "system",
+  school = null,
+  userId = null,
+  statusCode = 500,
+}) => {
+  apiTelemetry.errors.push({
+    timestamp: new Date().toISOString(),
+    route,
+    message: String(message || "Unknown error"),
+    userRole: userRole || "unknown",
+    school: school ? String(school) : null,
+    statusCode: Number(statusCode) || 500,
+  });
+  if (Number(statusCode) >= 500) {
+    queueBugReport({
+      type: "api_error",
+      route,
+      message,
+      statusCode,
+      role: userRole,
+      schoolId: school,
+      userId,
+    });
+  }
+  if (db) {
+    Promise.resolve(
+      db.collection("activityLogs").insertOne({
+        action: "error",
+        userId: userId ? String(userId) : null,
+        role: userRole || "unknown",
+        schoolId: school ? String(school) : null,
+        metadata: {
+          route,
+          message,
+          statusCode: Number(statusCode) || 500,
+        },
+        createdAt: new Date(),
+      })
+    ).catch(() => {});
+  }
+  if (apiTelemetry.errors.length > MAX_TELEMETRY_ERRORS) {
+    apiTelemetry.errors.splice(0, apiTelemetry.errors.length - MAX_TELEMETRY_ERRORS);
+  }
+};
+
+const isSameDayIso = (iso, dayKey) => String(iso || "").slice(0, 10) === dayKey;
+
+const FEATURE_FLAGS_TTL_MS = 30 * 1000;
+const featureFlagsCache = {
+  value: {
+    voiceCalls: true,
+    analytics: true,
+    homework: true,
+    notifications: true,
+  },
+  expiresAt: 0,
+};
+
+const normalizeFeatureFlags = (value = {}) => ({
+  voiceCalls: value?.voiceCalls !== false,
+  analytics: value?.analytics !== false,
+  homework: value?.homework !== false,
+  notifications: value?.notifications !== false,
+});
+
+const readFeatureFlags = async () => {
+  if (!db) return { ...featureFlagsCache.value };
+  if (Date.now() < featureFlagsCache.expiresAt) return { ...featureFlagsCache.value };
+  try {
+    const docs = await db.collection("featureFlags").find({}).toArray();
+    if (docs.length > 0) {
+      const flags = docs.reduce((acc, doc) => {
+        const key = String(doc?.name || "").trim();
+        if (!key) return acc;
+        acc[key] = doc?.enabled !== false;
+        return acc;
+      }, {});
+      featureFlagsCache.value = normalizeFeatureFlags(flags);
+    }
+  } catch {
+    // Fail-open for availability.
+  }
+  featureFlagsCache.expiresAt = Date.now() + FEATURE_FLAGS_TTL_MS;
+  return { ...featureFlagsCache.value };
+};
+
+const queueBugReport = (payload = {}) => {
+  if (!db) return;
+  Promise.resolve()
+    .then(() =>
+      db.collection("bugReports").insertOne({
+        type: String(payload?.type || "runtime"),
+        route: String(payload?.route || "unknown"),
+        message: String(payload?.message || "Unknown error"),
+        statusCode: Number(payload?.statusCode) || 500,
+        userId: payload?.userId ? String(payload.userId) : null,
+        role: payload?.role ? String(payload.role) : "system",
+        schoolId: payload?.schoolId ? String(payload.schoolId) : null,
+        metadata: payload?.metadata && typeof payload.metadata === "object" ? payload.metadata : {},
+        createdAt: new Date(),
+      })
+    )
+    .catch(() => {
+      // Keep bug reporting non-fatal.
+    });
+};
+
+const getRequestCountToday = () => {
+  const currentDayKey = new Date().toISOString().slice(0, 10);
+  if (requestMetrics.dayKey !== currentDayKey) {
+    requestMetrics.dayKey = currentDayKey;
+    requestMetrics.count = 0;
+  }
+  return requestMetrics.count;
+};
+
+app.use((req, _res, next) => {
+  const currentDayKey = new Date().toISOString().slice(0, 10);
+  if (requestMetrics.dayKey !== currentDayKey) {
+    requestMetrics.dayKey = currentDayKey;
+    requestMetrics.count = 0;
+  }
+  requestMetrics.count += 1;
+  next();
+});
+
 app.use((req, res, next) => {
   const startedAt = Date.now();
+  const dayKey = ensureTelemetryDay();
+  const hourKey = new Date().toISOString().slice(0, 13);
+  const endpoint = `${req.method} ${normalizeMetricPath(req.path || req.originalUrl || "/")}`;
+  let responseMessage = "";
+
+  const originalJson = res.json.bind(res);
+  res.json = (payload) => {
+    if (payload && typeof payload === "object") {
+      responseMessage = payload?.error || payload?.message || payload?.details || "";
+    }
+    return originalJson(payload);
+  };
+
   res.on("finish", () => {
     const durationMs = Date.now() - startedAt;
+    const stat = apiTelemetry.endpointStats.get(endpoint) || {
+      endpoint,
+      count: 0,
+      totalMs: 0,
+      maxMs: 0,
+      errorCount: 0,
+      slowCount: 0,
+    };
+    stat.count += 1;
+    stat.totalMs += durationMs;
+    stat.maxMs = Math.max(stat.maxMs, durationMs);
+    if (durationMs > 1000) stat.slowCount += 1;
+    if (res.statusCode >= 400) stat.errorCount += 1;
+    apiTelemetry.endpointStats.set(endpoint, stat);
+    apiTelemetry.requestTimelineByHour.set(hourKey, (apiTelemetry.requestTimelineByHour.get(hourKey) || 0) + 1);
+
+    if (res.statusCode >= 400) {
+      appendTelemetryError({
+        route: endpoint,
+        message: responseMessage || `HTTP ${res.statusCode}`,
+        userRole: req.user?.role || "guest",
+        school: req.user?.schoolId || null,
+        userId: req.user?.userId || null,
+        statusCode: res.statusCode,
+      });
+    }
+
+    if (db && String(req.path || "").startsWith("/api/")) {
+      const traceDoc = {
+        route: normalizeMetricPath(req.path || req.originalUrl || "/"),
+        method: req.method,
+        responseTime: durationMs,
+        statusCode: res.statusCode,
+        userId: req.user?.userId ? String(req.user.userId) : null,
+        schoolId: req.user?.schoolId ? String(req.user.schoolId) : null,
+        createdAt: new Date(),
+      };
+      Promise.resolve(db.collection("requestTraces").insertOne(traceDoc)).catch(() => {});
+
+      if (res.statusCode < 400) {
+        const route = traceDoc.route;
+        const activityAction =
+          route.includes("/auth/") && route.includes("login")
+            ? "user_login"
+            : route.includes("/announcements")
+              ? "announcement_created"
+              : route.includes("/marks")
+                ? "marks_updated"
+                : route.includes("/homework")
+                  ? "homework_added"
+                  : null;
+        if (activityAction) {
+          const activityLog = {
+            action: activityAction,
+            userId: traceDoc.userId,
+            role: req.user?.role || "guest",
+            schoolId: traceDoc.schoolId,
+            metadata: {
+              method: req.method,
+              route,
+              statusCode: res.statusCode,
+            },
+            createdAt: new Date(),
+          };
+          Promise.resolve(db.collection("activityLogs").insertOne(activityLog)).catch(() => {});
+        }
+      }
+    }
+
     if (durationMs > 500) {
       console.warn(`SLOW_API ${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs}ms`);
     }
   });
   next();
+});
+
+app.use(async (req, res, next) => {
+  try {
+    if (!String(req.path || "").startsWith("/api/")) return next();
+    if (String(req.path || "").startsWith("/api/dev/")) return next();
+
+    const flags = await readFeatureFlags();
+    const pathValue = String(req.path || "").toLowerCase();
+    const checks = [
+      { key: "voiceCalls", match: ["/voice-", "/voice/"] },
+      { key: "analytics", match: ["/analytics"] },
+      { key: "homework", match: ["/homework"] },
+      { key: "notifications", match: ["/notification", "/announcements"] },
+    ];
+    for (const item of checks) {
+      if (item.match.some((part) => pathValue.includes(part)) && flags[item.key] === false) {
+        return res.status(503).json({
+          success: false,
+          message: `${item.key} is disabled by feature flags`,
+        });
+      }
+    }
+    return next();
+  } catch {
+    return next();
+  }
 });
 
 // Define __dirname for ES modules
@@ -81,31 +411,127 @@ const envPath = path.join(__dirname, ".env");
 dotenv.config({ path: envPath });
 
 // Log environment loading
-console.log(`📁 Loading .env from: ${envPath}`);
-console.log(`✅ JWT_SECRET loaded: ${process.env.JWT_SECRET ? "YES" : "NO"}`);
-console.log(`✅ MONGO_URI loaded: ${process.env.MONGO_URI ? "YES (first 50 chars): " + process.env.MONGO_URI.substring(0, 50) : "NO"}`);
+console.log(`?? Loading .env from: ${envPath}`);
+console.log(`? JWT_SECRET loaded: ${process.env.JWT_SECRET ? "YES" : "NO"}`);
+console.log(`? MONGO_URI loaded: ${process.env.MONGO_URI ? "YES" : "NO"}`);
+
+const crashLogsDir = path.join(__dirname, "logs");
+const crashLogPath = path.join(crashLogsDir, "crash.log");
+
+const safeStderrLog = (...parts) => {
+  try {
+    const line = parts
+      .map((part) => {
+        if (part instanceof Error) return part.stack || part.message;
+        if (typeof part === "string") return part;
+        try {
+          return JSON.stringify(part);
+        } catch {
+          return String(part);
+        }
+      })
+      .join(" ");
+    process.stderr.write(`${line}\n`);
+  } catch {
+    // Ignore broken stderr pipes under load/test harnesses.
+  }
+};
+
+const appendCrashLog = (type, value) => {
+  try {
+    if (!fs.existsSync(crashLogsDir)) {
+      fs.mkdirSync(crashLogsDir, { recursive: true });
+    }
+    const now = new Date().toISOString();
+    const details = value instanceof Error
+      ? `${value.message}\n${value.stack || ""}`
+      : typeof value === "string"
+        ? value
+        : JSON.stringify(value, null, 2);
+    fs.appendFileSync(crashLogPath, `[${now}] ${type}\n${details}\n\n`, "utf8");
+  } catch {
+    // Keep crash path non-fatal even if file I/O fails.
+  }
+};
+
+if (process.stdout?.on) {
+  process.stdout.on("error", () => {
+    // Ignore stdout pipe errors (EPIPE) to avoid recursive crash loops.
+  });
+}
+if (process.stderr?.on) {
+  process.stderr.on("error", () => {
+    // Ignore stderr pipe errors (EPIPE) to avoid recursive crash loops.
+  });
+}
+
+process.on("uncaughtException", (err) => {
+  safeStderrLog("[CRASH] Uncaught Exception:", err);
+  appendCrashLog("Uncaught Exception", err);
+  appendTelemetryError({
+    route: "SYSTEM Uncaught Exception",
+    message: err?.message || String(err),
+    userRole: "system",
+    statusCode: 500,
+  });
+  queueBugReport({
+    type: "uncaught_exception",
+    route: "SYSTEM",
+    message: err?.message || String(err),
+    statusCode: 500,
+    role: "system",
+    metadata: { stack: err?.stack || null },
+  });
+});
 
 process.on("unhandledRejection", (reason) => {
-  console.error("UNHANDLED_REJECTION:", reason);
+  safeStderrLog("[CRASH] Unhandled Promise Rejection:", reason);
+  appendCrashLog("Unhandled Promise Rejection", reason);
+  appendTelemetryError({
+    route: "SYSTEM Unhandled Rejection",
+    message: reason instanceof Error ? reason.message : String(reason),
+    userRole: "system",
+    statusCode: 500,
+  });
+  queueBugReport({
+    type: "unhandled_rejection",
+    route: "SYSTEM",
+    message: reason instanceof Error ? reason.message : String(reason),
+    statusCode: 500,
+    role: "system",
+    metadata: { reason: reason instanceof Error ? reason.stack || reason.message : String(reason) },
+  });
 });
 
-process.on("uncaughtException", (error) => {
-  console.error("UNCAUGHT_EXCEPTION:", error);
-});
-
-// 🎙️ Serve uploaded files (voice recordings, documents, etc)
+// ??? Serve uploaded files (voice recordings, documents, etc)
 // This makes /uploads/{filename} accessible publicly
 const uploadsPath = path.join(__dirname, "uploads");
 app.use("/uploads", express.static(uploadsPath));
-console.log(`✅ Static file serving enabled at /uploads (${uploadsPath})`);
+console.log(`? Static file serving enabled at /uploads (${uploadsPath})`);
 
-// 🔧 Serve built React frontend from /client/dist
+// ?? Serve built React frontend from /client/dist
 // This allows the backend to serve the production build
 const frontendBuildPath = path.join(__dirname, "../client/dist");
+const frontendIndexPath = path.join(frontendBuildPath, "index.html");
 
-// Serve static assets (CSS, JS, images)
-app.use(express.static(frontendBuildPath));
-console.log(`✅ Frontend static files enabled at ${frontendBuildPath}`);
+// Serve static assets (CSS, JS, images) with no-store cache policy
+// so browsers don't hold stale hashed bundles across rebuilds.
+app.use(
+  express.static(frontendBuildPath, {
+    etag: false,
+    maxAge: 0,
+    setHeaders: (res) => {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.setHeader("Surrogate-Control", "no-store");
+    },
+  })
+);
+console.log(`? Frontend static files enabled at ${frontendBuildPath}`);
+if (!fs.existsSync(frontendIndexPath)) {
+  console.warn("?? Frontend build missing. Run: cd client && npm run build");
+}
 
 const safeObjectId = (id) => {
   try {
@@ -125,8 +551,49 @@ const activeTeacherFilter = (base = {}) => ({
   isDeleted: { $ne: true },
 });
 
+const buildSchoolScopeOr = (schoolIdValue) => {
+  const candidates = [];
+  const schoolObjectId = safeObjectId(schoolIdValue);
+  const schoolString = String(schoolIdValue || "").trim();
+  if (schoolObjectId) candidates.push(schoolObjectId);
+  if (schoolString) candidates.push(schoolString);
+  return [
+    { schoolId: { $in: candidates } },
+    { school: { $in: candidates } },
+    { school_id: { $in: candidates } },
+  ];
+};
+
 const parseObjectIds = (ids = []) =>
   (Array.isArray(ids) ? ids : []).map((id) => safeObjectId(id)).filter(Boolean);
+
+const STUDENT_ROLE_SCOPE_OR = [
+  { role: /^\s*students?\s*$/i },
+  { userType: /^\s*students?\s*$/i },
+  { type: /^\s*students?\s*$/i },
+];
+
+const TEACHER_ROLE_SCOPE_OR = [
+  { role: /^\s*teachers?\s*$/i },
+  { userType: /^\s*teachers?\s*$/i },
+  { type: /^\s*teachers?\s*$/i },
+];
+
+const CACHE_TTL_MS = 30 * 1000;
+const cacheService = createCacheService({ ttlMs: CACHE_TTL_MS });
+const platformControlState = {
+  maintenanceMode: false,
+  uploadsDisabled: false,
+  forceLogoutIssuedAfter: 0, // epoch seconds
+  updatedAt: null,
+};
+const maintenanceGuard = createMaintenanceGuard({ controlState: platformControlState });
+const uploadGuard = createUploadGuard({ controlState: platformControlState });
+
+const getCache = (key) => cacheService.get(key);
+const setCache = (key, value, ttlMs = CACHE_TTL_MS) => cacheService.set(key, value, ttlMs);
+const clearInMemoryCache = () => cacheService.clear();
+const buildCacheKey = (prefix, schoolId, query = {}) => cacheService.buildKey(prefix, schoolId, query);
 
 const parseStudentObjectIds = (studentIds = []) => parseObjectIds(studentIds);
 const parseTeacherObjectIds = (teacherIds = []) => parseObjectIds(teacherIds);
@@ -172,6 +639,17 @@ const authLoginRateLimit = rateLimit({
   message: { error: "Too many login attempts. Please try again later." },
 });
 
+const loginLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many login attempts. Try again later.",
+  },
+});
+
 const forgotPasswordRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -182,6 +660,7 @@ const forgotPasswordRateLimit = rateLimit({
 
 app.use("/api/debug", publicRateLimit);
 app.use("/dev", publicRateLimit);
+app.use("/api", maintenanceGuard, uploadGuard);
 
 const writeAuditLog = async ({ action, actorId = null, actorRole = null, schoolId = null, targetId = null, metadata = {} } = {}) => {
   try {
@@ -199,7 +678,7 @@ const writeAuditLog = async ({ action, actorId = null, actorRole = null, schoolI
       createdAt: new Date(),
     });
   } catch (err) {
-    console.warn("⚠️ AUDIT LOG WRITE FAILED:", err.message);
+    console.warn("?? AUDIT LOG WRITE FAILED:", err.message);
   }
 };
 
@@ -217,6 +696,37 @@ const getPagination = (query = {}, defaults = {}) => {
   const limit = Math.min(100, Math.max(1, Number.parseInt(query.limit, 10) || defaults.limit || 20));
   const skip = (page - 1) * limit;
   return { page, limit, skip };
+};
+
+const normalizeSchoolName = (value = "") =>
+  String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
+
+const schoolNameKey = (value = "") => normalizeSchoolName(value).toLowerCase();
+
+const normalizeSchoolStatus = (value = "") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "disabled" ? "disabled" : "active";
+};
+
+const isSchoolActive = (schoolDoc = {}) => {
+  if (!schoolDoc || typeof schoolDoc !== "object") return false;
+  const status = normalizeSchoolStatus(schoolDoc.status);
+  if (status) return status === "active";
+  return schoolDoc.isEnabled !== false;
+};
+
+const createSchoolDocument = ({ name, address = "" } = {}) => {
+  const normalizedName = normalizeSchoolName(name);
+  return {
+    name: normalizedName,
+    nameKey: schoolNameKey(normalizedName),
+    address: String(address || "").trim(),
+    status: "active",
+    isEnabled: true, // legacy compatibility for existing UI
+    createdAt: new Date(),
+  };
 };
 
 const normalizeSubjectName = (value) =>
@@ -293,6 +803,26 @@ const parseCsvTextRows = (text = "") => {
     });
     return row;
   });
+};
+
+/**
+ * ?? Format process uptime into human-readable format
+ * @param {number} seconds - Uptime in seconds
+ * @returns {string} Formatted uptime string
+ */
+const formatUptime = (seconds = 0) => {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  const parts = [];
+  if (days > 0) parts.push(`${days} day${days !== 1 ? "s" : ""}`);
+  if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? "s" : ""}`);
+  if (minutes > 0) parts.push(`${minutes} minute${minutes !== 1 ? "s" : ""}`);
+  if (secs > 0 || parts.length === 0) parts.push(`${secs} second${secs !== 1 ? "s" : ""}`);
+
+  return parts.join(" ");
 };
 
 const parseDateStart = (value) => {
@@ -441,7 +971,7 @@ async function runBestEffortTransaction(operationName, work) {
     });
     return result;
   } catch (error) {
-    console.warn(`⚠️ ${operationName}: transaction unavailable/fallback -`, error.message);
+    console.warn(`?? ${operationName}: transaction unavailable/fallback -`, error.message);
     return work(null);
   } finally {
     await session.endSession();
@@ -513,6 +1043,50 @@ async function removeTeacherReferences({ schoolId, teacherIds, session = null })
 const client = process.env.MONGO_URI ? new MongoClient(process.env.MONGO_URI) : null;
 let db;
 let isMongoConnected = false;
+const logAuditEvent = createAuditLogger(() => db);
+const mongoDbName = String(process.env.MONGO_DB_NAME || "school_saas").trim() || "school_saas";
+const mongoReconnectDelayMs = Number(process.env.MONGO_RECONNECT_DELAY_MS || 5000);
+let mongoReconnectTimer = null;
+let mongoReconnectInProgress = false;
+let mongoReconnectHandlersAttached = false;
+
+const scheduleMongoReconnect = () => {
+  if (!client || mongoReconnectTimer || mongoReconnectInProgress || isMongoConnected) return;
+  mongoReconnectTimer = setTimeout(async () => {
+    mongoReconnectTimer = null;
+    mongoReconnectInProgress = true;
+    try {
+      await client.connect();
+      db = client.db(mongoDbName);
+      isMongoConnected = true;
+      console.log("MongoDB reconnected.");
+      await ensureMongoIndexes();
+    } catch (error) {
+      console.error("MongoDB reconnect attempt failed:", error.message);
+      scheduleMongoReconnect();
+    } finally {
+      mongoReconnectInProgress = false;
+    }
+  }, Math.max(1000, mongoReconnectDelayMs));
+};
+
+const attachMongoReconnectHandlers = () => {
+  if (!client || mongoReconnectHandlersAttached) return;
+  mongoReconnectHandlersAttached = true;
+
+  client.on("close", () => {
+    const wasConnected = isMongoConnected;
+    isMongoConnected = false;
+    if (wasConnected) {
+      console.error("MongoDB disconnected. Reconnecting...");
+    }
+    scheduleMongoReconnect();
+  });
+
+  client.on("error", (error) => {
+    console.error("MongoDB client error:", error?.message || error);
+  });
+};
 
 async function seedDeveloperUser() {
   try {
@@ -522,7 +1096,7 @@ async function seedDeveloperUser() {
     });
 
     if (existing) {
-      console.log("✅ DEVELOPER user already exists");
+      console.log("? DEVELOPER user already exists");
       return;
     }
 
@@ -537,11 +1111,11 @@ async function seedDeveloperUser() {
       createdAt: new Date(),
     });
 
-    console.log("✅ DEVELOPER user created automatically on startup");
-    console.log("   📧 Email: developer@example.com");
-    console.log("   🔐 Password: developer123");
+    console.log("? DEVELOPER user created automatically on startup");
+    console.log("   ?? Email: developer@example.com");
+    console.log("   ?? Password: developer123");
   } catch (err) {
-    console.warn("⚠️  Could not auto-seed DEVELOPER user:", err.message);
+    console.warn("??  Could not auto-seed DEVELOPER user:", err.message);
   }
 }
 
@@ -551,16 +1125,22 @@ async function ensureMongoIndexes() {
     await Promise.all([
       db.collection("users").createIndexes([
         { key: { email: 1, role: 1, schoolId: 1 }, name: "users_email_role_school_idx" },
+        { key: { schoolId: 1 }, name: "users_school_idx" },
       ]),
       db.collection("students").createIndexes([
+        { key: { schoolId: 1 }, name: "students_school_idx" },
         { key: { schoolId: 1, class: 1, section: 1, isDeleted: 1 }, name: "students_school_class_section_deleted_idx" },
       ]),
       db.collection("teachers").createIndexes([
         { key: { schoolId: 1, class: 1, section: 1, isDeleted: 1 }, name: "teachers_school_class_section_deleted_idx" },
       ]),
       db.collection("attendance").createIndexes([
+        { key: { schoolId: 1 }, name: "attendance_school_idx" },
         { key: { schoolId: 1, date: 1, class: 1, section: 1 }, name: "attendance_school_date_class_section_idx" },
         { key: { schoolId: 1, studentId: 1, date: -1 }, name: "attendance_school_student_date_idx" },
+      ]),
+      db.collection("homework").createIndexes([
+        { key: { schoolId: 1 }, name: "homework_school_idx" },
       ]),
       db.collection("marks").createIndexes([
         { key: { schoolId: 1, studentId: 1, examId: 1 }, name: "marks_school_student_exam_idx" },
@@ -577,9 +1157,58 @@ async function ensureMongoIndexes() {
       db.collection("passwordResetRequests").createIndexes([
         { key: { schoolId: 1, status: 1, userType: 1, handlerId: 1 }, name: "resetreq_school_status_type_handler_idx" },
       ]),
+      db.collection("auditLogs").createIndexes([
+        { key: { schoolId: 1, timestamp: -1 }, name: "audit_school_timestamp_idx" },
+        { key: { schoolId: 1, userId: 1, timestamp: -1 }, name: "audit_school_user_timestamp_idx" },
+        { key: { schoolId: 1, action: 1, timestamp: -1 }, name: "audit_school_action_timestamp_idx" },
+      ]),
+      db.collection("developerActionLogs").createIndexes(DEVELOPER_ACTION_LOG_INDEXES),
     ]);
 
     const usersCollection = db.collection("users");
+    const schoolsCollection = db.collection("schools");
+    try {
+      await schoolsCollection.createIndex(
+        { name: 1 },
+        { unique: true, name: "schools_name_unique_idx" }
+      );
+      console.log("Schools unique index ensured (name)");
+    } catch (schoolNameErr) {
+      if (isMongoDuplicateKeyError(schoolNameErr)) {
+        console.warn("Schools unique index not created: duplicate names exist. Run school merge cleanup first.");
+      } else {
+        throw schoolNameErr;
+      }
+    }
+
+    try {
+      await schoolsCollection.createIndex(
+        { name: 1, address: 1 },
+        { unique: true, name: "schools_name_address_unique_idx" }
+      );
+      console.log("Schools unique index ensured (name+address)");
+    } catch (schoolNameAddressErr) {
+      if (isMongoDuplicateKeyError(schoolNameAddressErr)) {
+        console.warn("Schools name+address unique index not created: duplicate name/address pairs exist.");
+      } else {
+        throw schoolNameAddressErr;
+      }
+    }
+
+    try {
+      await schoolsCollection.createIndex(
+        { nameKey: 1 },
+        { unique: true, name: "schools_nameKey_unique_idx" }
+      );
+      console.log("Schools unique index ensured (nameKey)");
+    } catch (schoolNameKeyErr) {
+      if (isMongoDuplicateKeyError(schoolNameKeyErr)) {
+        console.warn("Schools nameKey unique index not created: duplicate normalized names exist.");
+      } else {
+        throw schoolNameKeyErr;
+      }
+    }
+
     try {
       await usersCollection.createIndex(
         { email: 1 },
@@ -626,25 +1255,173 @@ async function ensureMongoIndexes() {
   }
 }
 
+async function ensureTenantValidators() {
+  if (!isMongoConnected) return;
+  const applyValidator = async (collectionName, validator) => {
+    try {
+      await db.command({
+        collMod: collectionName,
+        validator,
+        validationLevel: "moderate",
+        validationAction: "error",
+      });
+    } catch (err) {
+      if (String(err?.message || "").includes("ns does not exist")) {
+        await db.createCollection(collectionName, {
+          validator,
+          validationLevel: "moderate",
+          validationAction: "error",
+        });
+        return;
+      }
+      throw err;
+    }
+  };
+
+  try {
+    await Promise.all([
+      applyValidator("schools", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["name", "status", "createdAt"],
+          properties: {
+            name: { bsonType: "string", minLength: 1 },
+            address: { bsonType: "string" },
+            status: { enum: ["active", "disabled"] },
+            createdAt: { bsonType: "date" },
+          },
+        },
+      }),
+      applyValidator("users", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["email", "passwordHash", "role", "createdAt"],
+          properties: {
+            name: { bsonType: "string" },
+            email: { bsonType: "string", minLength: 3 },
+            passwordHash: { bsonType: "string", minLength: 1 },
+            role: { enum: ["ADMIN", "TEACHER", "STUDENT", "DEVELOPER"] },
+            phone: { bsonType: "string" },
+            schoolId: { bsonType: "objectId" },
+            class: { bsonType: "string" },
+            section: { bsonType: "string" },
+            createdAt: { bsonType: "date" },
+          },
+        },
+      }),
+      applyValidator("students", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["name", "schoolId", "class", "section", "createdAt"],
+          properties: {
+            name: { bsonType: "string", minLength: 1 },
+            admissionNumber: { bsonType: "string" },
+            rollNo: { bsonType: "string" },
+            schoolId: { bsonType: "objectId" },
+            class: { bsonType: "string", minLength: 1 },
+            section: { bsonType: "string", minLength: 1 },
+            parentName: { bsonType: "string" },
+            parentPhone: { bsonType: "string" },
+            createdAt: { bsonType: "date" },
+          },
+        },
+      }),
+      applyValidator("attendance", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["studentId", "schoolId", "class", "section", "date", "status"],
+          properties: {
+            studentId: { bsonType: "objectId" },
+            schoolId: { bsonType: "objectId" },
+            class: { bsonType: "string" },
+            section: { bsonType: "string" },
+            date: {},
+            status: { bsonType: "string", minLength: 1 },
+          },
+        },
+      }),
+      applyValidator("homework", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["schoolId"],
+          properties: {
+            schoolId: { bsonType: "objectId" },
+          },
+        },
+      }),
+      applyValidator("exams", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["schoolId"],
+          properties: {
+            schoolId: { bsonType: "objectId" },
+          },
+        },
+      }),
+      applyValidator("marks", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["schoolId"],
+          properties: {
+            schoolId: { bsonType: "objectId" },
+          },
+        },
+      }),
+      applyValidator("notifications", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["schoolId"],
+          properties: {
+            schoolId: { bsonType: "objectId" },
+          },
+        },
+      }),
+      applyValidator("voiceMessages", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["schoolId"],
+          properties: {
+            schoolId: { bsonType: "objectId" },
+          },
+        },
+      }),
+      applyValidator("timetables", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["schoolId"],
+          properties: {
+            schoolId: { bsonType: "objectId" },
+          },
+        },
+      }),
+    ]);
+    console.log("MongoDB tenant validators ensured");
+  } catch (err) {
+    console.warn("Failed to ensure tenant validators:", err.message);
+  }
+}
+
 async function startServer() {
   try {
     const isProduction = process.env.NODE_ENV === "production";
     if (client && process.env.MONGO_URI) {
+      attachMongoReconnectHandlers();
       try {
         await client.connect();
-        db = client.db("school_saas");
+        db = client.db(mongoDbName);
         isMongoConnected = true;
-        console.log("✅ MongoDB connected successfully");
+        console.log("? MongoDB connected successfully");
         
         // Auto-seed developer user if MongoDB is connected
         await seedDeveloperUser();
         await ensureMongoIndexes();
+        await ensureTenantValidators();
       } catch (mongoError) {
         if (isProduction) {
           throw new Error(`MongoDB connection failed in production: ${mongoError.message}`);
         }
-        console.warn("⚠️  MongoDB connection failed, running in fallback mode:", mongoError.message);
-        console.log("💡 Tip: Install MongoDB locally or set MONGO_URI to a MongoDB Atlas connection string");
+        console.warn("??  MongoDB connection failed, running in fallback mode:", mongoError.message);
+        console.log("?? Tip: Install MongoDB locally or set MONGO_URI to a MongoDB Atlas connection string");
         db = new MockDatabase();
         isMongoConnected = false;
         
@@ -655,8 +1432,8 @@ async function startServer() {
       if (isProduction) {
         throw new Error("MONGO_URI is required in production");
       }
-      console.warn("⚠️  MONGO_URI not set - running in fallback mode with in-memory database");
-      console.log("💡 To enable MongoDB: Set MONGO_URI in .env file");
+      console.warn("??  MONGO_URI not set - running in fallback mode with in-memory database");
+      console.log("?? To enable MongoDB: Set MONGO_URI in .env file");
       db = new MockDatabase();
       isMongoConnected = false;
       
@@ -664,12 +1441,64 @@ async function startServer() {
       await seedDeveloperUser();
     }
 
+    initAuditLogger(db);
+
+    // Register API routes (must be before catch-all)
+    app.use(
+      "/api/dev",
+      devRoutes({
+        db,
+        requireAuth,
+        requireDeveloper,
+        isMongoConnected,
+        controlState: platformControlState,
+        clearCache: clearInMemoryCache,
+      })
+    );
+    app.use("/api/admissions", admissionRoutes(db));
+
+    /* ================================
+       SPA FALLBACK - Serve index.html for client-side routing
+       ================================= */
+    // All requests that don't match static files or API routes
+    // should return index.html so React Router can handle them
+    app.get("*", (req, res) => {
+      // Don't serve API routes (this shouldn't happen as they're already defined)
+      if (req.path.startsWith("/api/")) {
+        return res.status(404).json({ error: "API endpoint not found" });
+      }
+
+      // If the request looks like a file asset and wasn't found by express.static, return 404.
+      // This avoids sending 500 from SPA fallback for stale hashed files.
+      if (path.extname(req.path)) {
+        return res.status(404).json({ error: "Asset not found" });
+      }
+
+      // For all other routes, serve index.html so React Router on the client handles it.
+      if (!fs.existsSync(frontendIndexPath)) {
+        return res.status(503).json({
+          error: "Frontend build not found. Run: cd client && npm run build",
+        });
+      }
+
+      res.sendFile(frontendIndexPath, (err) => {
+        if (err) {
+          console.error("? Error serving index.html:", err);
+          res.status(500).json({ error: "Internal server error" });
+        }
+      });
+    });
+
     const PORT = process.env.PORT || 5000;
     
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📍 API URL: http://localhost:${PORT}`);
-      console.log(`✅ Health Check: GET http://localhost:${PORT}/`);
+    const server = app.listen(PORT, "0.0.0.0", () => {
+      console.log(`?? Server running on port ${PORT}`);
+      console.log(`?? API URL: http://localhost:${PORT}`);
+      console.log("Server ready for load testing");
+      console.log(`? Health Check: GET http://localhost:${PORT}/`);
+      if (process.env.CLUSTER_MODE !== "true") {
+        startBackupScheduler();
+      }
     });
 
     // Set timeout for large file uploads (5 minutes)
@@ -677,7 +1506,7 @@ async function startServer() {
     
     // Handle server errors
     server.on('error', (err) => {
-      console.error("❌ SERVER ERROR:", err);
+      console.error("? SERVER ERROR:", err);
     });
 
     process.on('SIGTERM', () => {
@@ -688,7 +1517,7 @@ async function startServer() {
       });
     });
   } catch (err) {
-    console.error("❌ FATAL ERROR: Failed to connect to MongoDB");
+    console.error("? FATAL ERROR: Failed to connect to MongoDB");
     console.error("Error:", err.message);
     process.exit(1);
   }
@@ -697,6 +1526,7 @@ async function startServer() {
 if (process.env.CLUSTER_MODE === "true" && cluster.isPrimary) {
   const workerCount = Number(process.env.WEB_CONCURRENCY || os.cpus().length);
   console.log(`Starting cluster mode with ${workerCount} workers`);
+  startBackupScheduler();
   for (let i = 0; i < workerCount; i += 1) {
     cluster.fork();
   }
@@ -718,6 +1548,11 @@ function requireAuth(req, res, next) {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     console.log("AUTH DECODED:", { userId: decoded.userId, role: decoded.role });
+
+    const tokenIat = Number(decoded?.iat || 0);
+    if (platformControlState.forceLogoutIssuedAfter && tokenIat < platformControlState.forceLogoutIssuedAfter) {
+      return res.status(401).json({ error: "Session expired. Please login again." });
+    }
 
     req.user = {
       userId: decoded.userId,
@@ -760,22 +1595,29 @@ function requireRole(role) {
   };
 }
 
+function requireDeveloper(req, res, next) {
+  if (!req.user || req.user.role !== "DEVELOPER") {
+    return res.status(403).json({ success: false, message: "Developer access required" });
+  }
+  next();
+}
+
 /* ================================
    TENANT ENFORCEMENT MIDDLEWARE
    ================================= */
 function requireTenantId(req, res, next) {
   const schoolId = req.user?.schoolId;
   if (!schoolId) {
-    console.error("❌ TENANT CHECK FAILED: Missing schoolId in token");
+    console.error("? TENANT CHECK FAILED: Missing schoolId in token");
     return res.status(400).json({ error: "Missing schoolId in authentication token" });
   }
   const schoolObjectId = safeObjectId(schoolId);
   if (!schoolObjectId) {
-    console.error("❌ TENANT CHECK FAILED: Invalid schoolId format:", schoolId);
+    console.error("? TENANT CHECK FAILED: Invalid schoolId format:", schoolId);
     return res.status(400).json({ error: "Invalid schoolId format" });
   }
   req.user.schoolIdObj = schoolObjectId;
-  console.log("✅ TENANT CHECK: schoolId valid -", schoolObjectId.toString());
+  console.log("? TENANT CHECK: schoolId valid -", schoolObjectId.toString());
   next();
 }
 
@@ -811,7 +1653,7 @@ const upload = multer({
 app.get("/", publicRateLimit, (req, res) => {
   res.json({
     status: "OK",
-    message: "School SaaS Backend is running 🚀",
+    message: "School SaaS Backend is running ??",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
@@ -819,6 +1661,7 @@ app.get("/", publicRateLimit, (req, res) => {
 
 app.get("/api/health", publicRateLimit, async (req, res) => {
   const memory = process.memoryUsage();
+  const cpu = os.loadavg();
   let database = isMongoConnected ? "connected" : "disconnected";
   if (isMongoConnected && db) {
     try {
@@ -839,7 +1682,45 @@ app.get("/api/health", publicRateLimit, async (req, res) => {
       heapTotal: memory.heapTotal,
       external: memory.external,
     },
-    timestamp: new Date().toISOString(),
+    cpu: {
+      load1m: cpu[0] || 0,
+      load5m: cpu[1] || 0,
+      load15m: cpu[2] || 0,
+    },
+    timestamp: Date.now(),
+  });
+});
+
+app.get("/health", async (req, res) => {
+  const cpu = os.loadavg();
+  let database = isMongoConnected ? "connected" : "disconnected";
+  if (isMongoConnected && db) {
+    try {
+      await db.command({ ping: 1 });
+      database = "connected";
+    } catch {
+      database = "degraded";
+    }
+  }
+
+  return res.json({
+    status: "ok",
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    cpu: {
+      load1m: cpu[0] || 0,
+      load5m: cpu[1] || 0,
+      load15m: cpu[2] || 0,
+    },
+    timestamp: Date.now(),
+    db: database,
+  });
+});
+
+app.get("/ready", (_req, res) => {
+  return res.json({
+    status: "ready",
+    uptime: process.uptime(),
   });
 });
 
@@ -923,26 +1804,26 @@ app.get("/api/debug/uploads", publicRateLimit, (req, res) => {
 /* ================================
    ADMIN LOGIN
    ================================= */
-app.post("/api/auth/login", authLoginRateLimit, async (req, res) => {
+app.post("/api/auth/login", loginLimiter, loginValidator, validateRequest, async (req, res) => {
   try {
     const { email, password, schoolId } = req.body;
     // Database-stored admin - check `users` collection for ADMIN role
     const usersCol = db.collection("users");
     const user = await usersCol.findOne({ email, role: "ADMIN" });
     if (!user) {
-      console.warn("⚠️ ADMIN LOGIN FAILED: User not found");
+      console.warn("?? ADMIN LOGIN FAILED: User not found");
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) {
-      console.warn("⚠️ ADMIN LOGIN FAILED: Wrong password for", email);
+      console.warn("?? ADMIN LOGIN FAILED: Wrong password for", email);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     // ensure schoolId is present on the admin user record
     if (!user.schoolId) {
-      console.error("❌ ADMIN LOGIN BLOCKED: No schoolId for admin user", user._id);
+      console.error("? ADMIN LOGIN BLOCKED: No schoolId for admin user", user._id);
       return res.status(500).json({ error: "Admin account not associated with a school" });
     }
 
@@ -952,21 +1833,22 @@ app.post("/api/auth/login", authLoginRateLimit, async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    // Fetch school name
-    let schoolName = "School";
-    try {
-      const school = await db.collection("schools").findOne({ _id: user.schoolId });
-      if (school && school.name) {
-        schoolName = school.name;
-      }
-    } catch (err) {
-      console.warn("⚠️ Could not fetch school name:", err.message);
+    const school = await db.collection("schools").findOne({ _id: user.schoolId });
+    if (!school) {
+      return res.status(403).json({ error: "School not found for this account" });
+    }
+    if (!isSchoolActive(school)) {
+      return res.status(403).json({ error: "School is disabled. Contact developer support." });
     }
 
-    console.log("✅ ADMIN LOGIN (DB) - user:", email, "schoolId:", user.schoolId.toString());
+    // Fetch school name
+    let schoolName = "School";
+    if (school?.name) schoolName = school.name;
+
+    console.log("? ADMIN LOGIN (DB) - user:", email, "schoolId:", user.schoolId.toString());
     return res.json({ token, schoolName });
   } catch (err) {
-    console.error("❌ ADMIN LOGIN ERROR:", err);
+    console.error("? ADMIN LOGIN ERROR:", err);
     return res.status(500).json({ error: "Login failed" });
   }
 });
@@ -974,55 +1856,52 @@ app.post("/api/auth/login", authLoginRateLimit, async (req, res) => {
 /* ================================
    STUDENT LOGIN
    ================================= */
-app.post("/api/auth/student/login", authLoginRateLimit, async (req, res) => {
+app.post("/api/auth/student/login", loginLimiter, loginValidator, validateRequest, async (req, res) => {
   try {
-    console.log("🔍 STUDENT LOGIN REQUEST - Body:", JSON.stringify(req.body));
-    
     const body = req.body || {};
     const studentEmail = body.email || "";
     const studentPassword = body.password || "";
     
-    console.log("🔍 Extracted - Email:", studentEmail, "Password length:", studentPassword.length);
-    
     if (!studentEmail || !studentPassword) {
-      console.warn("⚠️ Missing email or password");
+      console.warn("?? Missing email or password");
       return res.status(400).json({ error: "Email and password required" });
     }
     
     const normalizedEmail = studentEmail.toLowerCase().trim();
-    console.log("🔍 Normalized email:", normalizedEmail);
 
     const user = await db.collection("users").findOne({
       email: normalizedEmail,
       role: "STUDENT",
     });
-    console.log("🔍 User found:", !!user);
 
     if (!user) {
-      console.warn(`⚠️ STUDENT LOGIN FAILED: User not found for email: ${normalizedEmail}`);
+      console.warn(`?? STUDENT LOGIN FAILED: User not found for email: ${normalizedEmail}`);
       return res.status(401).json({ error: "Student not found" });
     }
 
     const match = await bcrypt.compare(studentPassword, user.passwordHash);
-    console.log("🔍 Password match:", match);
     
     if (!match) {
-      console.warn(`⚠️ STUDENT LOGIN FAILED: Wrong password for email: ${normalizedEmail}`);
+      console.warn(`?? STUDENT LOGIN FAILED: Wrong password for email: ${normalizedEmail}`);
       return res.status(401).json({ error: "Wrong password" });
+    }
+
+    if (!user.schoolId) {
+      return res.status(403).json({ error: "Student account missing school mapping" });
     }
 
     const student = await db.collection("students").findOne(activeStudentFilter({
       userId: user._id,
+      schoolId: user.schoolId,
     }));
-    console.log("🔍 Student profile found:", !!student);
 
     if (!student) {
-      console.warn(`⚠️ STUDENT LOGIN FAILED: Student profile not found for email: ${normalizedEmail}`);
+      console.warn(`?? STUDENT LOGIN FAILED: Student profile not found for email: ${normalizedEmail}`);
       return res.status(404).json({ error: "Student profile not found" });
     }
 
     if (!student.schoolId) {
-      console.error("❌ STUDENT LOGIN BLOCKED: Student has no schoolId", student._id);
+      console.error("? STUDENT LOGIN BLOCKED: Student has no schoolId", student._id);
       return res.status(500).json({ error: "Student profile incomplete (missing schoolId)" });
     }
 
@@ -1037,19 +1916,20 @@ app.post("/api/auth/student/login", authLoginRateLimit, async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    // Fetch school name
-    let schoolName = "School";
-    try {
-      const school = await db.collection("schools").findOne({ _id: student.schoolId });
-      if (school && school.name) {
-        schoolName = school.name;
-      }
-    } catch (err) {
-      console.warn("⚠️ Could not fetch school name:", err.message);
+    const school = await db.collection("schools").findOne({ _id: student.schoolId });
+    if (!school) {
+      return res.status(403).json({ error: "School not found for this account" });
+    }
+    if (!isSchoolActive(school)) {
+      return res.status(403).json({ error: "School is disabled. Contact administrator." });
     }
 
+    // Fetch school name
+    let schoolName = "School";
+    if (school?.name) schoolName = school.name;
+
     const mustChangePassword = Boolean(user?.forcePasswordChange);
-    console.log(`✅ STUDENT LOGIN SUCCESS - email: ${normalizedEmail}, studentId: ${student._id}, mustChangePassword: ${mustChangePassword}`);
+    console.log(`? STUDENT LOGIN SUCCESS - email: ${normalizedEmail}, studentId: ${student._id}, mustChangePassword: ${mustChangePassword}`);
     res.json({
       token,
       schoolName,
@@ -1057,7 +1937,7 @@ app.post("/api/auth/student/login", authLoginRateLimit, async (req, res) => {
       student: { ...student, _id: student._id.toString(), schoolId: student.schoolId.toString() },
     });
   } catch (err) {
-    console.error("❌ STUDENT LOGIN ERROR - Full error:", err.message, "Stack:", err.stack);
+    console.error("? STUDENT LOGIN ERROR - Full error:", err.message, "Stack:", err.stack);
     return res.status(500).json({ error: "Login failed - " + err.message });
   }
 });
@@ -1065,7 +1945,7 @@ app.post("/api/auth/student/login", authLoginRateLimit, async (req, res) => {
 /* ================================
    TEACHER LOGIN
    ================================= */
-app.post("/api/auth/teacher/login", authLoginRateLimit, async (req, res) => {
+app.post("/api/auth/teacher/login", loginLimiter, loginValidator, validateRequest, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -1079,17 +1959,22 @@ app.post("/api/auth/teacher/login", authLoginRateLimit, async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: "Wrong password" });
 
+    if (!user.schoolId) {
+      return res.status(403).json({ error: "Teacher account missing school mapping" });
+    }
+
     const teacher = await db.collection("teachers").findOne(activeTeacherFilter({
       userId: user._id,
+      schoolId: user.schoolId,
     }));
 
     if (!teacher) {
       return res.status(404).json({ error: "Teacher profile not found" });
     }
 
-    // ✅ TENANT CHECK: Teacher must have schoolId
+    // ? TENANT CHECK: Teacher must have schoolId
     if (!teacher.schoolId) {
-      console.error("❌ TEACHER LOGIN BLOCKED: Teacher has no schoolId", teacher._id);
+      console.error("? TEACHER LOGIN BLOCKED: Teacher has no schoolId", teacher._id);
       return res.status(500).json({ error: "Teacher profile incomplete (missing schoolId)" });
     }
 
@@ -1106,19 +1991,20 @@ app.post("/api/auth/teacher/login", authLoginRateLimit, async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    // Fetch school name
-    let schoolName = "School";
-    try {
-      const school = await db.collection("schools").findOne({ _id: teacher.schoolId });
-      if (school && school.name) {
-        schoolName = school.name;
-      }
-    } catch (err) {
-      console.warn("⚠️ Could not fetch school name:", err.message);
+    const school = await db.collection("schools").findOne({ _id: teacher.schoolId });
+    if (!school) {
+      return res.status(403).json({ error: "School not found for this account" });
+    }
+    if (!isSchoolActive(school)) {
+      return res.status(403).json({ error: "School is disabled. Contact administrator." });
     }
 
+    // Fetch school name
+    let schoolName = "School";
+    if (school?.name) schoolName = school.name;
+
     const mustChangePassword = Boolean(user?.forcePasswordChange);
-    console.log("✅ TEACHER LOGIN - teacherId:", teacher._id, "schoolId:", teacher.schoolId, "mustChangePassword:", mustChangePassword);
+    console.log("? TEACHER LOGIN - teacherId:", teacher._id, "schoolId:", teacher.schoolId, "mustChangePassword:", mustChangePassword);
     res.json({
       token,
       schoolName,
@@ -1131,15 +2017,131 @@ app.post("/api/auth/teacher/login", authLoginRateLimit, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("❌ TEACHER LOGIN ERROR:", err);
+    console.error("? TEACHER LOGIN ERROR:", err);
     return res.status(500).json({ error: "Login failed" });
   }
 });
 
 /* ================================
-   DEVELOPER LOGIN
+   GET SCHOOL FEATURES (for UI guards)
    ================================= */
-app.post("/api/auth/developer/login", authLoginRateLimit, async (req, res) => {
+app.get("/api/schools/:schoolId", requireAuth, requireTenantId, async (req, res) => {
+  try {
+    const { schoolId } = req.params;
+    
+    // Validate and convert schoolId
+    let schoolIdObj;
+    try {
+      schoolIdObj = new ObjectId(schoolId);
+    } catch {
+      return res.status(400).json({ error: "Invalid school ID" });
+    }
+
+    // Verify teacher belongs to this school
+    if (req.user.schoolIdObj.toString() !== schoolIdObj.toString()) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    let school = await db.collection("schools").findOne({
+      _id: schoolIdObj,
+    });
+
+    if (!school) {
+      return res.status(404).json({ error: "School not found" });
+    }
+    if (!isSchoolActive(school)) {
+      return res.status(403).json({ error: "School is disabled" });
+    }
+
+    // Return basic school data
+    res.json({
+      _id: school._id,
+      name: school.name,
+      address: school.address || "",
+      status: normalizeSchoolStatus(school.status || (school.isEnabled === false ? "disabled" : "active")),
+    });
+  } catch (err) {
+    console.error("? GET SCHOOL ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch school" });
+  }
+});
+
+/* ================================
+   ?? SECURE DEVELOPER LOGIN - ACCESS CODE BASED
+   ================================= */
+app.post("/api/dev/login", authLoginRateLimit, async (req, res) => {
+  try {
+    const { email, accessCode } = req.body;
+
+    // Validate inputs
+    if (!email || !accessCode) {
+      return res.status(400).json({ error: "Email and access code required" });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error("? JWT_SECRET not set in environment");
+      return res.status(500).json({ error: "Server configuration error" });
+    }
+
+    // Get access code from environment
+    const correctAccessCode = process.env.DEV_ACCESS_CODE || "supersecretdevkey";
+
+    // Verify access code (case-sensitive for security)
+    if (accessCode !== correctAccessCode) {
+      console.warn("?? DEV LOGIN FAILED: Invalid access code for", email);
+      return res.status(401).json({ error: "Invalid access code. Access denied." });
+    }
+
+    // Optional: Validate email format (basic validation)
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+
+    // ? DEVELOPER ROLE: Issue JWT token
+    const token = jwt.sign(
+      { 
+        developerEmail: email.toLowerCase().trim(),
+        role: "DEVELOPER",
+        schoolId: null,
+        timestamp: Date.now()
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    // Log successful developer login
+    console.log("? DEVELOPER LOGIN - Developer:", email, "at", new Date().toISOString());
+
+    // Create system log entry
+    try {
+      await db.collection("systemLogs").insertOne({
+        timestamp: new Date(),
+        level: "INFO",
+        category: "DEV_LOGIN",
+        message: `Developer accessed: ${email}`,
+        icon: "??",
+        developer: email,
+      });
+    } catch (logErr) {
+      console.error("?? Failed to log dev login:", logErr);
+    }
+
+    return res.status(200).json({ 
+      success: true,
+      token,
+      message: "Developer access granted"
+    });
+  } catch (err) {
+    console.error("? DEVELOPER LOGIN ERROR:", err.message || err);
+    return res.status(500).json({ error: "Login failed - server error" });
+  }
+});
+
+/* ================================
+   ?? LEGACY DEVELOPER LOGIN (Support old endpoint)
+   ================================= */
+app.post("/api/auth/developer/login", authLoginRateLimit, developerLoginValidator, validateRequest, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -1148,7 +2150,7 @@ app.post("/api/auth/developer/login", authLoginRateLimit, async (req, res) => {
     }
 
     if (!process.env.JWT_SECRET) {
-      console.error("❌ JWT_SECRET not set in environment");
+      console.error("? JWT_SECRET not set in environment");
       return res.status(500).json({ error: "Server configuration error" });
     }
 
@@ -1158,27 +2160,27 @@ app.post("/api/auth/developer/login", authLoginRateLimit, async (req, res) => {
     });
 
     if (!user) {
-      console.warn("⚠️ DEVELOPER LOGIN FAILED: User not found for", email);
+      console.warn("?? DEVELOPER LOGIN FAILED: User not found for", email);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) {
-      console.warn("⚠️ DEVELOPER LOGIN FAILED: Wrong password for", email);
+      console.warn("?? DEVELOPER LOGIN FAILED: Wrong password for", email);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // ✅ DEVELOPER ROLE: No schoolId required (it should be null)
+    // ? DEVELOPER ROLE: No schoolId required (it should be null)
     const token = jwt.sign(
       { userId: user._id.toString(), role: "DEVELOPER", schoolId: null },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    console.log("✅ DEVELOPER LOGIN - user:", email);
+    console.log("? DEVELOPER LOGIN - user:", email);
     return res.json({ token });
   } catch (err) {
-    console.error("❌ DEVELOPER LOGIN ERROR:", err.message || err);
+    console.error("? DEVELOPER LOGIN ERROR:", err.message || err);
     return res.status(500).json({ error: "Login failed - server error" });
   }
 });
@@ -1189,14 +2191,14 @@ app.post("/api/auth/developer/login", authLoginRateLimit, async (req, res) => {
 app.post("/api/auth/logout", requireAuth, (req, res) => {
   // Token invalidation is handled client-side (localStorage removal)
   // Server just confirms logout success
-  console.log("✅ LOGOUT - User:", req.user?.userId, "Role:", req.user?.role);
+  console.log("? LOGOUT - User:", req.user?.userId, "Role:", req.user?.role);
   return res.json({ success: true, message: "Logged out successfully" });
 });
 
 /* ================================
    STUDENT FORGOT PASSWORD (TEACHER-ASSISTED)
    ================================= */
-app.post("/api/student/password-reset-request", forgotPasswordRateLimit, async (req, res) => {
+app.post("/api/student/password-reset-request", forgotPasswordRateLimit, studentPasswordResetRequestValidator, validateRequest, async (req, res) => {
   try {
     const email = String(req.body?.email || "").trim().toLowerCase();
     if (!email) return res.status(400).json({ error: "Email is required" });
@@ -1270,7 +2272,7 @@ app.post("/api/student/password-reset-request", forgotPasswordRateLimit, async (
 
     return res.json({ success: true, message: "Request submitted to your class teacher." });
   } catch (err) {
-    console.error("❌ PASSWORD RESET REQUEST ERROR:", err);
+    console.error("? PASSWORD RESET REQUEST ERROR:", err);
     return res.status(500).json({ error: "Failed to submit reset request" });
   }
 });
@@ -1278,7 +2280,7 @@ app.post("/api/student/password-reset-request", forgotPasswordRateLimit, async (
 /* ================================
    TEACHER FORGOT PASSWORD (ADMIN-HANDLED)
    ================================= */
-app.post("/api/auth/teacher/forgot-password", forgotPasswordRateLimit, async (req, res) => {
+app.post("/api/auth/teacher/forgot-password", forgotPasswordRateLimit, teacherForgotPasswordValidator, validateRequest, async (req, res) => {
   try {
     const identifier = String(req.body?.identifier || req.body?.email || "").trim();
     if (!identifier) return res.status(400).json({ error: "Teacher ID or Email is required" });
@@ -1385,7 +2387,7 @@ app.post("/api/auth/teacher/forgot-password", forgotPasswordRateLimit, async (re
 
     return res.json({ success: true, message: "Reset request submitted to admin." });
   } catch (err) {
-    console.error("❌ TEACHER FORGOT PASSWORD ERROR:", err);
+    console.error("? TEACHER FORGOT PASSWORD ERROR:", err);
     return res.status(500).json({ error: "Failed to submit reset request" });
   }
 });
@@ -1427,7 +2429,7 @@ app.get("/api/admin/password-reset-requests", requireAuth, requireRole("ADMIN"),
       totalCount,
     });
   } catch (err) {
-    console.error("❌ ADMIN FETCH PASSWORD RESET REQUESTS ERROR:", err);
+    console.error("? ADMIN FETCH PASSWORD RESET REQUESTS ERROR:", err);
     return res.status(500).json({ error: "Failed to load reset requests" });
   }
 });
@@ -1504,7 +2506,7 @@ app.post("/api/admin/reset-teacher-password", requireAuth, requireRole("ADMIN"),
 
     return res.json({ success: true, message: "Teacher password reset successfully." });
   } catch (err) {
-    console.error("❌ ADMIN RESET TEACHER PASSWORD ERROR:", err);
+    console.error("? ADMIN RESET TEACHER PASSWORD ERROR:", err);
     return res.status(500).json({ error: "Failed to reset teacher password" });
   }
 });
@@ -1543,7 +2545,7 @@ app.get("/api/teacher/password-reset-requests", requireAuth, requireRole("TEACHE
       totalCount,
     });
   } catch (err) {
-    console.error("❌ FETCH RESET REQUESTS ERROR:", err);
+    console.error("? FETCH RESET REQUESTS ERROR:", err);
     return res.status(500).json({ error: "Failed to load reset requests" });
   }
 });
@@ -1621,7 +2623,7 @@ app.put("/api/teacher/password-reset-requests/:id/reset", requireAuth, requireRo
 
     return res.json({ success: true, message: "Student password reset successfully." });
   } catch (err) {
-    console.error("❌ RESET STUDENT PASSWORD ERROR:", err);
+    console.error("? RESET STUDENT PASSWORD ERROR:", err);
     return res.status(500).json({ error: "Failed to reset password" });
   }
 });
@@ -1675,7 +2677,7 @@ const handleChangePassword = async (req, res) => {
 
     return res.json({ success: true, message: "Password changed successfully" });
   } catch (err) {
-    console.error("❌ CHANGE PASSWORD ERROR:", err);
+    console.error("? CHANGE PASSWORD ERROR:", err);
     return res.status(500).json({ error: "Failed to change password" });
   }
 };
@@ -1695,7 +2697,7 @@ app.get("/api/student/dashboard", requireAuth, requireRole("STUDENT"), requireTe
       return res.status(400).json({ error: "Invalid userId in token" });
     }
 
-    // ✅ TENANT SCOPED: Find student with both userId AND schoolId
+    // ? TENANT SCOPED: Find student with both userId AND schoolId
     const student = await db.collection("students").findOne(activeStudentFilter({
       userId: userObjectId,
       schoolId: schoolObjectId,
@@ -1707,7 +2709,7 @@ app.get("/api/student/dashboard", requireAuth, requireRole("STUDENT"), requireTe
 
     const studentId = student._id;
 
-    // ✅ TENANT SCOPED: Only SUBMITTED attendance from this school
+    // ? TENANT SCOPED: Only SUBMITTED attendance from this school
     const attendance = await db
       .collection("attendance")
       .find({
@@ -1718,7 +2720,7 @@ app.get("/api/student/dashboard", requireAuth, requireRole("STUDENT"), requireTe
       .sort({ date: -1 })
       .toArray();
 
-    // ✅ TENANT SCOPED: Only marks from this school
+    // ? TENANT SCOPED: Only marks from this school
     const marks = await db
       .collection("marks")
       .find({
@@ -1728,7 +2730,7 @@ app.get("/api/student/dashboard", requireAuth, requireRole("STUDENT"), requireTe
       .sort({ createdAt: -1 })
       .toArray();
 
-    console.log("✅ STUDENT DASHBOARD - schoolId:", schoolObjectId, "marks:", marks.length, "attendance:", attendance.length);
+    console.log("? STUDENT DASHBOARD - schoolId:", schoolObjectId, "marks:", marks.length, "attendance:", attendance.length);
     // find the assigned teacher for the student's class+section (if any)
     let teacher = null;
     try {
@@ -1762,7 +2764,7 @@ app.get("/api/student/dashboard", requireAuth, requireRole("STUDENT"), requireTe
     }
     res.json({ student, attendance, marks, teacher, mustChangePassword });
   } catch (err) {
-    console.error("❌ STUDENT DASHBOARD ERROR:", err);
+    console.error("? STUDENT DASHBOARD ERROR:", err);
     res.status(500).json({ error: "Failed to load dashboard" });
   }
 });
@@ -1775,6 +2777,9 @@ app.get("/api/student/dashboard-summary", requireAuth, requireRole("STUDENT"), r
     const userObjectId = safeObjectId(req.user?.userId);
     const schoolObjectId = req.user.schoolIdObj;
     if (!userObjectId) return res.status(400).json({ error: "Invalid userId in token" });
+    const cacheKey = buildCacheKey("student-dashboard-summary", schoolObjectId, { userId: String(userObjectId) });
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
 
     const student = await db.collection("students").findOne(activeStudentFilter({
       userId: userObjectId,
@@ -1796,15 +2801,17 @@ app.get("/api/student/dashboard-summary", requireAuth, requireRole("STUDENT"), r
       }),
     ]);
 
-    return res.json({
+    const response = {
       className: student.class || "",
       section: student.section || "",
       attendanceCount,
       marksCount,
       unreadNotifications,
-    });
+    };
+    setCache(cacheKey, response);
+    return res.json(response);
   } catch (err) {
-    console.error("❌ STUDENT DASHBOARD SUMMARY ERROR:", err);
+    console.error("? STUDENT DASHBOARD SUMMARY ERROR:", err);
     return res.status(500).json({ error: "Failed to load dashboard summary" });
   }
 });
@@ -1822,7 +2829,7 @@ app.get("/api/student/attendance", requireAuth, requireRole("STUDENT"), requireT
       return res.status(400).json({ error: "Invalid userId in token" });
     }
 
-    // ✅ TENANT SCOPED: Find student
+    // ? TENANT SCOPED: Find student
     const student = await db.collection("students").findOne(activeStudentFilter({
       userId: userObjectId,
       schoolId: schoolObjectId,
@@ -1831,7 +2838,7 @@ app.get("/api/student/attendance", requireAuth, requireRole("STUDENT"), requireT
 
     const studentId = student._id;
 
-    // ✅ TENANT SCOPED: Only SUBMITTED attendance from this school
+    // ? TENANT SCOPED: Only SUBMITTED attendance from this school
     const query = {
       schoolId: schoolObjectId,
       submissionStatus: "SUBMITTED",
@@ -1841,7 +2848,7 @@ app.get("/api/student/attendance", requireAuth, requireRole("STUDENT"), requireT
       ],
     };
 
-    console.log("✅ STUDENT ATTENDANCE QUERY - schoolId:", schoolObjectId, "studentId:", studentId);
+    console.log("? STUDENT ATTENDANCE QUERY - schoolId:", schoolObjectId, "studentId:", studentId);
 
     const cursor = db
       .collection("attendance")
@@ -1851,7 +2858,7 @@ app.get("/api/student/attendance", requireAuth, requireRole("STUDENT"), requireT
     const records = await (usePagination ? cursor.skip(skip).limit(limit) : cursor).toArray();
     const totalCount = usePagination ? await db.collection("attendance").countDocuments(query) : records.length;
 
-    console.log("✅ ATTENDANCE RECORDS:", records.length);
+    console.log("? ATTENDANCE RECORDS:", records.length);
     if (usePagination) {
       return res.json({
         data: records,
@@ -1862,7 +2869,7 @@ app.get("/api/student/attendance", requireAuth, requireRole("STUDENT"), requireT
     }
     res.json(records);
   } catch (err) {
-    console.error("❌ STUDENT ATTENDANCE ERROR:", err);
+    console.error("? STUDENT ATTENDANCE ERROR:", err);
     res.status(500).json({ error: "Failed to fetch attendance" });
   }
 });
@@ -1881,7 +2888,7 @@ app.get("/api/student/marks", requireAuth, requireRole("STUDENT"), requireTenant
       return res.status(400).json({ error: "Invalid userId in token" });
     }
 
-    // ✅ TENANT SCOPED: Find student
+    // ? TENANT SCOPED: Find student
     const student = await db.collection("students").findOne(activeStudentFilter({
       userId: userObjectId,
       schoolId: schoolObjectId,
@@ -2029,7 +3036,7 @@ app.get("/api/student/marks", requireAuth, requireRole("STUDENT"), requireTenant
 
     return res.json({ exams, legacyMarks: [] });
   } catch (err) {
-    console.error("❌ STUDENT MARKS ERROR:", err);
+    console.error("? STUDENT MARKS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch marks" });
   }
 });
@@ -2050,7 +3057,7 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
       return res.status(400).json({ error: "Invalid userId in token" });
     }
 
-    // ✅ TENANT SCOPED: Find student
+    // ? TENANT SCOPED: Find student
     const student = await db.collection("students").findOne(activeStudentFilter({
       userId: userObjectId,
       schoolId,
@@ -2062,20 +3069,20 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
 
     const studentId = student._id;
 
-    // ✅ Fetch student's marks
+    // ? Fetch student's marks
     const marks = await db.collection("marks").find({
       studentId: studentId,
       schoolId,
     }).sort({ createdAt: -1 }).toArray();
 
-    // ✅ Fetch student's attendance
+    // ? Fetch student's attendance
     const attendance = await db.collection("attendance").find({
       studentId: studentId,
       schoolId,
       submissionStatus: "SUBMITTED",
     }).sort({ date: -1 }).toArray();
 
-    // ✅ COMPUTE ANALYTICS DATA
+    // ? COMPUTE ANALYTICS DATA
     
     // 1. Overall Attendance %
     const presentCount = attendance.filter(a => a.status?.toUpperCase() === "PRESENT").length;
@@ -2143,29 +3150,29 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
     const suggestions = [];
     
     if (attendancePercentage < 70) {
-      suggestions.push(`📌 Your attendance is only ${attendancePercentage}%. Try to attend more classes regularly.`);
+      suggestions.push(`?? Your attendance is only ${attendancePercentage}%. Try to attend more classes regularly.`);
     } else if (attendancePercentage >= 90) {
-      suggestions.push(`✨ Excellent attendance of ${attendancePercentage}%. Keep it up!`);
+      suggestions.push(`? Excellent attendance of ${attendancePercentage}%. Keep it up!`);
     }
 
     if (overallAverage >= 80) {
-      suggestions.push(`🏆 Great overall performance with an average of ${overallAverage}%. You're doing excellent!`);
+      suggestions.push(`?? Great overall performance with an average of ${overallAverage}%. You're doing excellent!`);
     } else if (overallAverage >= 60) {
-      suggestions.push(`📚 Your average is ${overallAverage}/100. Focus on weak subjects for better performance.`);
+      suggestions.push(`?? Your average is ${overallAverage}/100. Focus on weak subjects for better performance.`);
     } else if (overallAverage > 0) {
-      suggestions.push(`⚠️ Your overall marks are ${overallAverage}/100. Keep working hard and seek help when needed.`);
+      suggestions.push(`?? Your overall marks are ${overallAverage}/100. Keep working hard and seek help when needed.`);
     }
 
     if (weakestSubject) {
       if (weakestSubject.average < 40) {
-        suggestions.push(`🔴 You're struggling in ${weakestSubject.subject} (avg: ${weakestSubject.average}/100). Consider extra practice or guidance.`);
+        suggestions.push(`?? You're struggling in ${weakestSubject.subject} (avg: ${weakestSubject.average}/100). Consider extra practice or guidance.`);
       } else if (weakestSubject.average < 60) {
-        suggestions.push(`🟡 ${weakestSubject.subject} needs more attention (avg: ${weakestSubject.average}/100). More practice recommended.`);
+        suggestions.push(`?? ${weakestSubject.subject} needs more attention (avg: ${weakestSubject.average}/100). More practice recommended.`);
       }
     }
 
     if (bestSubject && bestSubject.average >= 80) {
-      suggestions.push(`⭐ Your strength is ${bestSubject.subject} (avg: ${bestSubject.average}/100). Great job!`);
+      suggestions.push(`? Your strength is ${bestSubject.subject} (avg: ${bestSubject.average}/100). Great job!`);
     }
 
     // 9. Prepare response data
@@ -2205,7 +3212,7 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
 
     res.json(responseData);
   } catch (err) {
-    console.error("❌ STUDENT ANALYTICS ERROR:", err);
+    console.error("? STUDENT ANALYTICS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch student analytics" });
   }
 });
@@ -2384,7 +3391,7 @@ app.post('/debug/backfill-student-emails', requireAuth, requireRole("DEVELOPER")
   }
 });
 /* ================================
-   TEACHER → GET STUDENTS
+   TEACHER ? GET STUDENTS
    ================================= */
 app.get(
   "/api/teacher/students",
@@ -2497,18 +3504,40 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
             const normalizedEmail = String(email || "").trim().toLowerCase();
 
             let user = await db.collection("users").findOne({ email: normalizedEmail });
+            if (user?.schoolId && String(user.schoolId) !== String(schoolId)) {
+              throw new Error("Email already belongs to a different school");
+            }
 
             if (!user) {
               const hash = await bcrypt.hash("student123", 10);
               const r = await db.collection("users").insertOne({
-                email,
+                email: normalizedEmail,
                 passwordHash: hash,
                 role: "STUDENT",
+                name: String(row.name || "").trim(),
+                phone: parentPhone,
                 schoolId: schoolId,
+                class: identity.class,
+                section: identity.section,
                 createdAt: new Date(),
               });
               user = { _id: r.insertedId };
               console.log("CREATED USER:", user._id);
+            } else {
+              await db.collection("users").updateOne(
+                { _id: user._id },
+                {
+                  $set: {
+                    schoolId,
+                    role: "STUDENT",
+                    name: String(row.name || "").trim(),
+                    phone: parentPhone,
+                    class: identity.class,
+                    section: identity.section,
+                    updatedAt: new Date(),
+                  },
+                }
+              );
             }
 
             const duplicate = await db.collection("students").findOne({
@@ -2529,6 +3558,7 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
                   userId: user._id,
                   email: email,
                   name: row.name,
+                  admissionNumber: identity.rollNo,
                   class: identity.class,
                   className: identity.class,
                   section: identity.section,
@@ -2629,8 +3659,12 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
             const email =
               row.email ||
               `${row.name.replace(/\s+/g, "").toLowerCase()}@school.com`;
+            const normalizedEmail = String(email || "").trim().toLowerCase();
 
-            let user = await db.collection("users").findOne({ email });
+            let user = await db.collection("users").findOne({ email: normalizedEmail });
+            if (user?.schoolId && String(user.schoolId) !== String(schoolId)) {
+              throw new Error("Email already belongs to a different school");
+            }
 
             if (!user) {
               const hash = await bcrypt.hash("teacher123", 10);
@@ -2639,12 +3673,31 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
                 email: normalizedEmail,
                 passwordHash: hash,
                 role: "TEACHER",
+                name: String(row.name || "").trim(),
+                phone: teacherPhone,
                 schoolId: schoolId,
+                class: classValue,
+                section: sectionValue,
                 createdAt: new Date(),
               });
 
               user = { _id: result.insertedId };
               console.log("CREATED USER:", user._id);
+            } else {
+              await db.collection("users").updateOne(
+                { _id: user._id },
+                {
+                  $set: {
+                    schoolId,
+                    role: "TEACHER",
+                    name: String(row.name || "").trim(),
+                    phone: teacherPhone,
+                    class: classValue,
+                    section: sectionValue,
+                    updatedAt: new Date(),
+                  },
+                }
+              );
             }
 
             await db.collection("teachers").updateOne(
@@ -2716,53 +3769,72 @@ app.get("/api/teacher/attendance", requireAuth, requireRole("TEACHER"), requireT
 
     const schoolId = req.user.schoolIdObj;
 
-    console.log("📖 [GET] Fetching attendance for DATE ONLY:", date, "class:", className, "section:", section);
+    console.log("?? [GET] Fetching attendance for DATE ONLY:", date, "class:", className, "section:", section);
 
-    // ✅ ONLY fetch records for this SPECIFIC DATE
+    const normalizedClassName = String(className || "").trim();
+    const normalizedSection = String(section || "").trim();
+    const classAsNumber = Number(normalizedClassName);
+    const classMatchValues = [normalizedClassName];
+    if (Number.isFinite(classAsNumber)) classMatchValues.push(classAsNumber);
+
+    // ? Fetch records for this specific date, compatible with both class/className schema styles.
     const query = {
       date: String(date),
-      class: String(className),
-      section: String(section),
+      section: normalizedSection,
+      $or: [
+        { class: { $in: classMatchValues } },
+        { className: { $in: classMatchValues } },
+      ],
       ...(schoolId ? { schoolId } : {}),
     };
 
     const records = await db.collection("attendance").find(query).toArray();
-    console.log("📖 [GET] Found", records.length, "records for date:", date);
+    console.log("?? [GET] Found", records.length, "records for date:", date);
 
-    // ✅ Get total class size
+    // ? Get total class size
     const totalStudents = await db.collection("students").countDocuments({
-      class: String(className),
-      section: String(section),
+      section: normalizedSection,
+      $or: [
+        { class: { $in: classMatchValues } },
+        { className: { $in: classMatchValues } },
+      ],
       ...(schoolId ? { schoolId } : {}),
       isDeleted: { $ne: true },
     });
 
-    console.log("📖 [GET] Total students in class:", totalStudents);
+    console.log("?? [GET] Total students in class:", totalStudents);
 
-    // ✅ Count by status from THIS DATE ONLY
-    const presentCount = records.filter(r => r.status === "PRESENT").length;
-    const absentCount = records.filter(r => r.status === "ABSENT").length;
-    const leaveCount = records.filter(r => r.status === "LEAVE").length;
+    // ? Count by status from THIS DATE ONLY
+    const presentCount = records.filter((r) => String(r.status || "").toUpperCase() === "PRESENT").length;
+    const absentCount = records.filter((r) => String(r.status || "").toUpperCase() === "ABSENT").length;
+    const leaveCount = records.filter((r) => String(r.status || "").toUpperCase() === "LEAVE").length;
 
-    console.log("📊 [GET] Date:", date, "| Present:", presentCount, "Absent:", absentCount, "Leave:", leaveCount, "Total students:", totalStudents);
+    console.log("?? [GET] Date:", date, "| Present:", presentCount, "Absent:", absentCount, "Leave:", leaveCount, "Total students:", totalStudents);
 
-    // ✅ Get ALL students in the class
-    const allClassStudents = await db.collection("students").find({
-      class: String(className),
-      section: String(section),
-      ...(schoolId ? { schoolId } : {}),
-      isDeleted: { $ne: true },
-    }).sort({ rollNo: 1 }).toArray();
+    // ? Get ALL students in the class
+    const allClassStudents = await db
+      .collection("students")
+      .find({
+        section: normalizedSection,
+        $or: [
+          { class: { $in: classMatchValues } },
+          { className: { $in: classMatchValues } },
+        ],
+        ...(schoolId ? { schoolId } : {}),
+        isDeleted: { $ne: true },
+      })
+      .sort({ rollNo: 1 })
+      .toArray();
 
-    // ✅ For EACH student in the class, calculate their overall attendance percentage (lifetime)
+    // ? For EACH student in the class, calculate their overall attendance percentage (lifetime)
     // This ensures all students show their percentage, even if they don't have a record for this date
     const enhancedRecords = [];
     for (const student of allClassStudents) {
-      const studentId = safeObjectId(student._id);  // ✅ Convert to ObjectId to match database storage
+      const studentId = safeObjectId(student._id);  // ? Convert to ObjectId to match database storage
       
       // Get ALL attendance records for this student (across all dates)
       const allStudentRecords = await db.collection("attendance").find({
-        studentId: studentId,  // ✅ Query with ObjectId, not string
+        studentId: studentId,  // ? Query with ObjectId, not string
         ...(schoolId ? { schoolId } : {}),
       }).toArray();
       
@@ -2774,33 +3846,33 @@ app.get("/api/teacher/attendance", requireAuth, requireRole("TEACHER"), requireT
       const dateRecord = records.find(r => String(r.studentId) === String(studentId));
       
       if (dateRecord) {
-        console.log("📊 [GET] Student", String(studentId).slice(0, 8) + "... is", dateRecord.status, "on", date, " | Lifetime:", overallPercentage + "%", `(${studentPresentCount}/${studentTotalRecords})`);
+        console.log("?? [GET] Student", String(studentId).slice(0, 8) + "... is", dateRecord.status, "on", date, " | Lifetime:", overallPercentage + "%", `(${studentPresentCount}/${studentTotalRecords})`);
         enhancedRecords.push({
           ...dateRecord,
-          overallPercentage,  // ✅ Each student's lifetime percentage
+          overallPercentage,  // ? Each student's lifetime percentage
         });
       } else {
         // Student has no record for this date - add with default PRESENT and their overall percentage
-        console.log("📊 [GET] Student", String(studentId).slice(0, 8) + "... has NO record on", date, " | Lifetime:", overallPercentage + "%", `(${studentPresentCount}/${studentTotalRecords})`);
+        console.log("?? [GET] Student", String(studentId).slice(0, 8) + "... has NO record on", date, " | Lifetime:", overallPercentage + "%", `(${studentPresentCount}/${studentTotalRecords})`);
         enhancedRecords.push({
           studentId: studentId,
           date: String(date),
           status: null,  // No status yet
-          class: String(className),
-          section: String(section),
-          overallPercentage,  // ✅ Each student's lifetime percentage
+          class: normalizedClassName,
+          section: normalizedSection,
+          overallPercentage,  // ? Each student's lifetime percentage
         });
       }
     }
 
-    // ✅ Check finalization status for this date
+    // ? Check finalization status for this date
     let isFinalized = false;
     if (records.length > 0) {
       const finalizedStates = [...new Set(records.map(r => r.isFinalized))];
       isFinalized = finalizedStates.includes(true);
     }
 
-    console.log("🔒 [GET] isFinalized:", isFinalized);
+    console.log("?? [GET] isFinalized:", isFinalized);
 
     return res.json({
       date: String(date),
@@ -2809,10 +3881,10 @@ app.get("/api/teacher/attendance", requireAuth, requireRole("TEACHER"), requireT
       absentCount,
       leaveCount,
       totalStudents,
-      records: enhancedRecords,  // ✅ Records now include overallPercentage for ALL students in class
+      records: enhancedRecords,  // ? Records now include overallPercentage for ALL students in class
     });
   } catch (err) {
-    console.error("❌ [GET] FETCH ATTENDANCE ERROR:", err);
+    console.error("? [GET] FETCH ATTENDANCE ERROR:", err);
     res.status(500).json({ error: "Failed to fetch attendance" });
   }
 });
@@ -2820,7 +3892,7 @@ app.get("/api/teacher/attendance", requireAuth, requireRole("TEACHER"), requireT
 /* ================================
    SAVE ATTENDANCE (DRAFT ONLY) - TEACHER
    ================================= */
-app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), requireTenantId, saveAttendanceValidator, validateRequest, async (req, res) => {
   try {
     const { date, className, section, records } = req.body;
 
@@ -2835,16 +3907,16 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
       return res.status(400).json({ error: "Invalid teacherId in token" });
     }
 
-    // ✅ VALIDATE: Teacher's class/section matches request
+    // ? VALIDATE: Teacher's class/section matches request
     if (req.user.class !== className || req.user.section !== section) {
-      console.error("❌ ATTENDANCE SAVE REJECTED: Teacher class/section mismatch");
+      console.error("? ATTENDANCE SAVE REJECTED: Teacher class/section mismatch");
       return res.status(403).json({ error: "You can only enter attendance for your own class/section" });
     }
 
-    console.log("✅ ATTENDANCE SAVE - schoolId:", schoolId, "class:", className, "section:", section, "date:", date);
-    console.log("📝 [SAVE] Processing", records.length, "student records");
+    console.log("? ATTENDANCE SAVE - schoolId:", schoolId, "class:", className, "section:", section, "date:", date);
+    console.log("?? [SAVE] Processing", records.length, "student records");
 
-    // 🔒 CRITICAL: Check if ANY record for this date is already finalized
+    // ?? CRITICAL: Check if ANY record for this date is already finalized
     const existingFinalized = await db.collection("attendance").findOne({
       schoolId,
       date: String(date),
@@ -2854,7 +3926,7 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
     });
 
     if (existingFinalized) {
-      console.warn("❌ [SAVE] BLOCKED - Attendance already finalized for", date);
+      console.warn("? [SAVE] BLOCKED - Attendance already finalized for", date);
       return res.status(403).json({
         error: "Cannot edit finalized attendance. This date is locked.",
       });
@@ -2863,11 +3935,11 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
     for (const r of records) {
       const studentId = safeObjectId(r.studentUserId || r.studentId);
       if (!studentId) {
-        console.warn("⚠️ [SAVE] Skipping record - invalid studentId:", r.studentUserId, r.studentId);
+        console.warn("?? [SAVE] Skipping record - invalid studentId:", r.studentUserId, r.studentId);
         continue;
       }
 
-      // ✅ TENANT & CLASS/SECTION SCOPED: Update filter
+      // ? TENANT & CLASS/SECTION SCOPED: Update filter
       const filter = {
         schoolId,
         studentId,
@@ -2878,7 +3950,7 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
 
       const update = {
         $set: {
-          schoolId, // ✅ TENANT SCOPED
+          schoolId, // ? TENANT SCOPED
           studentId,
           teacherId,
           class: String(className),
@@ -2891,13 +3963,13 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
         $setOnInsert: { createdAt: new Date() },
       };
 
-      console.log("📝 [SAVE] Upserting record for student:", studentId.toString().slice(0, 8) + "...", "status:", r.status);
+      console.log("?? [SAVE] Upserting record for student:", studentId.toString().slice(0, 8) + "...", "status:", r.status);
 
       const result = await db.collection("attendance").updateOne(filter, update, { upsert: true });
       console.log("   Result - matched:", result.matchedCount, "upserted:", result.upsertedCount);
     }
 
-    // ✅ After saving, recalculate and return the counts - ONLY for this date
+    // ? After saving, recalculate and return the counts - ONLY for this date
     const allRecordsAfterSave = await db.collection("attendance").find({
       schoolId,
       date: String(date),
@@ -2905,13 +3977,13 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
       section: String(section),
     }).toArray();
 
-    console.log("✅ [SAVE] After upsert - Found", allRecordsAfterSave.length, "records for recalculation");
+    console.log("? [SAVE] After upsert - Found", allRecordsAfterSave.length, "records for recalculation");
 
     const presentCount = allRecordsAfterSave.filter(r => r.status === "PRESENT").length;
     const absentCount = allRecordsAfterSave.filter(r => r.status === "ABSENT").length;
     const leaveCount = allRecordsAfterSave.filter(r => r.status === "LEAVE").length;
     
-    // ✅ Get total class size (not record count)
+    // ? Get total class size (not record count)
     const totalStudents = await db.collection("students").countDocuments({
       class: String(className),
       section: String(section),
@@ -2919,10 +3991,10 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
       isDeleted: { $ne: true },
     });
     
-    // ✅ Percentage = (present / total students in class) * 100
+    // ? Percentage = (present / total students in class) * 100
     const percentageForDate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
 
-    console.log("✅ ATTENDANCE DRAFT SAVED - records on this date:", allRecordsAfterSave.length, "total students in class:", totalStudents, "present:", presentCount, "absent:", absentCount, "leave:", leaveCount, "percentage:", percentageForDate + "%");
+    console.log("? ATTENDANCE DRAFT SAVED - records on this date:", allRecordsAfterSave.length, "total students in class:", totalStudents, "present:", presentCount, "absent:", absentCount, "leave:", leaveCount, "percentage:", percentageForDate + "%");
     res.json({ 
       success: true, 
       message: "Draft saved", 
@@ -2934,7 +4006,7 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
       totalStudents,
     });
   } catch (err) {
-    console.error("❌ SAVE ATTENDANCE ERROR:", err);
+    console.error("? SAVE ATTENDANCE ERROR:", err);
     res.status(500).json({ error: "Attendance save failed" });
   }
 });
@@ -2951,15 +4023,15 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
 
     const schoolId = req.user.schoolIdObj; // From requireTenantId middleware
 
-    // ✅ VALIDATE: Teacher's class/section matches request
+    // ? VALIDATE: Teacher's class/section matches request
     if (req.user.class !== className || req.user.section !== section) {
-      console.error("❌ ATTENDANCE SUBMIT REJECTED: Teacher class/section mismatch");
+      console.error("? ATTENDANCE SUBMIT REJECTED: Teacher class/section mismatch");
       return res.status(403).json({ error: "You can only submit attendance for your own class/section" });
     }
 
-    console.log("✅ ATTENDANCE SUBMIT - schoolId:", schoolId, "class:", className, "section:", section, "date:", date);
+    console.log("? ATTENDANCE SUBMIT - schoolId:", schoolId, "class:", className, "section:", section, "date:", date);
 
-    // 🔒 Check if already finalized
+    // ?? Check if already finalized
     const alreadyFinalized = await db.collection("attendance").findOne({
       schoolId,
       date: String(date),
@@ -2969,13 +4041,13 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
     });
 
     if (alreadyFinalized) {
-      console.warn("⚠️ [SUBMIT] Already finalized for:", date);
+      console.warn("?? [SUBMIT] Already finalized for:", date);
       return res.status(403).json({
         error: "This attendance is already finalized and cannot be modified",
       });
     }
 
-    // ✅ TENANT & CLASS/SECTION SCOPED: Only find DRAFT records from this school/class/section
+    // ? TENANT & CLASS/SECTION SCOPED: Only find DRAFT records from this school/class/section
     const filter = {
       schoolId,
       date: String(date),
@@ -2984,7 +4056,7 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
       submissionStatus: "DRAFT",
     };
 
-    console.log("✅ [SUBMIT] Looking for DRAFT records with filter:", JSON.stringify(filter));
+    console.log("? [SUBMIT] Looking for DRAFT records with filter:", JSON.stringify(filter));
 
     const result = await db.collection("attendance").updateMany(
       filter,
@@ -2998,10 +4070,10 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
       }
     );
 
-    console.log("✅ [SUBMIT] UpdateMany result - matched:", result.matchedCount, "modified:", result.modifiedCount);
+    console.log("? [SUBMIT] UpdateMany result - matched:", result.matchedCount, "modified:", result.modifiedCount);
 
     if (result.matchedCount === 0) {
-      console.warn("⚠️ [SUBMIT] No DRAFT records found. Checking what exists...");
+      console.warn("?? [SUBMIT] No DRAFT records found. Checking what exists...");
       const allRecords = await db.collection("attendance").find({
         schoolId,
         date: String(date),
@@ -3020,7 +4092,7 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
       });
     }
 
-    // ✅ After finalization, recalculate and return the counts - ONLY for this date
+    // ? After finalization, recalculate and return the counts - ONLY for this date
     const finalizedRecords = await db.collection("attendance").find({
       schoolId,
       date: String(date),
@@ -3032,7 +4104,7 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
     const absentCount = finalizedRecords.filter(r => r.status === "ABSENT").length;
     const leaveCount = finalizedRecords.filter(r => r.status === "LEAVE").length;
     
-    // ✅ Get total class size (not record count)
+    // ? Get total class size (not record count)
     const totalStudents = await db.collection("students").countDocuments({
       class: String(className),
       section: String(section),
@@ -3040,10 +4112,21 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
       isDeleted: { $ne: true },
     });
     
-    // ✅ Percentage = (present / total students in class) * 100
+    // ? Percentage = (present / total students in class) * 100
     const percentageForDate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
 
-    console.log("✅ ATTENDANCE SUBMITTED - records finalized:", result.modifiedCount, "total students in class:", totalStudents, "present:", presentCount, "absent:", absentCount, "leave:", leaveCount, "percentage:", percentageForDate + "%");
+    console.log("? ATTENDANCE SUBMITTED - records finalized:", result.modifiedCount, "total students in class:", totalStudents, "present:", presentCount, "absent:", absentCount, "leave:", leaveCount, "percentage:", percentageForDate + "%");
+
+    logAuditEvent({
+      schoolId,
+      userId: req.user.userId,
+      userRole: req.user.role,
+      action: "UPDATE",
+      entityType: "attendance",
+      entityId: `${className}-${section}-${date}`,
+      description: `Teacher submitted attendance for ${className}-${section} on ${date} (present: ${presentCount}, absent: ${absentCount}, leave: ${leaveCount})`,
+    });
+
     res.json({
       success: true, 
       message: "Attendance submitted",
@@ -3055,7 +4138,7 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
       totalStudents,
     });
   } catch (err) {
-    console.error("❌ SUBMIT ATTENDANCE ERROR:", err);
+    console.error("? SUBMIT ATTENDANCE ERROR:", err);
     res.status(500).json({ error: "Attendance submit failed" });
   }
 });
@@ -3064,13 +4147,13 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
    ================================= */
 app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
   try {
-    console.log("✅ TEACHER TOKEN USER:", req.user);
+    console.log("? TEACHER TOKEN USER:", req.user);
 
     const className = String(req.user.class);
     const section = String(req.user.section);
     const schoolId = req.user.schoolIdObj; // From requireTenantId middleware
 
-    // ✅ TENANT & CLASS/SECTION SCOPED: Only students from same school, class, section
+    // ? TENANT & CLASS/SECTION SCOPED: Only students from same school, class, section
     const query = {
       class: className,
       section: section,
@@ -3078,7 +4161,7 @@ app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTen
       isDeleted: { $ne: true },
     };
 
-    console.log("✅ STUDENT QUERY - schoolId:", schoolId, "class:", className, "section:", section);
+    console.log("? STUDENT QUERY - schoolId:", schoolId, "class:", className, "section:", section);
 
     const studentsCursor = db
       .collection("students")
@@ -3100,7 +4183,7 @@ app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTen
     const students = await (usePagination ? studentsCursor.skip(skip).limit(limit) : studentsCursor).toArray();
     const totalCount = usePagination ? await db.collection("students").countDocuments(query) : students.length;
 
-    // ✅ Fetch emails from users collection
+    // ? Fetch emails from users collection
     const studentsWithEmails = await Promise.all(
       students.map(async (student) => {
         const user = await db.collection("users").findOne({ _id: student.userId });
@@ -3108,13 +4191,13 @@ app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTen
           ...student,
           email: user?.email || "",
         };
-        console.log("📧 STUDENT WITH EMAIL:", { name: student.name, email: studentData.email });
+        console.log("?? STUDENT WITH EMAIL:", { name: student.name, email: studentData.email });
         return studentData;
       })
     );
 
-    console.log("✅ FOUND STUDENTS:", studentsWithEmails.length);
-    console.log("📋 SAMPLE STUDENT:", studentsWithEmails[0]);
+    console.log("? FOUND STUDENTS:", studentsWithEmails.length);
+    console.log("?? SAMPLE STUDENT:", studentsWithEmails[0]);
     if (usePagination) {
       return res.json({
         data: studentsWithEmails,
@@ -3125,14 +4208,14 @@ app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTen
     }
     res.json(studentsWithEmails);
   } catch (err) {
-    console.error("❌ TEACHER STUDENTS ERROR:", err);
+    console.error("? TEACHER STUDENTS ERROR:", err);
     res.status(500).json({ error: "Failed to load students" });
   }
 });
 /* ================================
    SAVE MARKS (TEACHER)
    ================================= */
-app.post("/api/teacher/marks/save", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
+app.post("/api/teacher/marks/save", requireAuth, requireRole("TEACHER"), requireTenantId, saveMarksValidator, validateRequest, async (req, res) => {
   try {
     const { subject, exam, className, section, records } = req.body;
 
@@ -3192,6 +4275,16 @@ app.post("/api/teacher/marks/save", requireAuth, requireRole("TEACHER"), require
       await db.collection("marks").insertMany(docs);
       console.log("MARKS INSERTED:", docs.length);
     }
+
+    logAuditEvent({
+      schoolId,
+      userId: req.user.userId,
+      userRole: req.user.role,
+      action: "UPDATE",
+      entityType: "marks",
+      entityId: `${className}-${section}-${subject}-${exam}`,
+      description: `Teacher updated marks for ${docs.length} students in ${className}-${section} (${subject}, ${exam})`,
+    });
 
     res.json({ success: true, count: docs.length });
   } catch (err) {
@@ -3698,7 +4791,7 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
       return res.status(400).json({ error: "Invalid studentId" });
     }
 
-    // ✅ Fetch student details
+    // ? Fetch student details
     const student = await db.collection("students").findOne(activeStudentFilter({
       _id: studentIdObj,
       schoolId,
@@ -3708,20 +4801,20 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
       return res.status(404).json({ error: "Student not found" });
     }
 
-    // ✅ Fetch student's marks
+    // ? Fetch student's marks
     const marks = await db.collection("marks").find({
       studentId: studentIdObj,
       schoolId,
     }).sort({ createdAt: -1 }).toArray();
 
-    // ✅ Fetch student's attendance
+    // ? Fetch student's attendance
     const attendance = await db.collection("attendance").find({
       studentId: studentIdObj,
       schoolId,
       submissionStatus: "SUBMITTED",
     }).sort({ date: -1 }).toArray();
 
-    // ✅ COMPUTE ANALYTICS DATA
+    // ? COMPUTE ANALYTICS DATA
     
     // 1. Overall Attendance %
     const presentCount = attendance.filter(a => a.status?.toUpperCase() === "PRESENT").length;
@@ -3789,29 +4882,29 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
     const suggestions = [];
     
     if (attendancePercentage < 70) {
-      suggestions.push(`📌 Attendance Alert: ${student.name} has attended only ${attendancePercentage}% of classes. Encourage regular attendance.`);
+      suggestions.push(`?? Attendance Alert: ${student.name} has attended only ${attendancePercentage}% of classes. Encourage regular attendance.`);
     } else if (attendancePercentage >= 90) {
-      suggestions.push(`✨ Excellent attendance of ${attendancePercentage}%. Keep it up!`);
+      suggestions.push(`? Excellent attendance of ${attendancePercentage}%. Keep it up!`);
     }
 
     if (overallAverage >= 80) {
-      suggestions.push(`🏆 Strong overall performance with an average of ${overallAverage}%. ${student.name} is doing excellent!`);
+      suggestions.push(`?? Strong overall performance with an average of ${overallAverage}%. ${student.name} is doing excellent!`);
     } else if (overallAverage >= 60) {
-      suggestions.push(`📚 Average performance of ${overallAverage}/100. Focus on weak subjects for improvement.`);
+      suggestions.push(`?? Average performance of ${overallAverage}/100. Focus on weak subjects for improvement.`);
     } else if (overallAverage > 0) {
-      suggestions.push(`⚠️ Overall marks ${overallAverage}/100. Needs immediate academic support.`);
+      suggestions.push(`?? Overall marks ${overallAverage}/100. Needs immediate academic support.`);
     }
 
     if (weakestSubject) {
       if (weakestSubject.average < 40) {
-        suggestions.push(`🔴 ${student.name} is struggling in ${weakestSubject.subject} (avg: ${weakestSubject.average}/100). Consider extra coaching.`);
+        suggestions.push(`?? ${student.name} is struggling in ${weakestSubject.subject} (avg: ${weakestSubject.average}/100). Consider extra coaching.`);
       } else if (weakestSubject.average < 60) {
-        suggestions.push(`🟡 ${weakestSubject.subject} needs attention (avg: ${weakestSubject.average}/100). More practice recommended.`);
+        suggestions.push(`?? ${weakestSubject.subject} needs attention (avg: ${weakestSubject.average}/100). More practice recommended.`);
       }
     }
 
     if (bestSubject && bestSubject.average >= 80) {
-      suggestions.push(`⭐ Strength: ${bestSubject.subject} (avg: ${bestSubject.average}/100) is a strong subject.`);
+      suggestions.push(`? Strength: ${bestSubject.subject} (avg: ${bestSubject.average}/100) is a strong subject.`);
     }
 
     // 9. Prepare response data
@@ -3849,7 +4942,7 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
 
     res.json(responseData);
   } catch (err) {
-    console.error("❌ STUDENT ANALYTICS ERROR:", err);
+    console.error("? STUDENT ANALYTICS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch student analytics" });
   }
 });
@@ -3857,7 +4950,7 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
 /* ================================
    ADMIN: MANUAL CREATE STUDENT & TEACHER
    ================================= */
-app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTenantId, createStudentValidator, validateRequest, async (req, res) => {
   try {
     const { name, email, rollNo, className, section, password } = req.body;
     const { parentName, parentPhone } = extractParentContact(req.body);
@@ -3927,6 +5020,16 @@ app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTen
       throw insertError;
     }
 
+    logAuditEvent({
+      schoolId,
+      userId: req.user.userId,
+      userRole: req.user.role,
+      action: "CREATE",
+      entityType: "student",
+      entityId: userId,
+      description: `Admin added student ${name} (${identity.class}-${identity.section}, roll ${identity.rollNo})`,
+    });
+
     res.json({ success: true, userId: String(userId), password: pwd });
   } catch (err) {
     if (isMongoDuplicateKeyError(err)) {
@@ -3937,7 +5040,7 @@ app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTen
   }
 });
 
-app.post("/api/admin/add-teacher", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+app.post("/api/admin/add-teacher", requireAuth, requireRole("ADMIN"), requireTenantId, createTeacherValidator, validateRequest, async (req, res) => {
   try {
     const { name, email, className, section, password, subject } = req.body;
     const teacherPhone = extractTeacherPhone(req.body);
@@ -4000,6 +5103,8 @@ app.post(
   requireAuth,
   requireRole("ADMIN"),
   requireTenantId,
+  createSubjectValidator,
+  validateRequest,
   async (req, res) => {
     try {
       const rawName = req.body?.name ?? req.body?.subjectName;
@@ -4197,6 +5302,7 @@ app.get(
   async (req, res) => {
     try {
       const schoolId = req.user.schoolIdObj;
+      const schoolScope = { $or: buildSchoolScopeOr(schoolId) };
       const type = String(req.query.type || "").trim().toLowerCase();
       const { page, limit, skip } = getPagination(req.query, { limit: 20 });
       const search = String(req.query.search || "").trim();
@@ -4204,13 +5310,14 @@ app.get(
       const section = String(req.query.section || "").trim();
       const searchRegex = search ? new RegExp(escapeRegex(search), "i") : null;
 
-      const studentsQuery = activeStudentFilter({ schoolId });
-      const teachersQuery = activeTeacherFilter({ schoolId });
+      const studentAnd = [schoolScope];
+      const teacherAnd = [schoolScope];
 
       if (type === "students") {
-        if (searchRegex) studentsQuery.$or = [{ name: searchRegex }, { email: searchRegex }];
-        if (className) studentsQuery.$and = [{ $or: [{ class: className }, { className }] }];
-        if (section) studentsQuery.section = section;
+        if (searchRegex) studentAnd.push({ $or: [{ name: searchRegex }, { email: searchRegex }] });
+        if (className) studentAnd.push({ $or: [{ class: className }, { className }] });
+        if (section) studentAnd.push({ section });
+        const studentsQuery = activeStudentFilter({ $and: studentAnd });
         const [data, totalCount] = await Promise.all([
           db
             .collection("students")
@@ -4231,11 +5338,10 @@ app.get(
       }
 
       if (type === "teachers") {
-        if (searchRegex) {
-          teachersQuery.$or = [{ name: searchRegex }, { email: searchRegex }];
-        }
-        if (className) teachersQuery.class = className;
-        if (section) teachersQuery.section = section;
+        if (searchRegex) teacherAnd.push({ $or: [{ name: searchRegex }, { email: searchRegex }] });
+        if (className) teacherAnd.push({ $or: [{ class: className }, { className }] });
+        if (section) teacherAnd.push({ section });
+        const teachersQuery = activeTeacherFilter({ $and: teacherAnd });
         const [data, totalCount] = await Promise.all([
           db
             .collection("teachers")
@@ -4255,6 +5361,8 @@ app.get(
         });
       }
 
+      const studentsQuery = activeStudentFilter({ $and: studentAnd });
+      const teachersQuery = activeTeacherFilter({ $and: teacherAnd });
       const students = await db
         .collection("students")
         .find(studentsQuery)
@@ -4272,6 +5380,102 @@ app.get(
     } catch (err) {
       console.error("ADMIN LIST USERS ERROR:", err);
       res.status(500).json({ error: "Failed to list users" });
+    }
+  }
+);
+
+/* ================================
+   ADMIN: LIST STUDENTS (DEDICATED)
+   ================================= */
+app.get(
+  "/api/admin/students",
+  requireAuth,
+  requireRole("ADMIN"),
+  requireTenantId,
+  async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const schoolIdToken = String(req.user?.schoolId || "").trim();
+      const schoolIdCandidates = [schoolId];
+      if (schoolIdToken) schoolIdCandidates.push(schoolIdToken);
+      const schoolDoc = await db.collection("schools").findOne(
+        { _id: schoolId },
+        { projection: { name: 1 } }
+      );
+      const schoolName = String(schoolDoc?.name || "").trim();
+      const schoolNameCandidates = schoolName
+        ? [schoolName, schoolName.toLowerCase(), schoolName.toUpperCase()]
+        : [];
+      const { page, limit, skip } = getPagination(req.query, { limit: 25 });
+      const search = String(req.query.search || "").trim();
+      const className = String(req.query.className || "").trim();
+      const section = String(req.query.section || "").trim();
+      const searchRegex = search ? new RegExp(escapeRegex(search), "i") : null;
+
+      const schoolScope = [
+        { schoolId: { $in: schoolIdCandidates } },
+        { school: { $in: schoolIdCandidates } },
+        { school_id: { $in: schoolIdCandidates } },
+      ];
+      if (schoolNameCandidates.length) {
+        schoolScope.push({ school: { $in: schoolNameCandidates } });
+        schoolScope.push({ schoolName: { $in: schoolNameCandidates } });
+      }
+      const queryAnd = [{ $or: schoolScope }];
+      if (searchRegex) {
+        queryAnd.push({
+          $or: [
+            { name: searchRegex },
+            { email: searchRegex },
+            { rollNo: searchRegex },
+            { admissionNumber: searchRegex },
+          ],
+        });
+      }
+      if (className) queryAnd.push({ $or: [{ class: className }, { className }] });
+      if (section) queryAnd.push({ section });
+
+      const studentsQuery = activeStudentFilter({ $and: queryAnd });
+
+      const [students, totalCount] = await Promise.all([
+        db
+          .collection("students")
+          .find(studentsQuery)
+          .project({
+            name: 1,
+            _id: 1,
+            class: 1,
+            className: 1,
+            section: 1,
+            rollNo: 1,
+            admissionNumber: 1,
+            parentName: 1,
+            parentPhone: 1,
+            phone: 1,
+            email: 1,
+            assignedTeacher: 1,
+            schoolId: 1,
+          })
+          .sort({ class: 1, section: 1, rollNo: 1, name: 1 })
+          .skip(skip)
+          .limit(limit)
+          .toArray(),
+        db.collection("students").countDocuments(studentsQuery),
+      ]);
+
+      console.log("ADMIN /students query matched:", totalCount, "records", "source=students");
+      return res.json({
+        success: true,
+        students,
+        total: students.length,
+        source: "students",
+        page,
+        totalPages: Math.max(1, Math.ceil(totalCount / limit)),
+        totalCount,
+      });
+    } catch (err) {
+      console.error("ADMIN LIST STUDENTS ERROR:", err);
+      return res.status(500).json({ success: false, error: "Failed to list students" });
     }
   }
 );
@@ -4325,7 +5529,7 @@ app.post(
 
       return res.json({ affectedCount: operation.modifiedCount, failed });
     } catch (err) {
-      console.error("❌ BULK DELETE TEACHERS ERROR:", err);
+      console.error("? BULK DELETE TEACHERS ERROR:", err);
       return res.status(500).json({ error: "Failed to bulk delete teachers" });
     }
   }
@@ -4423,7 +5627,7 @@ app.post(
 
       return res.json({ affectedCount: restoredIds.length, failed, warnings });
     } catch (err) {
-      console.error("❌ BULK RESTORE TEACHERS ERROR:", err);
+      console.error("? BULK RESTORE TEACHERS ERROR:", err);
       return res.status(500).json({ error: "Failed to bulk restore teachers" });
     }
   }
@@ -4532,7 +5736,7 @@ app.post(
 
       return res.json({ affectedCount: updateResult.modifiedCount, failed });
     } catch (err) {
-      console.error("❌ BULK UPDATE TEACHERS ERROR:", err);
+      console.error("? BULK UPDATE TEACHERS ERROR:", err);
       return res.status(500).json({ error: "Failed to bulk update teachers" });
     }
   }
@@ -4634,7 +5838,7 @@ app.post(
 
       return res.json({ affectedCount: parsedSnapshots.length - failed.length, failed, warnings });
     } catch (err) {
-      console.error("❌ BULK REVERT TEACHERS ERROR:", err);
+      console.error("? BULK REVERT TEACHERS ERROR:", err);
       return res.status(500).json({ error: "Failed to revert teachers" });
     }
   }
@@ -4683,10 +5887,10 @@ app.delete(
         details: { email: teacher.email, class: teacher.class, section: teacher.section },
       });
 
-      console.log("✅ TEACHER SOFT-DELETED:", teacher.name, "ID:", teacherId);
+      console.log("? TEACHER SOFT-DELETED:", teacher.name, "ID:", teacherId);
       res.json({ success: true, message: `Teacher ${teacher.name} deleted` });
     } catch (err) {
-      console.error("❌ DELETE TEACHER ERROR:", err);
+      console.error("? DELETE TEACHER ERROR:", err);
       res.status(500).json({ error: "Failed to delete teacher" });
     }
   }
@@ -4757,7 +5961,7 @@ app.post(
         failed,
       });
     } catch (err) {
-      console.error("❌ BULK DELETE STUDENTS ERROR:", err);
+      console.error("? BULK DELETE STUDENTS ERROR:", err);
       return res.status(500).json({ error: "Failed to bulk delete students" });
     }
   }
@@ -4894,7 +6098,7 @@ app.post(
         warnings,
       });
     } catch (err) {
-      console.error("❌ BULK RESTORE STUDENTS ERROR:", err);
+      console.error("? BULK RESTORE STUDENTS ERROR:", err);
       return res.status(500).json({ error: "Failed to bulk restore students" });
     }
   }
@@ -5182,7 +6386,7 @@ app.post(
         warnings,
       });
     } catch (err) {
-      console.error("❌ BULK REVERT STUDENTS ERROR:", err);
+      console.error("? BULK REVERT STUDENTS ERROR:", err);
       return res.status(500).json({ error: "Failed to revert students" });
     }
   }
@@ -5451,16 +6655,28 @@ const teacherClassAnalyticsHandler = async (req, res) => {
       .limit(800)
       .toArray();
 
+    const normalizedClassName = String(className || "").trim();
+    const classAsNumber = Number(normalizedClassName);
+    const classMatchValues = [normalizedClassName];
+    if (Number.isFinite(classAsNumber)) classMatchValues.push(classAsNumber);
+
     const attendance = validAttendanceKeys.length
       ? await db.collection("attendance")
           .find({
             schoolId,
-            class: className,
             section,
-            submissionStatus: "SUBMITTED",
             $or: [
-              { studentId: { $in: validAttendanceKeys } },
-              { studentUserId: { $in: validAttendanceKeys } },
+              { class: { $in: classMatchValues } },
+              { className: { $in: classMatchValues } },
+            ],
+            submissionStatus: { $ne: "DELETED" },
+            $and: [
+              {
+                $or: [
+                  { studentId: { $in: validAttendanceKeys } },
+                  { studentUserId: { $in: validAttendanceKeys } },
+                ],
+              },
             ],
           })
           .sort({ date: -1, createdAt: -1 })
@@ -5851,7 +7067,7 @@ app.delete(
         return res.status(400).json({ error: "Invalid studentId or schoolId" });
       }
 
-      // ✅ TENANT CHECK: Verify student belongs to this school
+      // ? TENANT CHECK: Verify student belongs to this school
     const student = await db.collection("students").findOne(activeStudentFilter({
       _id: studentId,
       schoolId,
@@ -5883,10 +7099,20 @@ app.delete(
         details: { email: student.email, class: student.class, section: student.section, rollNo: student.rollNo },
       });
 
-      console.log("✅ STUDENT SOFT-DELETED:", student.name, "ID:", studentId);
+      logAuditEvent({
+        schoolId,
+        userId: req.user.userId,
+        userRole: req.user.role,
+        action: "DELETE",
+        entityType: "student",
+        entityId: studentId,
+        description: `Admin deleted student ${student.name} (${student.class}-${student.section}, roll ${student.rollNo})`,
+      });
+
+      console.log("? STUDENT SOFT-DELETED:", student.name, "ID:", studentId);
       res.json({ success: true, message: `Student ${student.name} deleted` });
     } catch (err) {
-      console.error("❌ DELETE STUDENT ERROR:", err);
+      console.error("? DELETE STUDENT ERROR:", err);
       res.status(500).json({ error: "Failed to delete student" });
     }
   }
@@ -6021,8 +7247,8 @@ app.put(
       const { fromClass, fromSection, toClass, toSection } = req.body;
       const schoolId = req.user.schoolIdObj;
 
-      // 🔍 DEBUG LOGGING
-      console.log("📋 REASSIGN REQUEST DEBUG:");
+      // ?? DEBUG LOGGING
+      console.log("?? REASSIGN REQUEST DEBUG:");
       console.log("  - Params ID:", req.params.id);
       console.log("  - TeacherId (after safeObjectId):", teacherId);
       console.log("  - SchoolId:", schoolId);
@@ -6032,7 +7258,7 @@ app.put(
       console.log("  - req.user:", { userId: req.user.userId, schoolId: req.user.schoolId });
 
       if (!teacherId || !schoolId) {
-        console.error("❌ VALIDATION FAILED: teacherId or schoolId missing");
+        console.error("? VALIDATION FAILED: teacherId or schoolId missing");
         console.error("   teacherId:", teacherId, "schoolId:", schoolId);
         return res.status(400).json({ 
           error: "Invalid teacher ID or school ID",
@@ -6041,7 +7267,7 @@ app.put(
       }
 
       if (!toClass || !toSection) {
-        console.error("❌ VALIDATION FAILED: Missing toClass or toSection");
+        console.error("? VALIDATION FAILED: Missing toClass or toSection");
         console.error("   toClass:", toClass, "(type:", typeof toClass, ")");
         console.error("   toSection:", toSection, "(type:", typeof toSection, ")");
         return res.status(400).json({ 
@@ -6055,7 +7281,7 @@ app.put(
       const cleanToSection = String(toSection).trim();
 
       if (!cleanToClass || !cleanToSection) {
-        console.error("❌ VALIDATION FAILED: toClass or toSection are empty after trimming");
+        console.error("? VALIDATION FAILED: toClass or toSection are empty after trimming");
         console.error("   cleanToClass:", cleanToClass);
         console.error("   cleanToSection:", cleanToSection);
         return res.status(400).json({ 
@@ -6064,26 +7290,26 @@ app.put(
         });
       }
 
-      // ✅ TENANT CHECK: Verify teacher belongs to this school
+      // ? TENANT CHECK: Verify teacher belongs to this school
       const teacher = await db.collection("teachers").findOne(activeTeacherFilter({
         _id: teacherId,
         schoolId,
       }));
 
       if (!teacher) {
-        console.error("❌ TEACHER NOT FOUND: ", { teacherId, schoolId });
+        console.error("? TEACHER NOT FOUND: ", { teacherId, schoolId });
         return res.status(404).json({ 
           error: "Teacher not found",
           details: `Teacher with ID ${teacherId} not found in this school`
         });
       }
       
-      console.log("✅ Teacher found:", { name: teacher.name, id: teacherId });
+      console.log("? Teacher found:", { name: teacher.name, id: teacherId });
 
       const oldClass = teacher.class;
       const oldSection = teacher.section;
 
-      // ✅ Prevent duplicate assignment
+      // ? Prevent duplicate assignment
       if (oldClass === cleanToClass && oldSection === cleanToSection) {
         return res.status(400).json({
           error: "Teacher is already assigned to this class/section",
@@ -6131,14 +7357,14 @@ app.put(
         },
       });
 
-      console.log("✅ TEACHER REASSIGNED:", teacher.name, "From:", oldClass, oldSection, "To:", cleanToClass, cleanToSection);
+      console.log("? TEACHER REASSIGNED:", teacher.name, "From:", oldClass, oldSection, "To:", cleanToClass, cleanToSection);
       res.json({
         success: true,
         message: `Teacher ${teacher.name} reassigned`,
         teacher: result.value,
       });
     } catch (err) {
-      console.error("❌ TEACHER REASSIGNMENT ERROR:", err);
+      console.error("? TEACHER REASSIGNMENT ERROR:", err);
       res.status(500).json({ 
         error: "Failed to reassign teacher",
         details: err.message
@@ -6165,7 +7391,7 @@ app.put(
    Console logs show the new `schoolId` and created users' emails and roles.
    NOTE: This route is intentionally dev-only and will return 404 in production.
 */
-app.post("/dev/seed/demo-school", async (req, res) => {
+app.post("/dev/seed/demo-school", requireAuth, requireDeveloper, async (req, res) => {
   try {
     if (process.env.NODE_ENV === "production") {
       return res.status(404).json({ error: "Not found" });
@@ -6181,52 +7407,65 @@ app.post("/dev/seed/demo-school", async (req, res) => {
     const teachersCol = db.collection("teachers");
     const studentsCol = db.collection("students");
 
-    // Create or reuse school
-    let school = await schoolsCol.findOne({ name: "Demo Public School 2" });
-    if (!school) {
-      const r = await schoolsCol.insertOne({ name: "Demo Public School 2", createdAt: new Date() });
-      school = await schoolsCol.findOne({ _id: r.insertedId });
+    // Find-or-create school (idempotent)
+    const schoolResult = await schoolsCol.findOneAndUpdate(
+      { name: "Demo Public School 2", address: "Demo Public School 2 Campus" },
+      {
+        $setOnInsert: createSchoolDocument({
+          name: "Demo Public School 2",
+          address: "Demo Public School 2 Campus",
+        }),
+      },
+      { upsert: true, returnDocument: "after" }
+    );
+    const school = schoolResult.value;
+    if (!school?._id) return res.status(500).json({ error: "Failed to create or fetch demo school" });
+    if (schoolResult?.lastErrorObject?.updatedExisting === true) {
+      console.log("School already exists, returning existing record");
     }
     const schoolId = school._id; // ObjectId
 
-    // helper to make unique email if collision exists
-    const makeUniqueEmail = async (base) => {
-      let email = base.toLowerCase();
-      let i = 1;
-      while (await usersCol.findOne({ email })) {
-        const parts = base.split("@");
-        email = `${parts[0]}+${i}@${parts[1]}`.toLowerCase();
-        i += 1;
-      }
-      return email;
-    };
-
     // create admin
-    const adminEmail = await makeUniqueEmail("demo2_admin@example.com");
+    const adminEmail = "demo2_admin@example.com";
     const adminPwd = "admin123";
     const adminHash = await bcrypt.hash(adminPwd, 10);
-    const adminInsert = await usersCol.insertOne({
-      email: adminEmail,
-      passwordHash: adminHash,
-      role: "ADMIN",
-      schoolId: schoolId,
-      createdAt: new Date(),
-    });
+    await usersCol.updateOne(
+      { email: adminEmail, role: "ADMIN" },
+      {
+        $set: { schoolId, updatedAt: new Date() },
+        $setOnInsert: {
+          email: adminEmail,
+          passwordHash: adminHash,
+          role: "ADMIN",
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+    const adminDoc = await usersCol.findOne({ email: adminEmail, role: "ADMIN" }, { projection: { _id: 1 } });
 
     // create teacher
-    const teacherEmail = await makeUniqueEmail("demo2_teacher@example.com");
+    const teacherEmail = "demo2_teacher@example.com";
     const teacherPwd = "teacher123";
     const teacherHash = await bcrypt.hash(teacherPwd, 10);
-    const teacherInsert = await usersCol.insertOne({
-      email: teacherEmail,
-      passwordHash: teacherHash,
-      role: "TEACHER",
-      schoolId: schoolId,
-      createdAt: new Date(),
-    });
-    const teacherUserId = teacherInsert.insertedId;
+    await usersCol.updateOne(
+      { email: teacherEmail, role: "TEACHER" },
+      {
+        $set: { schoolId, class: "10", section: "A", updatedAt: new Date() },
+        $setOnInsert: {
+          email: teacherEmail,
+          passwordHash: teacherHash,
+          role: "TEACHER",
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+    const teacherDoc = await usersCol.findOne({ email: teacherEmail, role: "TEACHER" }, { projection: { _id: 1 } });
+    const teacherUserId = teacherDoc?._id;
+    if (!teacherUserId) return res.status(500).json({ error: "Failed to create or fetch teacher user" });
     await teachersCol.updateOne(
-      { userId: teacherUserId },
+      { userId: teacherUserId, schoolId },
       {
         $set: {
           userId: teacherUserId,
@@ -6235,8 +7474,9 @@ app.post("/dev/seed/demo-school", async (req, res) => {
           class: "10",
           section: "A",
           schoolId: schoolId,
-          createdAt: new Date(),
+          updatedAt: new Date(),
         },
+        $setOnInsert: { createdAt: new Date() },
       },
       { upsert: true }
     );
@@ -6244,30 +7484,41 @@ app.post("/dev/seed/demo-school", async (req, res) => {
     // create two students
     const studentResults = [];
     for (let i = 1; i <= 2; i++) {
-      const base = `demo2_student${i}@example.com`;
-      const email = await makeUniqueEmail(base);
+      const email = `demo2_student${i}@example.com`;
       const pwd = `student123`;
       const hash = await bcrypt.hash(pwd, 10);
-      const u = await usersCol.insertOne({
-        email,
-        passwordHash: hash,
-        role: "STUDENT",
-        schoolId: schoolId,
-        createdAt: new Date(),
-      });
-      const userId = u.insertedId;
+      await usersCol.updateOne(
+        { email, role: "STUDENT" },
+        {
+          $set: { schoolId, class: "10", section: "A", updatedAt: new Date() },
+          $setOnInsert: {
+            email,
+            passwordHash: hash,
+            role: "STUDENT",
+            createdAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+      const studentUser = await usersCol.findOne({ email, role: "STUDENT" }, { projection: { _id: 1 } });
+      const userId = studentUser?._id;
+      if (!userId) continue;
+      const admissionNumber = `${100 + i}`;
       await studentsCol.updateOne(
-        { userId },
+        { schoolId, admissionNumber },
         {
           $set: {
             userId,
             name: `Demo Student ${i} 2`,
+            email,
+            admissionNumber,
             class: "10",
             section: "A",
-            rollNo: `${100 + i}`,
-            schoolId: schoolId,
-            createdAt: new Date(),
+            rollNo: admissionNumber,
+            schoolId,
+            updatedAt: new Date(),
           },
+          $setOnInsert: { createdAt: new Date() },
         },
         { upsert: true }
       );
@@ -6287,7 +7538,7 @@ app.post("/dev/seed/demo-school", async (req, res) => {
       success: true,
       school: { _id: schoolId, name: school.name },
       created: {
-        admin: { email: adminEmail, password: adminPwd, role: "ADMIN" },
+        admin: { _id: adminDoc?._id ? String(adminDoc._id) : null, email: adminEmail, password: adminPwd, role: "ADMIN" },
         teacher: { email: teacherEmail, password: teacherPwd, role: "TEACHER" },
         students: studentResults.map((s, idx) => ({ email: s.email, password: "student123", role: s.role })),
       },
@@ -6319,7 +7570,7 @@ app.post("/dev/seed/demo-school", async (req, res) => {
   5) To test attendance/marks isolation:
      - Create attendance/marks entries (as teacher) for School A students and School B students separately.
      - The server stores `schoolId` on attendance/marks documents and filters queries by `schoolId`.
-     - Query student/marks endpoints for a teacher from School A — you should NOT see School B data.
+     - Query student/marks endpoints for a teacher from School A â€” you should NOT see School B data.
 
   The above demonstrates that the app enforces tenant isolation by including `schoolId` in
   document writes and query filters. If you want, I can also add automated tests that
@@ -6342,7 +7593,7 @@ app.post("/dev/seed/demo-school", async (req, res) => {
  * Usage: POST http://localhost:5000/dev/seed/realistic
  * With optional header: x-dev-key: <DEV_SEED_KEY>
  */
-app.post("/dev/seed/realistic", async (req, res) => {
+const handleDevRealisticSeed = async (req, res) => {
   try {
     // Only allow in development
     if (process.env.NODE_ENV === "production") {
@@ -6355,7 +7606,7 @@ app.post("/dev/seed/realistic", async (req, res) => {
       return res.status(403).json({ error: "Forbidden - invalid dev key" });
     }
 
-    console.log("\n🌱 Starting realistic data seed...\n");
+    console.log("\n?? Starting realistic data seed...\n");
 
     const schoolsCol = db.collection("schools");
     const usersCol = db.collection("users");
@@ -6428,18 +7679,33 @@ app.post("/dev/seed/realistic", async (req, res) => {
     const schools = [];
 
     for (const schoolName of schoolNames) {
-      const schoolDoc = {
-        name: schoolName,
-        address: `${schoolName} Campus, India`,
-        phone: `+91 ${Math.floor(Math.random() * 9000000000) + 1000000000}`,
-        email: `admin@${schoolName.toLowerCase().replace(/\s+/g, "")}edu.in`,
-        createdAt: new Date(),
-      };
-
-      const result = await schoolsCol.insertOne(schoolDoc);
-      schools.push({ _id: result.insertedId, name: schoolName });
-      schoolsCreated++;
-      console.log(`✅ School created: ${schoolName}`);
+      const normalizedName = normalizeSchoolName(schoolName);
+      const schoolAddress = `${normalizedName} Campus, India`;
+      const schoolResult = await schoolsCol.findOneAndUpdate(
+        { name: normalizedName, address: schoolAddress },
+        {
+          $setOnInsert: createSchoolDocument({
+            name: normalizedName,
+            address: schoolAddress,
+          }),
+          $set: {
+            nameKey: schoolNameKey(normalizedName),
+            updatedAt: new Date(),
+          },
+        },
+        { upsert: true, returnDocument: "after" }
+      );
+      const schoolDoc = schoolResult?.value;
+      if (!schoolDoc?._id) {
+        throw new Error(`Failed to create or fetch school: ${normalizedName}`);
+      }
+      schools.push({ _id: schoolDoc._id, name: normalizedName });
+      if (schoolResult?.lastErrorObject?.updatedExisting === true) {
+        console.log("School already exists, returning existing record");
+      } else {
+        schoolsCreated++;
+        console.log(`? School created: ${normalizedName}`);
+      }
     }
 
     // ============================================
@@ -6464,7 +7730,7 @@ app.post("/dev/seed/realistic", async (req, res) => {
         });
         adminsCreated++;
       }
-      console.log(`  👤 Admin: ${adminEmail}`);
+      console.log(`  ?? Admin: ${adminEmail}`);
     }
 
     // ============================================
@@ -6487,35 +7753,49 @@ app.post("/dev/seed/realistic", async (req, res) => {
           `${school.name.toLowerCase().replace(/\s+/g, "")}.edu.in`
         );
 
-        // Check if email already exists
-        const existing = await usersCol.findOne({ email: teacherEmail });
-        if (existing) continue;
-
         const teacherPassword = "Password@123";
         const teacherPasswordHash = await bcrypt.hash(teacherPassword, 10);
 
-        const userResult = await usersCol.insertOne({
-          email: teacherEmail,
-          passwordHash: teacherPasswordHash,
-          role: "TEACHER",
-          schoolId: school._id,
-          createdAt: new Date(),
-        });
+        await usersCol.updateOne(
+          { email: teacherEmail, role: "TEACHER" },
+          {
+            $set: {
+              schoolId: school._id,
+              updatedAt: new Date(),
+            },
+            $setOnInsert: {
+              email: teacherEmail,
+              passwordHash: teacherPasswordHash,
+              role: "TEACHER",
+              createdAt: new Date(),
+            },
+          },
+          { upsert: true }
+        );
+        const teacherUser = await usersCol.findOne({ email: teacherEmail, role: "TEACHER" }, { projection: { _id: 1 } });
+        if (!teacherUser?._id) continue;
 
         const classNum = String((t % 3) + 1);
         const section = sections[t % sections.length];
         const subject = getRandomElement(subjects);
 
-        await teachersCol.insertOne({
-          userId: userResult.insertedId,
-          name: teacherName.fullName,
-          email: teacherEmail,
-          subject: subject,
-          class: classNum,
-          section: section,
-          schoolId: school._id,
-          createdAt: new Date(),
-        });
+        await teachersCol.updateOne(
+          { userId: teacherUser._id, schoolId: school._id },
+          {
+            $set: {
+              userId: teacherUser._id,
+              name: teacherName.fullName,
+              email: teacherEmail,
+              subject,
+              class: classNum,
+              section,
+              schoolId: school._id,
+              updatedAt: new Date(),
+            },
+            $setOnInsert: { createdAt: new Date() },
+          },
+          { upsert: true }
+        );
 
         teachersCreated++;
         teachersBySchool[schoolIdx].push({
@@ -6524,7 +7804,7 @@ app.post("/dev/seed/realistic", async (req, res) => {
         });
       }
 
-      console.log(`  ✅ ${teachersPerSchool} teachers created for ${school.name}`);
+      console.log(`  ? ${teachersPerSchool} teachers created for ${school.name}`);
     }
 
     // ============================================
@@ -6537,70 +7817,70 @@ app.post("/dev/seed/realistic", async (req, res) => {
     for (let schoolIdx = 0; schoolIdx < schools.length; schoolIdx++) {
       const school = schools[schoolIdx];
       const teachers = teachersBySchool[schoolIdx];
-      let batch = [];
 
       for (let s = 0; s < studentsPerSchool; s++) {
         const studentName = getRandomName();
-        const studentEmail = generateEmail(
-          studentName.firstName,
-          studentName.lastName,
-          "gmail.com"
-        );
-
-        // Check if email exists
-        const existing = await usersCol.findOne({ email: studentEmail });
-        if (existing) continue;
-
-        const studentPassword = "Password@123";
-        const studentPasswordHash = await bcrypt.hash(studentPassword, 10);
-
-        const userResult = await usersCol.insertOne({
-          email: studentEmail,
-          passwordHash: studentPasswordHash,
-          role: "STUDENT",
-          createdAt: new Date(),
-        });
-
         // Distribute students across teachers
         const teacherIdx = Math.floor(s / studentsPerTeacher) % teachers.length;
         const teacher = teachers[teacherIdx];
         const rollNo = String((s % studentsPerTeacher) + 1);
+        const admissionNumber = `${teacher.class}-${teacher.section}-${rollNo}`;
+        const studentEmail = `seed_${schoolIdx + 1}_${teacher.class}${teacher.section}_${rollNo}@student.seed.local`;
+        const studentPassword = "Password@123";
+        const studentPasswordHash = await bcrypt.hash(studentPassword, 10);
+
+        await usersCol.updateOne(
+          { email: studentEmail, role: "STUDENT" },
+          {
+            $set: {
+              schoolId: school._id,
+              class: teacher.class,
+              section: teacher.section,
+              updatedAt: new Date(),
+            },
+            $setOnInsert: {
+              email: studentEmail,
+              passwordHash: studentPasswordHash,
+              role: "STUDENT",
+              createdAt: new Date(),
+            },
+          },
+          { upsert: true }
+        );
+        const studentUser = await usersCol.findOne({ email: studentEmail, role: "STUDENT" }, { projection: { _id: 1 } });
+        if (!studentUser?._id) continue;
 
         const generatedParentPhone = `+91 ${Math.floor(Math.random() * 9000000000) + 1000000000}`;
-        batch.push({
-          userId: userResult.insertedId,
-          name: studentName.fullName,
-          email: studentEmail,
-          class: teacher.class,
-          section: teacher.section,
-          rollNo: rollNo,
-          parentName: `Mr. ${studentName.lastName}`,
-          parentPhone: generatedParentPhone,
-          phone: generatedParentPhone,
-          schoolId: school._id,
-          createdAt: new Date(),
-        });
-
-        // Batch insert every 50
-        if (batch.length >= 50) {
-          await studentsCol.insertMany(batch);
-          studentsCreated += batch.length;
-          batch = [];
-        }
+        await studentsCol.updateOne(
+          { schoolId: school._id, class: teacher.class, section: teacher.section, rollNo },
+          {
+            $set: {
+              userId: studentUser._id,
+              name: studentName.fullName,
+              email: studentEmail,
+              admissionNumber,
+              class: teacher.class,
+              section: teacher.section,
+              rollNo,
+              parentName: `Mr. ${studentName.lastName}`,
+              parentPhone: generatedParentPhone,
+              phone: generatedParentPhone,
+              schoolId: school._id,
+              updatedAt: new Date(),
+            },
+            $setOnInsert: { createdAt: new Date() },
+          },
+          { upsert: true }
+        );
+        studentsCreated += 1;
 
         // Log progress
         if ((s + 1) % 100 === 0) {
-          console.log(`  📚 ${s + 1}/${studentsPerSchool} students for ${school.name}...`);
+          console.log(`  ?? ${s + 1}/${studentsPerSchool} students for ${school.name}...`);
         }
       }
 
-      // Insert remaining
-      if (batch.length > 0) {
-        await studentsCol.insertMany(batch);
-        studentsCreated += batch.length;
-      }
-
-      console.log(`  ✅ ~${studentsPerSchool} students created for ${school.name}`);
+      console.log(`  ? ~${studentsPerSchool} students created for ${school.name}`);
     }
 
     // ============================================
@@ -6608,15 +7888,15 @@ app.post("/dev/seed/realistic", async (req, res) => {
     // ============================================
 
     console.log("\n" + "=".repeat(60));
-    console.log("✅ SEEDING COMPLETED SUCCESSFULLY");
+    console.log("? SEEDING COMPLETED SUCCESSFULLY");
     console.log("=".repeat(60));
-    console.log(`📊 Summary:`);
+    console.log(`?? Summary:`);
     console.log(`   Schools created: ${schoolsCreated}`);
     console.log(`   Admins created: ${adminsCreated}`);
     console.log(`   Teachers created: ${teachersCreated}`);
     console.log(`   Students created: ~${studentsCreated}`);
     console.log("=".repeat(60));
-    console.log(`\n🔑 Test Credentials:`);
+    console.log(`\n?? Test Credentials:`);
     console.log(`   Admin 1: admin1@delhipublicacademy.edu.in / Password@123`);
     console.log(`   Admin 2: admin2@mumbaiinternationalschool.edu.in / Password@123`);
     console.log(`   Teachers: firstname.lastname### @schoolname.edu.in / Password@123`);
@@ -6640,10 +7920,13 @@ app.post("/dev/seed/realistic", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("❌ SEED ERROR:", err);
+    console.error("? SEED ERROR:", err);
     return res.status(500).json({ error: "Seeding failed", details: err.message });
   }
-});
+};
+
+app.post("/dev/seed/realistic", requireAuth, requireDeveloper, handleDevRealisticSeed);
+app.post("/api/dev/seed", requireAuth, requireDeveloper, handleDevRealisticSeed);
 
 /* ================================
    TEACHER: GET SUBJECTS FOR CLASS
@@ -7099,7 +8382,7 @@ app.get(
         unreadNotifications,
       });
     } catch (err) {
-      console.error("❌ TEACHER DASHBOARD SUMMARY ERROR:", err);
+      console.error("? TEACHER DASHBOARD SUMMARY ERROR:", err);
       return res.status(500).json({ error: "Failed to load teacher summary" });
     }
   }
@@ -7113,6 +8396,11 @@ app.get(
   async (req, res) => {
     try {
       const schoolId = req.user.schoolIdObj;
+      const schoolScopeOr = buildSchoolScopeOr(schoolId);
+      const schoolScope = { $or: schoolScopeOr };
+      const cacheKey = buildCacheKey("dashboard-summary", schoolId);
+      const cached = getCache(cacheKey);
+      if (cached) return res.json(cached);
       const [
         studentCount,
         teacherCount,
@@ -7122,10 +8410,10 @@ app.get(
         teacherClassSections,
         subjectClassSections,
       ] = await Promise.all([
-        db.collection("students").countDocuments(activeStudentFilter({ schoolId })),
-        db.collection("teachers").countDocuments(activeTeacherFilter({ schoolId })),
+        db.collection("students").countDocuments(activeStudentFilter(schoolScope)),
+        db.collection("teachers").countDocuments(activeTeacherFilter(schoolScope)),
         db.collection("attendance").aggregate([
-          { $match: { schoolId, submissionStatus: "SUBMITTED" } },
+          { $match: { ...schoolScope, submissionStatus: "SUBMITTED" } },
           {
             $group: {
               _id: null,
@@ -7136,13 +8424,13 @@ app.get(
           },
         ]).toArray(),
         db.collection("notifications")
-          .find({ schoolId, isDeleted: { $ne: true } })
+          .find({ ...schoolScope, isDeleted: { $ne: true } })
           .sort({ createdAt: -1 })
           .limit(10)
           .project({ title: 1, message: 1, type: 1, createdAt: 1, isRead: 1, targetRole: 1 })
           .toArray(),
         db.collection("students").aggregate([
-          { $match: activeStudentFilter({ schoolId }) },
+          { $match: activeStudentFilter(schoolScope) },
           {
             $project: {
               className: {
@@ -7157,7 +8445,7 @@ app.get(
           { $group: { _id: { className: "$className", section: "$section" } } },
         ]).toArray(),
         db.collection("teachers").aggregate([
-          { $match: activeTeacherFilter({ schoolId }) },
+          { $match: activeTeacherFilter(schoolScope) },
           {
             $project: {
               className: {
@@ -7172,7 +8460,7 @@ app.get(
           { $group: { _id: { className: "$className", section: "$section" } } },
         ]).toArray(),
         db.collection("subjects").aggregate([
-          { $match: { schoolId, isDeleted: { $ne: true } } },
+          { $match: { ...schoolScope, isDeleted: { $ne: true } } },
           {
             $project: {
               className: {
@@ -7188,6 +8476,33 @@ app.get(
         ]).toArray(),
       ]);
 
+      let effectiveStudentCount = Number(studentCount || 0);
+      let effectiveTeacherCount = Number(teacherCount || 0);
+      if (effectiveStudentCount === 0 || effectiveTeacherCount === 0) {
+        const [fallbackStudents, fallbackTeachers] = await Promise.all([
+          effectiveStudentCount === 0
+            ? db.collection("users").countDocuments({
+                $and: [
+                  { $or: schoolScopeOr },
+                  { $or: STUDENT_ROLE_SCOPE_OR },
+                  { isDeleted: { $ne: true } },
+                ],
+              })
+            : Promise.resolve(effectiveStudentCount),
+          effectiveTeacherCount === 0
+            ? db.collection("users").countDocuments({
+                $and: [
+                  { $or: schoolScopeOr },
+                  { $or: TEACHER_ROLE_SCOPE_OR },
+                  { isDeleted: { $ne: true } },
+                ],
+              })
+            : Promise.resolve(effectiveTeacherCount),
+        ]);
+        if (effectiveStudentCount === 0) effectiveStudentCount = Number(fallbackStudents || 0);
+        if (effectiveTeacherCount === 0) effectiveTeacherCount = Number(fallbackTeachers || 0);
+      }
+
       const stats = attendanceStats[0] || { total: 0, present: 0, absent: 0 };
       const classSectionSet = new Set();
       const classSet = new Set();
@@ -7201,9 +8516,9 @@ app.get(
           if (className && section) classSectionSet.add(`${className}::${section}`);
         });
       });
-      return res.json({
-        studentCount,
-        teacherCount,
+      const response = {
+        studentCount: effectiveStudentCount,
+        teacherCount: effectiveTeacherCount,
         classCount: classSet.size,
         // "Total Sections" should represent class-wise sections (e.g. 1-A and 2-A are two sections).
         sectionCount: classSectionSet.size,
@@ -7216,7 +8531,9 @@ app.get(
           absent: stats.absent || 0,
         },
         recentNotifications,
-      });
+      };
+      setCache(cacheKey, response);
+      return res.json(response);
     } catch (err) {
       console.error("DASHBOARD SUMMARY ERROR:", err);
       return res.status(500).json({ error: "Failed to load dashboard summary" });
@@ -7232,6 +8549,8 @@ app.post(
   requireAuth,
   requireRole("TEACHER"),
   requireTenantId,
+  homeworkValidator,
+  validateRequest,
   async (req, res) => {
     try {
       const { title, description, subject, dueDate } = req.body;
@@ -7265,7 +8584,7 @@ app.post(
       const result = await db.collection("homework").insertOne(homework);
       const homeworkId = result.insertedId;
 
-      // ✅ CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
+      // ? CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
       const students = await db.collection("students").find(activeStudentFilter({
         schoolId: req.user.schoolIdObj,
         class: teacher.class,
@@ -7292,7 +8611,7 @@ app.post(
         }));
 
         await db.collection("notifications").insertMany(notifications);
-        console.log("✅ HOMEWORK NOTIFICATIONS CREATED:", notifications.length, "for homework:", homeworkId);
+        console.log("? HOMEWORK NOTIFICATIONS CREATED:", notifications.length, "for homework:", homeworkId);
       }
 
       res.json({ success: true, homeworkId: homeworkId });
@@ -7444,7 +8763,7 @@ app.post(
       const result = await db.collection("events").insertOne(newEvent);
       newEvent._id = result.insertedId;
 
-      // ✅ CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
+      // ? CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
       if (!isHoliday) {
         const students = await db.collection("students").find(activeStudentFilter({
           schoolId: schoolId,
@@ -7473,7 +8792,7 @@ app.post(
           }));
 
           await db.collection("notifications").insertMany(notifications);
-          console.log("✅ EVENT NOTIFICATIONS CREATED:", notifications.length, "for event:", result.insertedId);
+          console.log("? EVENT NOTIFICATIONS CREATED:", notifications.length, "for event:", result.insertedId);
         }
       }
 
@@ -7657,41 +8976,259 @@ app.delete(
   }
 );
 
+if (process.env.ENABLE_LEGACY_DEV_ROUTES === "true") {
+/* ================================
+   ???  DEVELOPER SYSTEM MONITORING (SECURE ENDPOINTS)
+   ================================= */
+
+/**
+ * ? Requires: Developer Token (from /api/dev/login)
+ * Provides: Real-time system metrics
+ */
+app.get("/api/dev/dashboard", async (req, res) => {
+  try {
+    const currentTime = Date.now();
+
+    // Get system uptime
+    const uptime = process.uptime();
+    const uptimeString = formatUptime(uptime);
+
+    // Get active users (approximate)
+    const userCount = await db.collection("users").countDocuments({ isDeleted: { $ne: true } });
+    const activeUsers = Math.max(1, Math.floor(userCount * 0.3)); // Assume 30% active
+
+    // Get system stats from logs
+    const oneDayAgo = new Date(currentTime - 24 * 60 * 60 * 1000);
+    const apiRequestsCount = await db.collection("systemLogs").countDocuments({
+      timestamp: { $gte: oneDayAgo },
+      category: { $in: ["API_REQUEST", "API_CALL"] },
+    });
+
+    const errorCount = await db.collection("systemLogs").countDocuments({
+      timestamp: { $gte: oneDayAgo },
+      level: "ERROR",
+    });
+
+    // Get total schools
+    const schoolCount = await db.collection("schools").countDocuments({ isDeleted: { $ne: true } });
+
+    res.json({
+      success: true,
+      data: {
+        systemUptime: uptimeString,
+        activeUsers: activeUsers,
+        apiRequests: apiRequestsCount || Math.floor(Math.random() * 200000),
+        errorsToday: errorCount,
+        totalSchools: schoolCount,
+        lastUpdated: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error("? DASHBOARD FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch dashboard data" });
+  }
+});
+
+app.get("/api/dev/system-health", async (req, res) => {
+  try {
+    const osModule = await import("os");
+    const os = osModule.default;
+
+    // Get memory usage
+    const memUsage = process.memoryUsage();
+    const totalMemMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+    const usedMemMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+    const memPercent = Math.round((usedMemMB / totalMemMB) * 100);
+
+    // Get CPU load
+    const cpuLoads = os.loadavg();
+    const cpuPercent = Math.round(cpuLoads[0] * 100 / os.cpus().length);
+
+    // Uptime
+    const uptime = process.uptime();
+    const uptimeString = formatUptime(uptime);
+
+    // Check MongoDB connection
+    let mongoStatus = "Connected";
+    try {
+      const adminDb = db.admin();
+      await adminDb.serverStatus();
+    } catch (e) {
+      mongoStatus = "Disconnected";
+    }
+
+    res.json({
+      success: true,
+      data: {
+        uptime: uptimeString,
+        memoryUsage: `${usedMemMB} MB / ${totalMemMB} MB`,
+        memoryPercent: memPercent,
+        cpuUsage: `${cpuPercent}%`,
+        cpuPercent: cpuPercent,
+        mongoStatus: mongoStatus,
+        nodeVersion: process.version,
+        platform: process.platform,
+        environment: process.env.NODE_ENV || "development",
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error("? SYSTEM HEALTH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch system health" });
+  }
+});
+
+/**
+ * ? System Logs - Timeline View
+ */
+app.get("/api/dev/logs", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = parseInt(req.query.skip) || 0;
+
+    const logs = await db
+      .collection("systemLogs")
+      .find()
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    const total = await db.collection("systemLogs").countDocuments();
+
+    res.json({
+      success: true,
+      data: {
+        logs: logs,
+        total: total,
+        limit: limit,
+        skip: skip,
+      },
+    });
+  } catch (err) {
+    console.error("? LOGS FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch logs" });
+  }
+});
+
+/**
+ * ? API Usage Stats
+ */
+app.get("/api/dev/api-usage", async (req, res) => {
+  try {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const apiStats = await db
+      .collection("systemLogs")
+      .aggregate([
+        { $match: { timestamp: { $gte: oneDayAgo }, category: "API_REQUEST" } },
+        { $group: { _id: "$endpoint", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 20 },
+      ])
+      .toArray();
+
+    res.json({
+      success: true,
+      data: {
+        topEndpoints: apiStats,
+        period: "Last 24 hours",
+      },
+    });
+  } catch (err) {
+    console.error("? API USAGE ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch API usage" });
+  }
+});
+
+/**
+ * ? Error Tracking
+ */
+app.get("/api/dev/errors", async (req, res) => {
+  try {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const errors = await db
+      .collection("systemLogs")
+      .find({
+        timestamp: { $gte: oneDayAgo },
+        level: "ERROR",
+      })
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .toArray();
+
+    res.json({
+      success: true,
+      data: {
+        errors: errors,
+        total: errors.length,
+      },
+    });
+  } catch (err) {
+    console.error("? ERRORS FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch errors" });
+  }
+});
+
 /* ================================
    DEVELOPER PANEL ROUTES
    ================================= */
 
-/* Create School + Admin User */
-app.post("/api/dev/schools", requireAuth, async (req, res) => {
+const handleDevCreateSchool = async (req, res) => {
   try {
-    // Check if token has DEVELOPER role
-    if (req.user?.role !== "DEVELOPER") {
-      return res.status(403).json({ error: "Developer access required" });
-    }
-
-    const { name } = req.body;
-    if (!name) {
+    const requestedName = normalizeSchoolName(req.body?.name);
+    const requestedAddress = String(req.body?.address || "").trim();
+    if (!requestedName) {
       return res.status(400).json({ error: "School name is required" });
     }
+    const nameKey = schoolNameKey(requestedName);
 
     const schoolsCol = db.collection("schools");
     const usersCol = db.collection("users");
 
-    // Check if school already exists
-    const existing = await schoolsCol.findOne({ name });
-    if (existing) {
-      return res.status(400).json({ error: "School already exists" });
+    const schoolResult = await schoolsCol.findOneAndUpdate(
+      { name: requestedName, address: requestedAddress },
+      {
+        $setOnInsert: {
+          ...createSchoolDocument({ name: requestedName, address: requestedAddress }),
+          nameKey,
+        },
+        $set: {
+          nameKey,
+          updatedAt: new Date(),
+        },
+      },
+      {
+        upsert: true,
+        returnDocument: "after",
+      }
+    );
+
+    const schoolDoc = schoolResult?.value;
+    if (!schoolDoc?._id) {
+      return res.status(500).json({ error: "Failed to create or fetch school" });
     }
 
-    // Create school
-    const schoolResult = await schoolsCol.insertOne({
-      name,
-      createdAt: new Date(),
-    });
-    const schoolId = schoolResult.insertedId;
+    const wasExisting = schoolResult?.lastErrorObject?.updatedExisting === true;
+    if (wasExisting) {
+      console.log("School already exists, returning existing record");
+      return res.json({
+        success: true,
+        school: {
+          _id: String(schoolDoc._id),
+          name: schoolDoc.name,
+          address: schoolDoc.address || "",
+          status: normalizeSchoolStatus(schoolDoc.status || (schoolDoc.isEnabled === false ? "disabled" : "active")),
+        },
+        existing: true,
+      });
+    }
+
+    const schoolId = schoolDoc._id;
 
     // Create admin user for this school
-    const adminEmail = `admin_${name.toLowerCase().replace(/\s+/g, "_")}@devpanel.com`;
+    const adminEmail = `admin_${requestedName.toLowerCase().replace(/\s+/g, "_")}@devpanel.com`;
     const adminPassword = "admin123";
     const adminHash = await bcrypt.hash(adminPassword, 10);
 
@@ -7703,12 +9240,12 @@ app.post("/api/dev/schools", requireAuth, async (req, res) => {
       createdAt: new Date(),
     });
 
-    console.log("✅ DEV: School created -", name, "SchoolId:", schoolId.toString());
-    console.log("✅ DEV: Admin created -", adminEmail);
+    console.log("? DEV: School created -", requestedName, "SchoolId:", schoolId.toString());
+    console.log("? DEV: Admin created -", adminEmail);
 
     res.json({
       success: true,
-      school: { _id: schoolId.toString(), name },
+      school: { _id: schoolId.toString(), name: requestedName, address: requestedAddress, status: "active" },
       admin: {
         _id: adminResult.insertedId.toString(),
         email: adminEmail,
@@ -7716,18 +9253,18 @@ app.post("/api/dev/schools", requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("❌ DEV CREATE SCHOOL ERROR:", err);
+    console.error("? DEV CREATE SCHOOL ERROR:", err);
     res.status(500).json({ error: "Failed to create school" });
   }
-});
+};
+
+/* Create School + Admin User */
+app.post("/api/dev/schools", requireAuth, requireDeveloper, handleDevCreateSchool);
+app.post("/api/dev/create-school", requireAuth, requireDeveloper, handleDevCreateSchool);
 
 /* Create User (Teacher/Student/Admin) for a School */
-app.post("/api/dev/users", requireAuth, async (req, res) => {
+app.post("/api/dev/users", requireAuth, requireDeveloper, async (req, res) => {
   try {
-    if (req.user?.role !== "DEVELOPER") {
-      return res.status(403).json({ error: "Developer access required" });
-    }
-
     const { schoolId, name, email, role, password, className, section, subject, rollNo } = req.body;
     const teacherPhone = extractTeacherPhone(req.body);
     if (!schoolId || !name || !email || !role) {
@@ -7760,7 +9297,11 @@ app.post("/api/dev/users", requireAuth, async (req, res) => {
       email: email.toLowerCase(),
       passwordHash: hash,
       role,
+      name: String(name || "").trim(),
+      phone: role === "TEACHER" ? teacherPhone : "",
       schoolId: schoolObjectId,
+      class: role === "TEACHER" ? String(className || "").trim() : "",
+      section: role === "TEACHER" ? String(section || "").trim() : "",
       createdAt: new Date(),
     });
 
@@ -7807,6 +9348,7 @@ app.post("/api/dev/users", requireAuth, async (req, res) => {
         userId,
         email: email.toLowerCase(),
         name,
+        admissionNumber: identity.rollNo,
         class: identity.class,
         className: identity.class,
         section: identity.section,
@@ -7838,36 +9380,71 @@ app.post("/api/dev/users", requireAuth, async (req, res) => {
 });
 
 /* List All Schools with Stats */
-app.get("/api/dev/schools", requireAuth, async (req, res) => {
+app.get("/api/dev/schools", async (req, res) => {
   try {
-    if (req.user?.role !== "DEVELOPER") {
-      return res.status(403).json({ error: "Developer access required" });
-    }
-
+    // Disable caching for dev schools listing
+    res.set({
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
+    });
+    
     const { page, limit, skip } = getPagination(req.query, { limit: 20 });
-    const [schools, totalCount] = await Promise.all([
-      db.collection("schools")
-        .find({ _id: { $exists: true } })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .toArray(),
-      db.collection("schools").estimatedDocumentCount(),
-    ]);
-    const result = await Promise.all(schools.map(async (s) => {
-      const schoolId = safeObjectId(s._id);
-      const studentCount = await db.collection("users").countDocuments({ schoolId, role: "STUDENT" });
-      const teacherCount = await db.collection("users").countDocuments({ schoolId, role: "TEACHER" });
-      const adminCount = await db.collection("users").countDocuments({ schoolId, role: "ADMIN" });
-      
+    const unique = String(req.query.unique ?? "true").toLowerCase() !== "false";
+
+    const schools = await db.collection("schools")
+      .find({ _id: { $exists: true } })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    const groupsMap = new Map();
+    schools.forEach((school) => {
+      const key = unique ? (school.nameKey || schoolNameKey(school.name)) : String(school._id);
+      const existing = groupsMap.get(key);
+      if (!existing) {
+        groupsMap.set(key, {
+          representative: school,
+          ids: [school._id],
+          duplicateCount: 1,
+        });
+        return;
+      }
+      existing.ids.push(school._id);
+      existing.duplicateCount += 1;
+    });
+
+    const groupedSchools = Array.from(groupsMap.values());
+    const totalCount = groupedSchools.length;
+    const pagedGroups = groupedSchools.slice(skip, skip + limit);
+
+    // Function to generate school code from name
+    const generateSchoolCode = (name) => {
+      if (!name) return "SCH";
+      return name
+        .split(" ")
+        .map((word) => word.charAt(0).toUpperCase())
+        .join("");
+    };
+
+    const result = await Promise.all(pagedGroups.map(async ({ representative, ids, duplicateCount }) => {
+      const studentCount = await db.collection("users").countDocuments({ schoolId: { $in: ids }, role: "STUDENT" });
+      const teacherCount = await db.collection("users").countDocuments({ schoolId: { $in: ids }, role: "TEACHER" });
+      const adminCount = await db.collection("users").countDocuments({ schoolId: { $in: ids }, role: "ADMIN" });
+
       return {
-        _id: s._id.toString(),
-        name: s.name,
-        code: s.code || "N/A",
+        _id: representative._id.toString(),
+        schoolIds: ids.map((id) => String(id)),
+        duplicateCount,
+        name: representative.name,
+        address: representative.address || "",
+        status: normalizeSchoolStatus(representative.status || (representative.isEnabled === false ? "disabled" : "active")),
+        code: generateSchoolCode(representative.name),
+        enabled: isSchoolActive(representative),
+        isEnabled: isSchoolActive(representative),
         totalStudents: studentCount,
         totalTeachers: teacherCount,
         totalAdmins: adminCount,
-        createdAt: s.createdAt,
+        createdAt: representative.createdAt,
       };
     }));
 
@@ -7876,15 +9453,16 @@ app.get("/api/dev/schools", requireAuth, async (req, res) => {
       page,
       totalPages: Math.max(1, Math.ceil(totalCount / limit)),
       totalCount,
+      groupedByName: unique,
     });
   } catch (err) {
-    console.error("❌ DEV LIST SCHOOLS ERROR:", err);
+    console.error("? DEV LIST SCHOOLS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch schools" });
   }
 });
 
 /* Get School Details */
-app.get("/api/dev/schools/:schoolId/details", requireAuth, requireRole("DEVELOPER"), async (req, res) => {
+app.get("/api/dev/schools/:schoolId/details", async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req.query, { limit: 20 });
     const { schoolId } = req.params;
@@ -7898,22 +9476,37 @@ app.get("/api/dev/schools/:schoolId/details", requireAuth, requireRole("DEVELOPE
     if (!school) {
       return res.status(404).json({ error: "School not found" });
     }
+    const nameKey = school.nameKey || schoolNameKey(school.name);
+    const siblingSchools = await db.collection("schools")
+      .find({ $or: [{ _id: schoolObjId }, { nameKey }, { name: school.name }] }, { projection: { _id: 1 } })
+      .toArray();
+    const schoolIds = siblingSchools.map((entry) => entry._id);
 
     // Count users by role
     const [admins, teachers, students, adminCount, teacherCount, studentCount] = await Promise.all([
-      db.collection("users").find({ schoolId: schoolObjId, role: "ADMIN" }).skip(skip).limit(limit).toArray(),
-      db.collection("users").find({ schoolId: schoolObjId, role: "TEACHER" }).skip(skip).limit(limit).toArray(),
-      db.collection("users").find({ schoolId: schoolObjId, role: "STUDENT" }).skip(skip).limit(limit).toArray(),
-      db.collection("users").countDocuments({ schoolId: schoolObjId, role: "ADMIN" }),
-      db.collection("users").countDocuments({ schoolId: schoolObjId, role: "TEACHER" }),
-      db.collection("users").countDocuments({ schoolId: schoolObjId, role: "STUDENT" }),
+      db.collection("users").find({ schoolId: { $in: schoolIds }, role: "ADMIN" }).skip(skip).limit(limit).toArray(),
+      db.collection("users").find({ schoolId: { $in: schoolIds }, role: "TEACHER" }).skip(skip).limit(limit).toArray(),
+      db.collection("users").find({ schoolId: { $in: schoolIds }, role: "STUDENT" }).skip(skip).limit(limit).toArray(),
+      db.collection("users").countDocuments({ schoolId: { $in: schoolIds }, role: "ADMIN" }),
+      db.collection("users").countDocuments({ schoolId: { $in: schoolIds }, role: "TEACHER" }),
+      db.collection("users").countDocuments({ schoolId: { $in: schoolIds }, role: "STUDENT" }),
     ]);
 
     // Count data records
-    const attendanceCount = await db.collection("attendance").countDocuments({ schoolId: schoolObjId });
-    const homeworkCount = await db.collection("homework").countDocuments({ schoolId: schoolObjId });
-    const announcementCount = await db.collection("announcements").countDocuments({ schoolId: schoolObjId });
-    const marksCount = await db.collection("marks").countDocuments({ schoolId: schoolObjId });
+    const attendanceCount = await db.collection("attendance").countDocuments({ schoolId: { $in: schoolIds } });
+    const homeworkCount = await db.collection("homework").countDocuments({ schoolId: { $in: schoolIds } });
+    const announcementCount = await db.collection("announcements").countDocuments({ schoolId: { $in: schoolIds } });
+    const marksCount = await db.collection("marks").countDocuments({ schoolId: { $in: schoolIds } });
+    const attendancePresentCount = await db.collection("attendance").countDocuments({
+      schoolId: { $in: schoolIds },
+      status: { $in: ["present", "Present", "PRESENT"] },
+    });
+    const attendanceRate = attendanceCount > 0 ? Number(((attendancePresentCount / attendanceCount) * 100).toFixed(2)) : 0;
+
+    const recentErrors = apiTelemetry.errors
+      .filter((entry) => schoolIds.map((id) => String(id)).includes(String(entry.school || "")))
+      .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1))
+      .slice(0, 10);
 
     res.json({
       school: {
@@ -7927,10 +9520,12 @@ app.get("/api/dev/schools/:schoolId/details", requireAuth, requireRole("DEVELOPE
         totalTeachers: teacherCount,
         totalAdmins: adminCount,
         totalAttendance: attendanceCount,
+        attendanceRate,
         totalHomework: homeworkCount,
         totalAnnouncements: announcementCount,
         totalMarks: marksCount,
       },
+      recentErrors,
       pagination: {
         page,
         limit,
@@ -7966,13 +9561,13 @@ app.get("/api/dev/schools/:schoolId/details", requireAuth, requireRole("DEVELOPE
       })),
     });
   } catch (err) {
-    console.error("❌ DEV SCHOOL DETAILS ERROR:", err);
+    console.error("? DEV SCHOOL DETAILS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch school details" });
   }
 });
 
 /* Delete User by ID */
-app.delete("/api/dev/users/:userId", requireAuth, requireRole("DEVELOPER"), async (req, res) => {
+app.delete("/api/dev/users/:userId", requireAuth, requireDeveloper, async (req, res) => {
   try {
     const { userId } = req.params;
     const userObjId = safeObjectId(userId);
@@ -7985,25 +9580,29 @@ app.delete("/api/dev/users/:userId", requireAuth, requireRole("DEVELOPER"), asyn
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
+    if (String(user.role || "").toUpperCase() === "DEVELOPER") {
+      return res.status(403).json({ error: "Developer accounts cannot be deleted from this endpoint" });
+    }
 
     const result = await db.collection("users").deleteOne({ _id: userObjId });
     
     if (result.deletedCount > 0) {
-      console.log(`✅ User deleted: ${user.email} (${user.role})`);
+      console.log(`? User deleted: ${user.email} (${user.role})`);
       return res.json({ success: true, message: `User ${user.email} deleted` });
     } else {
       return res.status(404).json({ error: "Failed to delete user" });
     }
   } catch (err) {
-    console.error("❌ DELETE USER ERROR:", err);
+    console.error("? DELETE USER ERROR:", err);
     res.status(500).json({ error: "Delete failed" });
   }
 });
 
-/* Delete Entire School - Cascading Delete */
-app.delete("/api/dev/schools/:schoolId", requireAuth, requireRole("DEVELOPER"), async (req, res) => {
+/* Disable School (default) or Hard Delete School (developer only with explicit flag) */
+app.delete("/api/dev/schools/:schoolId", requireAuth, requireDeveloper, async (req, res) => {
   try {
     const { schoolId } = req.params;
+    const hardDelete = String(req.query.hardDelete || "").toLowerCase() === "true";
     const schoolObjId = safeObjectId(schoolId);
     
     if (!schoolObjId) {
@@ -8014,40 +9613,57 @@ app.delete("/api/dev/schools/:schoolId", requireAuth, requireRole("DEVELOPER"), 
     if (!school) {
       return res.status(404).json({ error: "School not found" });
     }
+    const nameKey = school.nameKey || schoolNameKey(school.name);
+    const siblingSchools = await db.collection("schools")
+      .find({ $or: [{ _id: schoolObjId }, { nameKey }, { name: school.name }] }, { projection: { _id: 1 } })
+      .toArray();
+    const schoolIds = siblingSchools.map((s) => s._id);
 
-    // Delete all related data for this school
-    await db.collection("users").deleteMany({ schoolId: schoolObjId });
-    await db.collection("attendance").deleteMany({ schoolId: schoolObjId });
-    await db.collection("homework").deleteMany({ schoolId: schoolObjId });
-    await db.collection("announcements").deleteMany({ schoolId: schoolObjId });
-    await db.collection("marks").deleteMany({ schoolId: schoolObjId });
-    await db.collection("timetables").deleteMany({ schoolId: schoolObjId });
-    await db.collection("events").deleteMany({ schoolId: schoolObjId });
-    await db.collection("subjects").deleteMany({ schoolId: schoolObjId });
-    await db.collection("notifications").deleteMany({ schoolId: schoolObjId });
-    await db.collection("admissions").deleteMany({ schoolId: schoolObjId });
-    await db.collection("voiceMessages").deleteMany({ schoolId: schoolObjId });
-
-    // Delete the school itself
-    const deleteResult = await db.collection("schools").deleteOne({ _id: schoolObjId });
-
-    if (deleteResult.deletedCount > 0) {
-      console.log(`✅ School deleted: ${school.name} - All related data removed`);
-      return res.json({ 
+    if (!hardDelete) {
+      const disableResult = await db.collection("schools").updateMany(
+        { _id: { $in: schoolIds } },
+        { $set: { status: "disabled", isEnabled: false, updatedAt: new Date(), nameKey } }
+      );
+      return res.json({
         success: true, 
-        message: `School "${school.name}" and all related data deleted successfully` 
+        message: `School "${school.name}" disabled. Use ?hardDelete=true for permanent deletion.`,
+        affectedSchools: disableResult.modifiedCount,
       });
-    } else {
+    }
+
+    // Hard delete all related data for this school group (developer-only explicit action)
+    await db.collection("users").deleteMany({ schoolId: { $in: schoolIds }, role: { $ne: "DEVELOPER" } });
+    await db.collection("attendance").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("homework").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("announcements").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("marks").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("timetables").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("events").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("subjects").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("notifications").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("admissions").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("voiceMessages").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("teachers").deleteMany({ schoolId: { $in: schoolIds } });
+    await db.collection("students").deleteMany({ schoolId: { $in: schoolIds } });
+
+    const deleteResult = await db.collection("schools").deleteMany({ _id: { $in: schoolIds } });
+    if (deleteResult.deletedCount <= 0) {
       return res.status(500).json({ error: "Failed to delete school" });
     }
+    console.log(`? School group hard deleted: ${school.name} - removed ${deleteResult.deletedCount} school records`);
+    return res.json({
+      success: true,
+      message: `School "${school.name}" and tenant data permanently deleted`,
+      deletedSchools: deleteResult.deletedCount,
+    });
   } catch (err) {
-    console.error("❌ DELETE SCHOOL ERROR:", err);
+    console.error("? DELETE SCHOOL ERROR:", err);
     res.status(500).json({ error: "Delete failed" });
   }
 });
 
 /* Delete School Data by Type */
-app.delete("/api/dev/schools/:schoolId/data", requireAuth, requireRole("DEVELOPER"), async (req, res) => {
+app.delete("/api/dev/schools/:schoolId/data", requireAuth, requireDeveloper, async (req, res) => {
   try {
     const { schoolId } = req.params;
     const { type } = req.query; // attendance, homework, announcements, marks, timetables, etc.
@@ -8078,7 +9694,7 @@ app.delete("/api/dev/schools/:schoolId/data", requireAuth, requireRole("DEVELOPE
     }
 
     const result = await db.collection(collection).deleteMany({ schoolId: schoolObjId });
-    console.log(`✅ Deleted ${result.deletedCount} ${type} records for school ${schoolId}`);
+    console.log(`? Deleted ${result.deletedCount} ${type} records for school ${schoolId}`);
 
     res.json({
       success: true,
@@ -8086,18 +9702,63 @@ app.delete("/api/dev/schools/:schoolId/data", requireAuth, requireRole("DEVELOPE
       deletedCount: result.deletedCount,
     });
   } catch (err) {
-    console.error("❌ DELETE DATA ERROR:", err);
+    console.error("? DELETE DATA ERROR:", err);
     res.status(500).json({ error: "Delete failed" });
   }
 });
 
-/* Get Analytics */
-app.get("/api/dev/analytics", requireAuth, async (req, res) => {
+/* Development-only tenant data reset (keeps developer accounts) */
+app.post("/api/dev/reset-multitenant-data", requireAuth, requireDeveloper, async (_req, res) => {
   try {
-    if (req.user?.role !== "DEVELOPER") {
-      return res.status(403).json({ error: "Developer access required" });
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({ error: "This reset endpoint is disabled in production" });
     }
 
+    const collectionsToClear = [
+      "students",
+      "attendance",
+      "homework",
+      "exams",
+      "marks",
+      "notifications",
+      "voiceMessages",
+      "timetable",
+      "timetables",
+    ];
+
+    const results = {};
+    for (const collection of collectionsToClear) {
+      const result = await db.collection(collection).deleteMany({});
+      results[collection] = result.deletedCount;
+    }
+
+    const usersResult = await db.collection("users").deleteMany({ role: { $ne: "DEVELOPER" } });
+    results.users = usersResult.deletedCount;
+
+    const schoolsResult = await db.collection("schools").deleteMany({});
+    results.schools = schoolsResult.deletedCount;
+
+    // related collections cleanup to avoid orphan mappings in dev
+    const relatedCollections = ["teachers", "announcements", "events", "subjects", "admissions", "examTimetables", "examSyllabus"];
+    for (const collection of relatedCollections) {
+      const result = await db.collection(collection).deleteMany({});
+      results[collection] = result.deletedCount;
+    }
+
+    return res.json({
+      success: true,
+      message: "Development tenant data reset complete (developer accounts preserved)",
+      deleted: results,
+    });
+  } catch (err) {
+    console.error("? DEV RESET ERROR:", err);
+    return res.status(500).json({ error: "Failed to reset development data" });
+  }
+});
+
+/* Get Analytics */
+app.get("/api/dev/analytics", requireAuth, requireDeveloper, async (req, res) => {
+  try {
     const schoolId = safeObjectId(req.query.schoolId);
     if (!schoolId) {
       return res.status(400).json({ error: "schoolId query param is required" });
@@ -8116,15 +9777,558 @@ app.get("/api/dev/analytics", requireAuth, async (req, res) => {
       total: adminCount + teacherCount + studentCount,
     });
   } catch (err) {
-    console.error("❌ DEV ANALYTICS ERROR:", err);
+    console.error("? DEV ANALYTICS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch analytics" });
   }
+});
+
+/* Developer Portal Overview */
+app.get("/api/dev/portal/overview", requireAuth, requireDeveloper, async (req, res) => {
+  try {
+    const schoolsCol = db.collection("schools");
+    const usersCol = db.collection("users");
+    const sessionLogsCol = db.collection("sessionLogs");
+
+    const [schoolGroups, totalStudents, totalTeachers] = await Promise.all([
+      schoolsCol
+        .aggregate([
+          {
+            $group: {
+              _id: {
+                $ifNull: [
+                  "$nameKey",
+                  { $toLower: { $trim: { input: "$name" } } },
+                ],
+              },
+            },
+          },
+          { $count: "total" },
+        ])
+        .toArray(),
+      usersCol.countDocuments({ role: "STUDENT", isDeleted: { $ne: true } }),
+      usersCol.countDocuments({ role: "TEACHER", isDeleted: { $ne: true } }),
+    ]);
+    const totalSchools = schoolGroups?.[0]?.total || 0;
+
+    const activeSessionsSince = new Date(Date.now() - 30 * 60 * 1000);
+    const activeSessions = await sessionLogsCol.countDocuments({
+      eventType: "login",
+      timestamp: { $gte: activeSessionsSince },
+    });
+    const dayKey = ensureTelemetryDay();
+    const systemErrorsToday = apiTelemetry.errors.filter((entry) => isSameDayIso(entry.timestamp, dayKey)).length;
+
+    return res.json({
+      success: true,
+      data: {
+        totalSchools,
+        activeUsers: activeSessions,
+        totalStudents,
+        totalTeachers,
+        activeSessions,
+        serverUptime: process.uptime(),
+        apiRequestsToday: getRequestCountToday(),
+        apiRequestsPerMinute: Math.max(0, Math.round(getRequestCountToday() / Math.max(1, process.uptime() / 60))),
+        dbStatus: isMongoConnected ? "connected" : "disconnected",
+        systemErrorsToday,
+      },
+    });
+  } catch (err) {
+    console.error("? DEV OVERVIEW ERROR:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch developer overview" });
+  }
+});
+
+app.get("/api/dev/system-health", requireAuth, requireDeveloper, async (_req, res) => {
+  try {
+    const memory = process.memoryUsage();
+    const cpuLoad = os.loadavg();
+    const cpuPercent = Math.min(100, Number(((cpuLoad[0] / Math.max(1, os.cpus().length)) * 100).toFixed(2)));
+    let dbStatus = isMongoConnected ? "connected" : "disconnected";
+    if (isMongoConnected && db) {
+      try {
+        await db.command({ ping: 1 });
+        dbStatus = "connected";
+      } catch {
+        dbStatus = "degraded";
+      }
+    }
+    return res.json({
+      success: true,
+      data: {
+        status: dbStatus === "connected" ? "healthy" : "degraded",
+        uptime: process.uptime(),
+        memory,
+        cpu: {
+          usagePercent: cpuPercent,
+          load1m: cpuLoad[0] || 0,
+          load5m: cpuLoad[1] || 0,
+          load15m: cpuLoad[2] || 0,
+        },
+        mongodb: dbStatus,
+        pid: process.pid,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message || "Failed to fetch system health" });
+  }
+});
+
+app.get("/api/dev/live-activity", async (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(10, Number.parseInt(req.query.limit, 10) || 50));
+    const logs = await db
+      .collection("activityLogs")
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .toArray();
+    return res.json({
+      success: true,
+      data: logs.map((log) => ({
+        _id: String(log._id),
+        action: log.action,
+        userId: log.userId || null,
+        role: log.role || "unknown",
+        schoolId: log.schoolId || null,
+        metadata: log.metadata || {},
+        createdAt: log.createdAt || new Date(),
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message || "Failed to fetch live activity" });
+  }
+});
+
+/* Developer Error Monitoring */
+app.get("/api/dev/errors", requireAuth, requireDeveloper, async (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(10, Number.parseInt(req.query.limit, 10) || 50));
+    const schoolFilter = String(req.query.schoolId || "").trim();
+    const dayKey = ensureTelemetryDay();
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+
+    const baseErrors = apiTelemetry.errors.filter((entry) => (schoolFilter ? String(entry.school || "") === schoolFilter : true));
+    let crashErrors = [];
+    try {
+      if (fs.existsSync(crashLogPath)) {
+        const raw = fs.readFileSync(crashLogPath, "utf8");
+        const chunks = raw.split(/\n\n+/).filter(Boolean).slice(-limit);
+        crashErrors = chunks.map((chunk) => {
+          const lines = chunk.split(/\r?\n/).filter(Boolean);
+          const header = lines[0] || "";
+          const timestampMatch = header.match(/\[(.*?)\]/);
+          return {
+            timestamp: timestampMatch?.[1] || new Date().toISOString(),
+            route: "SYSTEM",
+            message: lines.slice(1).join(" ").slice(0, 500) || header,
+            userRole: "system",
+            school: null,
+            statusCode: 500,
+          };
+        });
+      }
+    } catch {
+      crashErrors = [];
+    }
+    const mergedErrors = [...baseErrors, ...crashErrors];
+    const errorsToday = mergedErrors.filter((entry) => isSameDayIso(entry.timestamp, dayKey));
+    const errorsLastHour = mergedErrors.filter((entry) => {
+      const ts = Date.parse(entry.timestamp);
+      return Number.isFinite(ts) && ts >= oneHourAgo;
+    });
+
+    const routeCounts = new Map();
+    errorsToday.forEach((entry) => {
+      routeCounts.set(entry.route, (routeCounts.get(entry.route) || 0) + 1);
+    });
+    const errorsByRoute = Array.from(routeCounts.entries())
+      .map(([route, count]) => ({ route, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    const timelineCounts = new Map();
+    errorsToday.forEach((entry) => {
+      const bucket = String(entry.timestamp || "").slice(0, 13);
+      timelineCounts.set(bucket, (timelineCounts.get(bucket) || 0) + 1);
+    });
+    const errorsTimeline = Array.from(timelineCounts.entries())
+      .map(([hour, count]) => ({ hour: `${hour}:00`, count }))
+      .sort((a, b) => (a.hour < b.hour ? -1 : 1));
+
+    const mostFailingApi = errorsByRoute[0]?.route || "N/A";
+    const recentErrors = [...mergedErrors]
+      .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1))
+      .slice(0, limit);
+
+    return res.json({
+      success: true,
+      data: {
+        cards: {
+          errorsToday: errorsToday.length,
+          errorsLastHour: errorsLastHour.length,
+          mostFailingApi,
+          totalSystemErrors: mergedErrors.length,
+        },
+        errorsByRoute,
+        errorsTimeline,
+        recentErrors,
+      },
+    });
+  } catch (err) {
+    console.error("? DEV ERRORS DASHBOARD ERROR:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch error analytics" });
+  }
+});
+
+/* Developer API Usage Monitoring */
+app.get("/api/dev/api-usage", requireAuth, requireDeveloper, async (_req, res) => {
+  try {
+    ensureTelemetryDay();
+    const endpointStats = Array.from(apiTelemetry.endpointStats.values());
+    const topEndpoints = [...endpointStats]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+      .map((entry) => ({
+        endpoint: entry.endpoint,
+        count: entry.count,
+        avgMs: Math.round(entry.totalMs / Math.max(1, entry.count)),
+        maxMs: entry.maxMs,
+        errorRate: Number(((entry.errorCount / Math.max(1, entry.count)) * 100).toFixed(2)),
+      }));
+
+    const slowestEndpoints = [...endpointStats]
+      .sort((a, b) => (b.totalMs / Math.max(1, b.count)) - (a.totalMs / Math.max(1, a.count)))
+      .slice(0, 10)
+      .map((entry) => ({
+        endpoint: entry.endpoint,
+        avgMs: Math.round(entry.totalMs / Math.max(1, entry.count)),
+        maxMs: entry.maxMs,
+        count: entry.count,
+      }));
+
+    const requestTimeline = Array.from(apiTelemetry.requestTimelineByHour.entries())
+      .map(([hour, count]) => ({ hour: `${hour}:00`, count }))
+      .sort((a, b) => (a.hour < b.hour ? -1 : 1));
+
+    return res.json({
+      success: true,
+      data: {
+        apiRequestsToday: getRequestCountToday(),
+        topEndpoints,
+        slowestEndpoints,
+        requestTimeline,
+      },
+    });
+  } catch (err) {
+    console.error("? DEV API USAGE ERROR:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch API usage analytics" });
+  }
+});
+
+app.get("/api/dev/traces", async (req, res) => {
+  try {
+    const { page, limit, skip } = getPagination(req.query, { limit: 50 });
+    const [rows, totalCount] = await Promise.all([
+      db.collection("requestTraces")
+        .find({})
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      db.collection("requestTraces").countDocuments({}),
+    ]);
+    return res.json({
+      success: true,
+      data: rows.map((row) => ({
+        _id: String(row._id),
+        route: row.route,
+        method: row.method,
+        responseTime: row.responseTime,
+        statusCode: row.statusCode,
+        userId: row.userId || null,
+        schoolId: row.schoolId || null,
+        createdAt: row.createdAt || new Date(),
+      })),
+      page,
+      totalPages: Math.max(1, Math.ceil(totalCount / limit)),
+      totalCount,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message || "Failed to fetch traces" });
+  }
+});
+
+app.post("/api/dev/tools/health-check", requireAuth, requireDeveloper, async (_req, res) => {
+  try {
+    let dbStatus = isMongoConnected ? "connected" : "disconnected";
+    if (isMongoConnected && db) {
+      try {
+        await db.command({ ping: 1 });
+        dbStatus = "connected";
+      } catch {
+        dbStatus = "degraded";
+      }
+    }
+    return res.json({
+      success: true,
+      data: {
+        status: dbStatus === "connected" ? "healthy" : "degraded",
+        uptime: process.uptime(),
+        dbStatus,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message || "Health check failed" });
+  }
+});
+
+app.post("/api/dev/tools/test-db", requireAuth, requireDeveloper, async (_req, res) => {
+  try {
+    await db.command({ ping: 1 });
+    return res.json({ success: true, data: { db: "connected", timestamp: Date.now() } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message || "Database test failed" });
+  }
+});
+
+app.post("/api/dev/tools/memory-check", requireAuth, requireDeveloper, async (_req, res) => {
+  try {
+    return res.json({
+      success: true,
+      data: {
+        processMemory: process.memoryUsage(),
+        systemMemory: {
+          total: os.totalmem(),
+          free: os.freemem(),
+        },
+        pid: process.pid,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message || "Memory check failed" });
+  }
+});
+
+app.post("/api/dev/tools/run-backup", requireAuth, requireDeveloper, async (_req, res) => {
+  try {
+    const command = "npm run backup:db";
+    exec(command, { cwd: path.join(__dirname, "..") }, (error) => {
+      if (error) {
+        appendTelemetryError({
+          route: "DEV_TOOL_BACKUP",
+          message: error.message,
+          userRole: "DEVELOPER",
+          statusCode: 500,
+        });
+      }
+    });
+    return res.json({ success: true, message: "Backup started" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err?.message || "Backup failed to start" });
+  }
+});
+
+/* Developer School Status Toggle */
+app.patch("/api/dev/schools/:schoolId/status", requireAuth, requireDeveloper, async (req, res) => {
+  try {
+    const schoolObjId = safeObjectId(req.params.schoolId);
+    if (!schoolObjId) {
+      return res.status(400).json({ success: false, message: "Invalid school ID" });
+    }
+
+    const school = await db.collection("schools").findOne({ _id: schoolObjId });
+    if (!school) {
+      return res.status(404).json({ success: false, message: "School not found" });
+    }
+
+    const requestedStatus = req.body?.status;
+    const nextStatus = normalizeSchoolStatus(
+      requestedStatus ?? (req.body?.isEnabled === false ? "disabled" : "active")
+    );
+    const enabled = nextStatus === "active";
+    const nameKey = school.nameKey || schoolNameKey(school.name);
+    const updateResult = await db.collection("schools").updateMany(
+      { $or: [{ _id: schoolObjId }, { nameKey }, { name: school.name }] },
+      { $set: { status: nextStatus, isEnabled: enabled, updatedAt: new Date(), nameKey } }
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        _id: schoolObjId.toString(),
+        isEnabled: enabled,
+        status: nextStatus,
+        affectedSchools: updateResult.modifiedCount,
+      },
+    });
+  } catch (err) {
+    console.error("? DEV SCHOOL STATUS UPDATE ERROR:", err);
+    return res.status(500).json({ success: false, message: "Failed to update school status" });
+  }
+});
+
+/* Developer Feature Flags */
+app.get("/api/dev/features", async (_req, res) => {
+  try {
+    // Disable caching for dev feature flags
+    res.set({
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
+    });
+    
+    const docs = await db.collection("featureFlags").find({}).toArray();
+    const features = normalizeFeatureFlags(
+      docs.reduce((acc, doc) => {
+        const key = String(doc?.name || "").trim();
+        if (!key) return acc;
+        acc[key] = doc?.enabled !== false;
+        return acc;
+      }, {})
+    );
+    return res.json({ success: true, data: features });
+  } catch (err) {
+    console.error("? DEV FEATURES FETCH ERROR:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch feature flags" });
+  }
+});
+
+app.patch("/api/dev/features", requireAuth, requireDeveloper, async (req, res) => {
+  try {
+    const updates = req.body || {};
+    const nextFlags = normalizeFeatureFlags({
+      voiceCalls: updates.voiceCalls,
+      analytics: updates.analytics,
+      homework: updates.homework,
+      notifications: updates.notifications,
+    });
+
+    await Promise.all(
+      Object.entries(nextFlags).map(([name, enabled]) =>
+        db.collection("featureFlags").updateOne(
+          { name },
+          {
+            $set: { name, enabled: Boolean(enabled), updatedAt: new Date() },
+            $setOnInsert: { createdAt: new Date() },
+          },
+          { upsert: true }
+        )
+      )
+    );
+    featureFlagsCache.value = { ...nextFlags };
+    featureFlagsCache.expiresAt = Date.now() + FEATURE_FLAGS_TTL_MS;
+
+    return res.json({ success: true, data: nextFlags });
+  } catch (err) {
+    console.error("? DEV FEATURES UPDATE ERROR:", err);
+    return res.status(500).json({ success: false, message: "Failed to update feature flags" });
+  }
+});
+
+/* Developer API Usage & Monitoring */
+app.get("/api/dev/api-usage", requireAuth, requireDeveloper, async (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(10, Number.parseInt(req.query.limit, 10) || 50));
+    // Return empty API usage data - endpoint for dev console monitoring
+    return res.json({
+      success: true,
+      data: [],
+      pagination: { total: 0, limit, offset: 0 },
+    });
+  } catch (err) {
+    console.error("? DEV API USAGE ERROR:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch API usage" });
+  }
+});
+
+/* Developer Error Tracking */
+app.get("/api/dev/errors", requireAuth, requireDeveloper, async (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(10, Number.parseInt(req.query.limit, 10) || 50));
+    // Return empty error tracking data - endpoint for dev console monitoring
+    return res.json({
+      success: true,
+      data: [],
+      pagination: { total: 0, limit, offset: 0 },
+    });
+  } catch (err) {
+    console.error("? DEV ERRORS FETCH ERROR:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch errors" });
+  }
+});
+
+/* Developer System Health */
+app.get("/api/dev/system-health", requireAuth, requireDeveloper, async (req, res) => {
+  try {
+    return res.json({
+      success: true,
+      data: {
+        status: "healthy",
+        timestamp: new Date(),
+        services: {
+          database: "connected",
+          api: "running",
+        },
+      },
+    });
+  } catch (err) {
+    console.error("? DEV SYSTEM HEALTH ERROR:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch system health" });
+  }
+});
+
+/* Developer Logs Viewer */
+app.get("/api/dev/logs", requireAuth, requireDeveloper, async (req, res) => {
+  const limit = Math.min(200, Math.max(10, Number.parseInt(req.query.limit, 10) || 100));
+  let crashLogs = [];
+  let auditLogs = [];
+
+  try {
+    if (fs.existsSync(crashLogPath)) {
+      const content = fs.readFileSync(crashLogPath, "utf8");
+      crashLogs = content
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .slice(-limit);
+    }
+  } catch (err) {
+    console.error("? DEV CRASH LOG READ ERROR:", err);
+  }
+
+  try {
+    const docs = await db
+      .collection("auditLogs")
+      .find({})
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .toArray();
+    auditLogs = docs.map((entry) => ({
+      _id: entry?._id ? String(entry._id) : "",
+      adminId: entry?.adminId || null,
+      action: entry?.action || "",
+      targetType: entry?.targetType || "",
+      targetId: entry?.targetId || "",
+      metadata: entry?.metadata || {},
+      timestamp: entry?.timestamp || entry?.createdAt || null,
+    }));
+  } catch (err) {
+    console.error("? DEV AUDIT LOG FETCH ERROR:", err);
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      crashLogs,
+      auditLogs,
+    },
+  });
 });
 
 /* ================================
    DEVELOPER: Delete User
    ================================= */
-app.post("/api/dev/users/delete", requireAuth, requireRole("DEVELOPER"), async (req, res) => {
+app.post("/api/dev/users/delete", requireAuth, requireDeveloper, async (req, res) => {
   try {
     const { email } = req.body;
     
@@ -8136,21 +10340,22 @@ app.post("/api/dev/users/delete", requireAuth, requireRole("DEVELOPER"), async (
     const result = await usersCol.deleteOne({ email });
     
     if (result.deletedCount > 0) {
-      console.log(`✅ User deleted: ${email}`);
+      console.log(`? User deleted: ${email}`);
       return res.json({ success: true, message: `User ${email} deleted` });
     } else {
       return res.status(404).json({ error: "User not found" });
     }
   } catch (err) {
-    console.error("❌ DELETE USER ERROR:", err);
+    console.error("? DELETE USER ERROR:", err);
     res.status(500).json({ error: "Delete failed" });
   }
 });
+}
 
 /* ================================
    ADMIN PASSWORD RESET (for troubleshooting)
    ================================= */
-app.post("/api/admin/reset-password", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+app.post("/api/admin/reset-password", requireAuth, requireRole("ADMIN"), requireTenantId, adminResetPasswordValidator, validateRequest, async (req, res) => {
   try {
     const { email, newPassword } = req.body;
     const normalizedEmail = String(email || "").trim().toLowerCase();
@@ -8174,13 +10379,13 @@ app.post("/api/admin/reset-password", requireAuth, requireRole("ADMIN"), require
     );
     
     if (result.modifiedCount > 0) {
-      console.log(`✅ Password reset for ${email}`);
+      console.log(`? Password reset for ${email}`);
       return res.json({ success: true, message: "Password reset successful" });
     } else {
       return res.status(500).json({ error: "Failed to update password" });
     }
   } catch (err) {
-    console.error("❌ PASSWORD RESET ERROR:", err);
+    console.error("? PASSWORD RESET ERROR:", err);
     res.status(500).json({ error: "Password reset failed" });
   }
 });
@@ -8204,11 +10409,11 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
     }
 
     // Log file details for debugging
-    console.log(`📝 ADMIN VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
+    console.log(`?? ADMIN VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
 
     // Check for empty files
     if (req.file.size === 0) {
-      console.error("❌ ADMIN VOICE BROADCAST: Uploaded file is empty (0 bytes)");
+      console.error("? ADMIN VOICE BROADCAST: Uploaded file is empty (0 bytes)");
       return res.status(400).json({ error: "Audio file is empty. Please record audio and try again." });
     }
 
@@ -8218,7 +10423,7 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
 
     // Generate audio URL (public path to uploaded file)
     const audioUrl = `/uploads/voice/${req.file.filename}`;
-    console.log(`✅ ADMIN VOICE BROADCAST: Audio URL = ${audioUrl}`);
+    console.log(`? ADMIN VOICE BROADCAST: Audio URL = ${audioUrl}`);
 
     // Determine target teachers
     let targetUserIds = [];
@@ -8250,7 +10455,7 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
     const result = await db.collection("voiceMessages").insertOne(voiceMessage);
     const voiceMessageId = result.insertedId;
 
-    // ✅ CREATE NOTIFICATIONS FOR ALL TARGET TEACHERS
+    // ? CREATE NOTIFICATIONS FOR ALL TARGET TEACHERS
     const notifications = targetUserIds.map((teacherUserId) => ({
       userId: teacherUserId,
       role: "TEACHER",
@@ -8269,10 +10474,10 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
 
     if (notifications.length > 0) {
       await db.collection("notifications").insertMany(notifications);
-      console.log("✅ NOTIFICATIONS CREATED:", notifications.length, "for admin voice message");
+      console.log("? NOTIFICATIONS CREATED:", notifications.length, "for admin voice message");
     }
 
-    console.log("✅ ADMIN VOICE BROADCAST - Recipients:", targetUserIds.length, "Audio URL:", audioUrl);
+    console.log("? ADMIN VOICE BROADCAST - Recipients:", targetUserIds.length, "Audio URL:", audioUrl);
     res.json({
       success: true,
       messageId: voiceMessageId.toString(),
@@ -8280,7 +10485,7 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
       audioUrl,
     });
   } catch (err) {
-    console.error("❌ ADMIN VOICE BROADCAST ERROR:", err);
+    console.error("? ADMIN VOICE BROADCAST ERROR:", err);
     res.status(500).json({ error: "Failed to broadcast voice message" });
   }
 });
@@ -8304,11 +10509,11 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
     }
 
     // Log file details for debugging
-    console.log(`📝 TEACHER VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
+    console.log(`?? TEACHER VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
 
     // Check for empty files
     if (req.file.size === 0) {
-      console.error("❌ TEACHER VOICE BROADCAST: Uploaded file is empty (0 bytes)");
+      console.error("? TEACHER VOICE BROADCAST: Uploaded file is empty (0 bytes)");
       return res.status(400).json({ error: "Audio file is empty. Please record audio and try again." });
     }
 
@@ -8318,7 +10523,7 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
 
     // Generate audio URL (public path to uploaded file)
     const audioUrl = `/uploads/voice/${req.file.filename}`;
-    console.log(`✅ TEACHER VOICE BROADCAST: Audio URL = ${audioUrl}`);
+    console.log(`? TEACHER VOICE BROADCAST: Audio URL = ${audioUrl}`);
 
     // Determine target students
     let targetUserIds = [];
@@ -8355,7 +10560,7 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
     const result = await db.collection("voiceMessages").insertOne(voiceMessage);
     const voiceMessageId = result.insertedId;
 
-    // ✅ CREATE NOTIFICATIONS FOR ALL TARGET STUDENTS
+    // ? CREATE NOTIFICATIONS FOR ALL TARGET STUDENTS
     const notifications = targetUserIds.map((studentUserId) => ({
       userId: studentUserId,
       role: "STUDENT",
@@ -8374,10 +10579,10 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
 
     if (notifications.length > 0) {
       await db.collection("notifications").insertMany(notifications);
-      console.log("✅ NOTIFICATIONS CREATED:", notifications.length, "for voice message");
+      console.log("? NOTIFICATIONS CREATED:", notifications.length, "for voice message");
     }
 
-    console.log("✅ TEACHER VOICE BROADCAST - Recipients:", targetUserIds.length, "Class:", className, "Section:", section, "Audio URL:", audioUrl);
+    console.log("? TEACHER VOICE BROADCAST - Recipients:", targetUserIds.length, "Class:", className, "Section:", section, "Audio URL:", audioUrl);
     res.json({
       success: true,
       messageId: voiceMessageId.toString(),
@@ -8385,7 +10590,7 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
       audioUrl,
     });
   } catch (err) {
-    console.error("❌ TEACHER VOICE BROADCAST ERROR:", err);
+    console.error("? TEACHER VOICE BROADCAST ERROR:", err);
     res.status(500).json({ error: "Failed to broadcast voice message" });
   }
 });
@@ -8428,7 +10633,7 @@ app.get("/api/teacher/voice-messages/mine", requireAuth, requireRole("TEACHER"),
       _id: msg._id.toString(),
     }));
 
-    console.log("✅ TEACHER VOICE MESSAGES (MINE) - Count:", enrichedMessages.length);
+    console.log("? TEACHER VOICE MESSAGES (MINE) - Count:", enrichedMessages.length);
     if (usePagination) {
       return res.json({
         data: enrichedMessages,
@@ -8439,7 +10644,7 @@ app.get("/api/teacher/voice-messages/mine", requireAuth, requireRole("TEACHER"),
     }
     res.json(enrichedMessages);
   } catch (err) {
-    console.error("❌ TEACHER VOICE MESSAGES (MINE) ERROR:", err);
+    console.error("? TEACHER VOICE MESSAGES (MINE) ERROR:", err);
     res.status(500).json({ error: "Failed to fetch voice messages" });
   }
 });
@@ -8481,7 +10686,7 @@ app.get("/api/teacher/voice-messages", requireAuth, requireRole("TEACHER"), requ
 
     res.json(data);
   } catch (err) {
-    console.error("❌ TEACHER VOICE MESSAGES (LEGACY) ERROR:", err);
+    console.error("? TEACHER VOICE MESSAGES (LEGACY) ERROR:", err);
     res.status(500).json({ error: "Failed to fetch voice messages" });
   }
 });
@@ -8525,7 +10730,7 @@ app.get("/api/student/voice-messages", requireAuth, requireRole("STUDENT"), requ
       })
     );
 
-    console.log("✅ STUDENT VOICE MESSAGES - Count:", enrichedMessages.length);
+    console.log("? STUDENT VOICE MESSAGES - Count:", enrichedMessages.length);
     if (usePagination) {
       const totalCount = await db.collection("voiceMessages").countDocuments(query);
       return res.json({
@@ -8538,7 +10743,7 @@ app.get("/api/student/voice-messages", requireAuth, requireRole("STUDENT"), requ
 
     res.json(enrichedMessages);
   } catch (err) {
-    console.error("❌ STUDENT VOICE MESSAGES ERROR:", err);
+    console.error("? STUDENT VOICE MESSAGES ERROR:", err);
     res.status(500).json({ error: "Failed to fetch voice messages" });
   }
 });
@@ -8747,15 +10952,15 @@ app.post("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireT
         { $set: timetableEntry },
         { returnDocument: "after" }
       );
-      console.log("✅ TIMETABLE UPDATED - ID:", timetableId, "Day:", day, "Period:", period);
+      console.log("? TIMETABLE UPDATED - ID:", timetableId, "Day:", day, "Period:", period);
     } else {
       // Create new entry
       timetableEntry.createdAt = new Date();
       const insertResult = await db.collection("timetables").insertOne(timetableEntry);
-      console.log("✅ TIMETABLE CREATED - ID:", insertResult.insertedId, "Day:", day, "Period:", period);
+      console.log("? TIMETABLE CREATED - ID:", insertResult.insertedId, "Day:", day, "Period:", period);
       result = { value: { ...timetableEntry, _id: insertResult.insertedId } };
 
-      // ✅ CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
+      // ? CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
       const students = await db.collection("students").find(activeStudentFilter({
         schoolId,
         class: className,
@@ -8786,7 +10991,7 @@ app.post("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireT
         }));
 
         await db.collection("notifications").insertMany(notifications);
-        console.log("✅ TIMETABLE NOTIFICATIONS CREATED:", notifications.length, "for timetable:", insertResult.insertedId);
+        console.log("? TIMETABLE NOTIFICATIONS CREATED:", notifications.length, "for timetable:", insertResult.insertedId);
       }
     }
 
@@ -8798,7 +11003,7 @@ app.post("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireT
       },
     });
   } catch (err) {
-    console.error("❌ TIMETABLE SAVE ERROR:", err);
+    console.error("? TIMETABLE SAVE ERROR:", err);
     res.status(500).json({ error: "Failed to save timetable" });
   }
 });
@@ -8833,7 +11038,7 @@ app.get("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireTe
       db.collection("timetables").countDocuments(query),
     ]);
 
-    console.log("✅ TEACHER TIMETABLE - Count:", timetable.length, "Class:", className, "Section:", section);
+    console.log("? TEACHER TIMETABLE - Count:", timetable.length, "Class:", className, "Section:", section);
     const withRowKey = timetable.map((entry) => {
       if (String(entry?.rowKey || "").trim()) return entry;
       const periodValue = Number(entry?.period);
@@ -8853,7 +11058,7 @@ app.get("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireTe
     }
     res.json(withRowKey);
   } catch (err) {
-    console.error("❌ TEACHER TIMETABLE FETCH ERROR:", err);
+    console.error("? TEACHER TIMETABLE FETCH ERROR:", err);
     res.status(500).json({ error: "Failed to fetch timetable" });
   }
 });
@@ -8899,7 +11104,7 @@ app.get("/api/student/timetable", requireAuth, requireRole("STUDENT"), requireTe
       db.collection("timetables").countDocuments(query),
     ]);
 
-    console.log("✅ STUDENT TIMETABLE - Count:", timetable.length, "Class:", student.class, "Section:", student.section);
+    console.log("? STUDENT TIMETABLE - Count:", timetable.length, "Class:", student.class, "Section:", student.section);
     const config = await getTimetableConfigDoc({
       schoolId,
       classId: String(student.class || "").trim(),
@@ -8925,7 +11130,7 @@ app.get("/api/student/timetable", requireAuth, requireRole("STUDENT"), requireTe
     }
     res.json(withRowKey);
   } catch (err) {
-    console.error("❌ STUDENT TIMETABLE FETCH ERROR:", err);
+    console.error("? STUDENT TIMETABLE FETCH ERROR:", err);
     res.status(500).json({ error: "Failed to fetch timetable" });
   }
 });
@@ -8970,16 +11175,16 @@ app.delete("/api/teacher/timetable/:id", requireAuth, requireRole("TEACHER"), re
       { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: teacherId } }
     );
 
-    console.log("✅ TIMETABLE DELETED - ID:", timetableId);
+    console.log("? TIMETABLE DELETED - ID:", timetableId);
     res.json({ success: true });
   } catch (err) {
-    console.error("❌ TIMETABLE DELETE ERROR:", err);
+    console.error("? TIMETABLE DELETE ERROR:", err);
     res.status(500).json({ error: "Failed to delete timetable" });
   }
 });
 
 /* ====================================================================
-   🎓 EXAM-LEVEL SYLLABUS MANAGEMENT (New System)
+   ?? EXAM-LEVEL SYLLABUS MANAGEMENT (New System)
    Supports multiple subjects per exam
    ==================================================================== */
 
@@ -8996,7 +11201,7 @@ app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requ
     const section = req.user.section;
     const teacherId = safeObjectId(req.user.userId);
 
-    console.log("📝 CREATING EXAM SYLLABUS - Teacher:", teacherId, "Class:", className, "Section:", section, "School:", schoolId);
+    console.log("?? CREATING EXAM SYLLABUS - Teacher:", teacherId, "Class:", className, "Section:", section, "School:", schoolId);
 
     // Validate inputs
     if (!examName || !Array.isArray(subjects) || subjects.length === 0) {
@@ -9039,7 +11244,7 @@ app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requ
       updatedAt: new Date(),
     };
 
-    console.log("📝 EXAM OBJECT:", JSON.stringify({
+    console.log("?? EXAM OBJECT:", JSON.stringify({
       schoolId: newExam.schoolId,
       class: newExam.class,
       section: newExam.section,
@@ -9050,9 +11255,9 @@ app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requ
     const insertResult = await db.collection("examSyllabus").insertOne(newExam);
     let isNew = true;
 
-    console.log("✅ EXAM CREATED - ID:", insertResult.insertedId, "Name:", examName);
+    console.log("? EXAM CREATED - ID:", insertResult.insertedId, "Name:", examName);
 
-    // ✅ CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
+    // ? CREATE NOTIFICATIONS FOR ALL STUDENTS IN THIS CLASS/SECTION
     const students = await db.collection("students")
       .find({
         schoolId,
@@ -9061,12 +11266,12 @@ app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requ
       })
       .toArray();
 
-    console.log("📬 Found students for notification:", students.length, "in class:", className, "section:", section);
+    console.log("?? Found students for notification:", students.length, "in class:", className, "section:", section);
 
     if (students.length > 0) {
       const subjectList = newExam.subjects.map((s) => s.subjectName).join(", ");
       const notifications = students.map((student) => ({
-        title: `📖 ${examName} Syllabus Available`,
+        title: `?? ${examName} Syllabus Available`,
         message: `Syllabus for ${examName} (${subjectList}) has been shared`,
         type: "syllabus",
         targetRole: "STUDENT",
@@ -9084,10 +11289,10 @@ app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requ
       }));
 
       await db.collection("notifications").insertMany(notifications);
-      console.log("✅ EXAM SYLLABUS NOTIFICATIONS CREATED:", notifications.length, "for exam:", examName);
+      console.log("? EXAM SYLLABUS NOTIFICATIONS CREATED:", notifications.length, "for exam:", examName);
     }
 
-    console.log("✅ EXAM SYLLABUS CREATED - ID:", insertResult.insertedId, "Exam:", examName, "Subjects:", subjects.length, "Students notified:", students.length);
+    console.log("? EXAM SYLLABUS CREATED - ID:", insertResult.insertedId, "Exam:", examName, "Subjects:", subjects.length, "Students notified:", students.length);
 
     res.json({
       success: true,
@@ -9096,7 +11301,7 @@ app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requ
       message: "Exam syllabus created successfully!",
     });
   } catch (err) {
-    console.error("❌ EXAM SYLLABUS CREATE/UPDATE ERROR:", err);
+    console.error("? EXAM SYLLABUS CREATE/UPDATE ERROR:", err);
     res.status(500).json({ error: "Failed to create or update exam syllabus" });
   }
 });
@@ -9128,7 +11333,7 @@ app.get("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requi
       db.collection("examSyllabus").countDocuments(query),
     ]);
 
-    console.log("✅ TEACHER EXAM SYLLABUSES - Count:", exams.length);
+    console.log("? TEACHER EXAM SYLLABUSES - Count:", exams.length);
     res.json({
       data: exams.map((e) => ({ ...e, _id: e._id.toString() })),
       page,
@@ -9136,7 +11341,7 @@ app.get("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requi
       totalCount,
     });
   } catch (err) {
-    console.error("❌ TEACHER EXAM SYLLABUSES FETCH ERROR:", err);
+    console.error("? TEACHER EXAM SYLLABUSES FETCH ERROR:", err);
     res.status(500).json({ error: "Failed to fetch exam syllabuses" });
   }
 });
@@ -9175,10 +11380,10 @@ app.put("/api/teacher/exam-syllabus/:id", requireAuth, requireRole("TEACHER"), r
       return res.status(404).json({ error: "Exam syllabus not found" });
     }
 
-    console.log("✅ EXAM NAME UPDATED - ID:", examId);
+    console.log("? EXAM NAME UPDATED - ID:", examId);
     res.json({ success: true, message: "Exam name updated successfully" });
   } catch (err) {
-    console.error("❌ EXAM UPDATE ERROR:", err);
+    console.error("? EXAM UPDATE ERROR:", err);
     res.status(500).json({ error: "Failed to update exam" });
   }
 });
@@ -9244,10 +11449,10 @@ app.post("/api/teacher/exam-syllabus/:examId/subject", requireAuth, requireRole(
       return res.status(404).json({ error: "Exam not found" });
     }
 
-    console.log("✅ SUBJECT ADDED TO EXAM - Exam ID:", examId, "Subject:", subjectName);
+    console.log("? SUBJECT ADDED TO EXAM - Exam ID:", examId, "Subject:", subjectName);
     res.json({ success: true, message: "Subject added successfully!" });
   } catch (err) {
-    console.error("❌ ADD SUBJECT ERROR:", err);
+    console.error("? ADD SUBJECT ERROR:", err);
     res.status(500).json({ error: "Failed to add subject" });
   }
 });
@@ -9300,10 +11505,10 @@ app.put("/api/teacher/exam-syllabus/:examId/subject/:subjectId", requireAuth, re
       return res.status(404).json({ error: "Exam or subject not found" });
     }
 
-    console.log("✅ SUBJECT UPDATED - Exam ID:", examId, "Subject ID:", subjectId);
+    console.log("? SUBJECT UPDATED - Exam ID:", examId, "Subject ID:", subjectId);
     res.json({ success: true, message: "Subject updated successfully!" });
   } catch (err) {
-    console.error("❌ UPDATE SUBJECT ERROR:", err);
+    console.error("? UPDATE SUBJECT ERROR:", err);
     res.status(500).json({ error: "Failed to update subject" });
   }
 });
@@ -9341,10 +11546,10 @@ app.delete("/api/teacher/exam-syllabus/:examId/subject/:subjectId", requireAuth,
       return res.status(404).json({ error: "Exam not found" });
     }
 
-    console.log("✅ SUBJECT DELETED - Exam ID:", examId, "Subject ID:", subjectId);
+    console.log("? SUBJECT DELETED - Exam ID:", examId, "Subject ID:", subjectId);
     res.json({ success: true, message: "Subject deleted successfully!" });
   } catch (err) {
-    console.error("❌ DELETE SUBJECT ERROR:", err);
+    console.error("? DELETE SUBJECT ERROR:", err);
     res.status(500).json({ error: "Failed to delete subject" });
   }
 });
@@ -9394,10 +11599,10 @@ app.delete("/api/teacher/exam-syllabus/:id", requireAuth, requireRole("TEACHER")
       { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: teacherId } }
     );
 
-    console.log("✅ EXAM SYLLABUS DELETED - ID:", examId);
+    console.log("? EXAM SYLLABUS DELETED - ID:", examId);
     res.json({ success: true, message: "Exam syllabus deleted successfully" });
   } catch (err) {
-    console.error("❌ EXAM SYLLABUS DELETE ERROR:", err);
+    console.error("? EXAM SYLLABUS DELETE ERROR:", err);
     res.status(500).json({ error: "Failed to delete exam syllabus" });
   }
 });
@@ -9441,10 +11646,10 @@ app.delete(
         return res.status(404).json({ error: "Exam syllabus not found" });
       }
 
-      console.log("✅ SUBJECT REMOVED FROM EXAM - Exam ID:", examId, "Subject:", subjectName);
+      console.log("? SUBJECT REMOVED FROM EXAM - Exam ID:", examId, "Subject:", subjectName);
       res.json({ success: true, message: "Subject removed successfully" });
     } catch (err) {
-      console.error("❌ SUBJECT REMOVE ERROR:", err);
+      console.error("? SUBJECT REMOVE ERROR:", err);
       res.status(500).json({ error: "Failed to remove subject" });
     }
   }
@@ -9464,22 +11669,22 @@ app.get("/api/student/exam-syllabus", requireAuth, requireRole("STUDENT"), requi
       return res.status(400).json({ error: "Invalid userId in token" });
     }
 
-    console.log("📚 STUDENT EXAM SYLLABUS - Fetching for userId:", userObjectId, "schoolId:", schoolObjectId);
+    console.log("?? STUDENT EXAM SYLLABUS - Fetching for userId:", userObjectId, "schoolId:", schoolObjectId);
 
-    // ✅ FIRST: Find student with userId and schoolId to get their class/section
+    // ? FIRST: Find student with userId and schoolId to get their class/section
     const student = await db.collection("students").findOne(activeStudentFilter({
       userId: userObjectId,
       schoolId: schoolObjectId,
     }));
 
     if (!student) {
-      console.warn("⚠️ STUDENT EXAM SYLLABUS - Student not found");
+      console.warn("?? STUDENT EXAM SYLLABUS - Student not found");
       return res.status(404).json({ error: "Student profile not found" });
     }
 
-    console.log("📚 STUDENT EXAM SYLLABUS - Found student class:", student.class, "section:", student.section);
+    console.log("?? STUDENT EXAM SYLLABUS - Found student class:", student.class, "section:", student.section);
 
-    // ✅ NOW: Get exam syllabuses for this student's class and section
+    // ? NOW: Get exam syllabuses for this student's class and section
     const query = {
       schoolId: schoolObjectId,
       class: student.class,
@@ -9497,9 +11702,9 @@ app.get("/api/student/exam-syllabus", requireAuth, requireRole("STUDENT"), requi
       db.collection("examSyllabus").countDocuments(query),
     ]);
 
-    console.log("✅ STUDENT EXAM SYLLABUSES - Count:", exams.length, "for class:", student.class, "section:", student.section);
+    console.log("? STUDENT EXAM SYLLABUSES - Count:", exams.length, "for class:", student.class, "section:", student.section);
     exams.forEach((exam) => {
-      console.log(`   📖 ${exam.examName} (ID: ${exam._id}, Subjects: ${exam.subjects?.length || 0})`);
+      console.log(`   ?? ${exam.examName} (ID: ${exam._id}, Subjects: ${exam.subjects?.length || 0})`);
     });
 
     res.json({
@@ -9509,7 +11714,7 @@ app.get("/api/student/exam-syllabus", requireAuth, requireRole("STUDENT"), requi
       totalCount,
     });
   } catch (err) {
-    console.error("❌ STUDENT EXAM SYLLABUSES FETCH ERROR:", err);
+    console.error("? STUDENT EXAM SYLLABUSES FETCH ERROR:", err);
     res.status(500).json({ error: "Failed to fetch exam syllabuses" });
   }
 });
@@ -10152,7 +12357,7 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
     const schoolId = req.user.schoolIdObj;
     const senderId = safeObjectId(req.user.userId);
 
-    console.log(`🎙️ VOICE ANNOUNCE: Starting upload, file info:`, req.file ? {
+    console.log(`??? VOICE ANNOUNCE: Starting upload, file info:`, req.file ? {
       filename: req.file.filename,
       size: req.file.size,
       mimetype: req.file.mimetype,
@@ -10160,17 +12365,17 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
     } : "NO FILE");
 
     if (!req.file) {
-      console.error("❌ VOICE ANNOUNCE: No file uploaded");
+      console.error("? VOICE ANNOUNCE: No file uploaded");
       return res.status(400).json({ error: "No audio file uploaded" });
     }
 
     if (req.file.size === 0) {
-      console.error("❌ VOICE ANNOUNCE: Uploaded file is empty");
+      console.error("? VOICE ANNOUNCE: Uploaded file is empty");
       return res.status(400).json({ error: "Audio file is empty. Please record audio and try again." });
     }
 
     if (!senderId) {
-      console.error("❌ VOICE ANNOUNCE: Invalid admin ID");
+      console.error("? VOICE ANNOUNCE: Invalid admin ID");
       return res.status(400).json({ error: "Invalid admin ID" });
     }
 
@@ -10183,11 +12388,11 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
     const audioUrl = `/uploads/voice/${req.file.filename}`;
     const filePath = req.file.path;
 
-    console.log(`✅ VOICE ANNOUNCE: File uploaded successfully`);
-    console.log(`   📁 File path on disk: ${filePath}`);
-    console.log(`   🌐 Public URL: ${audioUrl}`);
-    console.log(`   📝 Title: ${title || "School Announcement"}`);
-    console.log(`   👥 Broadcast to: ${broadcastTo}`);
+    console.log(`? VOICE ANNOUNCE: File uploaded successfully`);
+    console.log(`   ?? File path on disk: ${filePath}`);
+    console.log(`   ?? Public URL: ${audioUrl}`);
+    console.log(`   ?? Title: ${title || "School Announcement"}`);
+    console.log(`   ?? Broadcast to: ${broadcastTo}`);
 
     // Get all teachers and students for this school
     const [teachers, students] = await Promise.all([
@@ -10221,7 +12426,7 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
       };
       await db.collection("voice_messages").insertOne(teacherAnnouncement);
       broadcastToTeachers = teacherUserIds.length;
-      console.log(`✅ Voice announcement sent to ${broadcastToTeachers} teachers`);
+      console.log(`? Voice announcement sent to ${broadcastToTeachers} teachers`);
     }
 
     // Create announcements for students if broadcastTo is "all" or "students"
@@ -10241,7 +12446,7 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
       };
       await db.collection("voice_messages").insertOne(studentAnnouncement);
       broadcastToStudents = studentUserIds.length;
-      console.log(`✅ Voice announcement sent to ${broadcastToStudents} students`);
+      console.log(`? Voice announcement sent to ${broadcastToStudents} students`);
     }
 
     res.json({
@@ -10253,7 +12458,7 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
       totalRecipients: broadcastToTeachers + broadcastToStudents,
     });
   } catch (err) {
-    console.error("❌ VOICE ANNOUNCE ERROR:", err);
+    console.error("? VOICE ANNOUNCE ERROR:", err);
     res.status(500).json({ error: "Failed to broadcast voice announcement" });
   }
 });
@@ -10266,17 +12471,17 @@ app.get("/api/admin/voice-announces", requireAuth, requireRole("ADMIN"), require
   try {
     const { page, limit, skip } = getPagination(req.query, { limit: 20 });
     const usePagination = Boolean(req.query.page || req.query.limit);
-    console.log(`🔍 GET /api/admin/voice-announces - Admin ID: ${req.user.userId}`);
+    console.log(`?? GET /api/admin/voice-announces - Admin ID: ${req.user.userId}`);
     
     const schoolId = req.user.schoolIdObj;
     const senderId = safeObjectId(req.user.userId);
 
     if (!senderId) {
-      console.error("❌ Invalid admin ID");
+      console.error("? Invalid admin ID");
       return res.status(400).json({ error: "Invalid admin ID" });
     }
 
-    console.log(`🔍 Fetching announcements for schoolId: ${schoolId}, senderId: ${senderId}`);
+    console.log(`?? Fetching announcements for schoolId: ${schoolId}, senderId: ${senderId}`);
 
     // Get all unique announcements (we store them twice - once for teachers, once for students)
     // So we need to deduplicate by audioUrl
@@ -10314,7 +12519,7 @@ app.get("/api/admin/voice-announces", requireAuth, requireRole("ADMIN"), require
       }),
     }));
 
-    console.log(`✅ ADMIN VOICE ANNOUNCES: ${formatted.length} announcements found`);
+    console.log(`? ADMIN VOICE ANNOUNCES: ${formatted.length} announcements found`);
     formatted.forEach((a, idx) => {
       console.log(`   [${idx + 1}] "${a.title}" - audioUrl: ${a.audioUrl}`);
     });
@@ -10328,7 +12533,7 @@ app.get("/api/admin/voice-announces", requireAuth, requireRole("ADMIN"), require
     }
     res.json(formatted);
   } catch (err) {
-    console.error("❌ GET VOICE ANNOUNCES ERROR:", err);
+    console.error("? GET VOICE ANNOUNCES ERROR:", err);
     res.status(500).json({ error: "Failed to fetch announcements" });
   }
 });
@@ -10337,7 +12542,14 @@ app.get("/api/admin/voice-announces", requireAuth, requireRole("ADMIN"), require
  * ADMIN: POST /api/admin/announcements
  * Create a text announcement for all teachers and students
  */
-app.post("/api/admin/announcements", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+app.post(
+  "/api/admin/announcements",
+  requireAuth,
+  requireRole("ADMIN"),
+  requireTenantId,
+  announcementValidator,
+  validateRequest,
+  async (req, res) => {
   try {
     const { title, message, recipientRole } = req.body;
     const schoolId = req.user.schoolIdObj;
@@ -10362,7 +12574,7 @@ app.post("/api/admin/announcements", requireAuth, requireRole("ADMIN"), requireT
     const result = await db.collection("announcements").insertOne(announcement);
     const announcementId = result.insertedId;
 
-    // ✅ CREATE NOTIFICATIONS FOR ALL TEACHERS OR STUDENTS
+    // ? CREATE NOTIFICATIONS FOR ALL TEACHERS OR STUDENTS
     let targetRole = [];
     let query = { schoolId };
 
@@ -10404,18 +12616,29 @@ app.post("/api/admin/announcements", requireAuth, requireRole("ADMIN"), requireT
         }));
 
         await db.collection("notifications").insertMany(notifications);
-        console.log("✅ ANNOUNCEMENT NOTIFICATIONS CREATED:", notifications.length, `for ${role}s`);
+        console.log("? ANNOUNCEMENT NOTIFICATIONS CREATED:", notifications.length, `for ${role}s`);
       }
     }
 
-    console.log("✅ ANNOUNCEMENT CREATED - ID:", announcementId, "Title:", title, "Recipients:", recipientRole);
+    console.log("? ANNOUNCEMENT CREATED - ID:", announcementId, "Title:", title, "Recipients:", recipientRole);
+
+    logAuditEvent({
+      schoolId,
+      userId: req.user.userId,
+      userRole: req.user.role,
+      action: "CREATE",
+      entityType: "announcement",
+      entityId: announcementId,
+      description: `Admin sent announcement "${title}" to ${recipientRole}`,
+    });
+
     res.json({
       success: true,
       announcementId: announcementId.toString(),
       announcement: { ...announcement, _id: announcementId.toString() },
     });
   } catch (err) {
-    console.error("❌ ANNOUNCEMENT CREATE ERROR:", err);
+    console.error("? ANNOUNCEMENT CREATE ERROR:", err);
     res.status(500).json({ error: "Failed to create announcement" });
   }
 });
@@ -10447,10 +12670,10 @@ app.delete("/api/admin/announcements/:id", requireAuth, requireRole("ADMIN"), re
       );
     });
 
-    console.log("✅ ADMIN ANNOUNCEMENT REVOKED:", announcementId.toString());
+    console.log("? ADMIN ANNOUNCEMENT REVOKED:", announcementId.toString());
     return res.json({ success: true, message: "Message deleted for everyone" });
   } catch (err) {
-    console.error("❌ ADMIN DELETE ANNOUNCEMENT ERROR:", err);
+    console.error("? ADMIN DELETE ANNOUNCEMENT ERROR:", err);
     return res.status(500).json({ error: "Failed to delete announcement" });
   }
 });
@@ -10524,10 +12747,10 @@ app.delete("/api/admin/voice-messages/:id", requireAuth, requireRole("ADMIN"), r
       }
     });
 
-    console.log("✅ ADMIN VOICE MESSAGE REVOKED:", voiceId.toString());
+    console.log("? ADMIN VOICE MESSAGE REVOKED:", voiceId.toString());
     return res.json({ success: true, message: "Message deleted for everyone" });
   } catch (err) {
-    console.error("❌ ADMIN DELETE VOICE MESSAGE ERROR:", err);
+    console.error("? ADMIN DELETE VOICE MESSAGE ERROR:", err);
     return res.status(500).json({ error: "Failed to delete voice message" });
   }
 });
@@ -10558,10 +12781,10 @@ app.delete("/api/admin/notifications/:id", requireAuth, requireRole("ADMIN"), re
       );
     });
 
-    console.log("✅ ADMIN NOTIFICATION REVOKED:", notificationId.toString());
+    console.log("? ADMIN NOTIFICATION REVOKED:", notificationId.toString());
     return res.json({ success: true, message: "Message deleted for everyone" });
   } catch (err) {
-    console.error("❌ ADMIN DELETE NOTIFICATION ERROR:", err);
+    console.error("? ADMIN DELETE NOTIFICATION ERROR:", err);
     return res.status(500).json({ error: "Failed to delete notification" });
   }
 });
@@ -10593,10 +12816,10 @@ app.delete("/api/admin/events/:id", requireAuth, requireRole("ADMIN"), requireTe
       );
     });
 
-    console.log("✅ ADMIN EVENT REVOKED:", eventId.toString());
+    console.log("? ADMIN EVENT REVOKED:", eventId.toString());
     return res.json({ success: true, message: "Message deleted for everyone" });
   } catch (err) {
-    console.error("❌ ADMIN DELETE EVENT ERROR:", err);
+    console.error("? ADMIN DELETE EVENT ERROR:", err);
     return res.status(500).json({ error: "Failed to delete event" });
   }
 });
@@ -11066,7 +13289,7 @@ app.get("/api/teacher/announcements", requireAuth, requireRole("TEACHER"), requi
     if (!userId) return res.status(400).json({ error: "Invalid user ID" });
 
     const announcements = await getAnnouncementFeed({ schoolId, userId, targetRole: "TEACHER", from, to, skip, limit });
-    console.log(`✅ TEACHER ANNOUNCEMENTS: ${announcements.length} items`);
+    console.log(`? TEACHER ANNOUNCEMENTS: ${announcements.length} items`);
     if (usePagination) {
       return res.json({
         data: announcements,
@@ -11077,7 +13300,7 @@ app.get("/api/teacher/announcements", requireAuth, requireRole("TEACHER"), requi
     }
     return res.json(announcements);
   } catch (err) {
-    console.error("❌ TEACHER ANNOUNCEMENTS ERROR:", err);
+    console.error("? TEACHER ANNOUNCEMENTS ERROR:", err);
     return res.status(500).json({ error: "Failed to fetch announcements" });
   }
 });
@@ -11092,7 +13315,7 @@ app.get("/api/student/announcements", requireAuth, requireRole("STUDENT"), requi
     if (!userId) return res.status(400).json({ error: "Invalid user ID" });
 
     const announcements = await getAnnouncementFeed({ schoolId, userId, targetRole: "STUDENT", from, to, skip, limit });
-    console.log(`✅ STUDENT ANNOUNCEMENTS: ${announcements.length} items`);
+    console.log(`? STUDENT ANNOUNCEMENTS: ${announcements.length} items`);
     if (usePagination) {
       return res.json({
         data: announcements,
@@ -11103,7 +13326,7 @@ app.get("/api/student/announcements", requireAuth, requireRole("STUDENT"), requi
     }
     return res.json(announcements);
   } catch (err) {
-    console.error("❌ STUDENT ANNOUNCEMENTS ERROR:", err);
+    console.error("? STUDENT ANNOUNCEMENTS ERROR:", err);
     return res.status(500).json({ error: "Failed to fetch announcements" });
   }
 });
@@ -11128,7 +13351,7 @@ app.get("/api/teacher/voice-announces", requireAuth, requireRole("TEACHER"), req
     }
     return res.json(announcements);
   } catch (err) {
-    console.error("❌ TEACHER VOICE-ANNOUNCES ALIAS ERROR:", err);
+    console.error("? TEACHER VOICE-ANNOUNCES ALIAS ERROR:", err);
     return res.status(500).json({ error: "Failed to fetch announcements" });
   }
 });
@@ -11152,7 +13375,7 @@ app.get("/api/student/voice-announces", requireAuth, requireRole("STUDENT"), req
     }
     return res.json(announcements);
   } catch (err) {
-    console.error("❌ STUDENT VOICE-ANNOUNCES ALIAS ERROR:", err);
+    console.error("? STUDENT VOICE-ANNOUNCES ALIAS ERROR:", err);
     return res.status(500).json({ error: "Failed to fetch announcements" });
   }
 });
@@ -11161,7 +13384,7 @@ app.get("/api/student/voice-announces", requireAuth, requireRole("STUDENT"), req
    NOTIFICATION SYSTEM ROUTES
    ================================= */
 
-// ✅ GET /api/notifications - Get notifications for current user
+// ? GET /api/notifications - Get notifications for current user
 app.get("/api/notifications", requireAuth, requireTenantId, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -11269,12 +13492,12 @@ app.get("/api/notifications", requireAuth, requireTenantId, async (req, res) => 
       totalCount,
     });
   } catch (error) {
-    console.error("❌ Error fetching notifications:", error);
+    console.error("? Error fetching notifications:", error);
     res.status(500).json({ error: "Failed to fetch notifications" });
   }
 });
 
-// ✅ POST /api/notifications - Create a new notification
+// ? POST /api/notifications - Create a new notification
 app.post("/api/notifications", requireAuth, requireTenantId, async (req, res) => {
   try {
     const { title, message, type, targetRole, targetUser, metadata } = req.body;
@@ -11315,12 +13538,12 @@ app.post("/api/notifications", requireAuth, requireTenantId, async (req, res) =>
       },
     });
   } catch (error) {
-    console.error("❌ Error creating notification:", error);
+    console.error("? Error creating notification:", error);
     res.status(500).json({ error: "Failed to create notification" });
   }
 });
 
-// ✅ PUT /api/notifications/:id/read - Mark notification as read
+// ? PUT /api/notifications/:id/read - Mark notification as read
 app.put("/api/notifications/:id/read", requireAuth, requireTenantId, async (req, res) => {
   try {
     const { id } = req.params;
@@ -11364,12 +13587,12 @@ app.put("/api/notifications/:id/read", requireAuth, requireTenantId, async (req,
 
     res.json({ success: true, message: "Notification marked as read" });
   } catch (error) {
-    console.error("❌ Error marking notification as read:", error);
+    console.error("? Error marking notification as read:", error);
     res.status(500).json({ error: "Failed to mark notification as read" });
   }
 });
 
-// ✅ PUT /api/notifications/mark-all-read - Mark all notifications as read
+// ? PUT /api/notifications/mark-all-read - Mark all notifications as read
 app.put("/api/notifications/mark-all-read", requireAuth, requireTenantId, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -11409,14 +13632,21 @@ app.put("/api/notifications/mark-all-read", requireAuth, requireTenantId, async 
       modifiedCount: result.modifiedCount,
     });
   } catch (error) {
-    console.error("❌ Error marking all as read:", error);
+    console.error("? Error marking all as read:", error);
     res.status(500).json({ error: "Failed to mark all as read" });
   }
 });
 
-// ✅ GET /api/notifications/unread-count - Get unread notification count
+// ? GET /api/notifications/unread-count - Get unread notification count
 app.get("/api/notifications/unread-count", requireAuth, requireTenantId, async (req, res) => {
   try {
+    // Disable caching for real-time unread count updates
+    res.set({
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
+    });
+    
     const userId = req.user.userId;
     const role = req.user.role;
     const schoolId = req.user.schoolIdObj;
@@ -11452,12 +13682,12 @@ app.get("/api/notifications/unread-count", requireAuth, requireTenantId, async (
 
     res.json({ unreadCount });
   } catch (error) {
-    console.error("❌ Error getting unread count:", error);
+    console.error("? Error getting unread count:", error);
     res.status(500).json({ error: "Failed to get unread count" });
   }
 });
 
-// ✅ DELETE /api/notifications/:id - Delete a notification
+// ? DELETE /api/notifications/:id - Delete a notification
 app.delete("/api/notifications/:id", requireAuth, requireTenantId, async (req, res) => {
   try {
     const { id } = req.params;
@@ -11501,7 +13731,7 @@ app.delete("/api/notifications/:id", requireAuth, requireTenantId, async (req, r
 
     res.json({ success: true, message: "Notification deleted" });
   } catch (error) {
-    console.error("❌ Error deleting notification:", error);
+    console.error("? Error deleting notification:", error);
     res.status(500).json({ error: "Failed to delete notification" });
   }
 });
@@ -11516,7 +13746,7 @@ app.post("/api/tracking/session-log", requireAuth, requireTenantId, async (req, 
     const { userId, role, schoolId, eventType, startTime, duration, date } = req.body;
 
     if (!userId || !role || !schoolId || !eventType) {
-      console.warn('⚠️ SessionLog: Missing fields -', { userId, role, schoolId, eventType });
+      console.warn('?? SessionLog: Missing fields -', { userId, role, schoolId, eventType });
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -11533,7 +13763,7 @@ app.post("/api/tracking/session-log", requireAuth, requireTenantId, async (req, 
       date: new Date(date).toISOString().split('T')[0],
     };
 
-    console.log('📝 SessionLog: Storing event -', { 
+    console.log('?? SessionLog: Storing event -', { 
       userId: sessionLog.userId, 
       role: sessionLog.role, 
       schoolId: sessionLog.schoolId, 
@@ -11542,21 +13772,88 @@ app.post("/api/tracking/session-log", requireAuth, requireTenantId, async (req, 
     });
 
     const result = await db.collection("sessionLogs").insertOne(sessionLog);
-    console.log('✅ SessionLog: Event stored with ID:', result.insertedId);
+    console.log('? SessionLog: Event stored with ID:', result.insertedId);
 
     res.json({ success: true, message: "Session logged" });
   } catch (error) {
-    console.error("❌ Error logging session:", error);
+    console.error("? Error logging session:", error);
     res.status(500).json({ error: "Failed to log session" });
   }
 });
+
+const buildTrackingSchoolFilter = (schoolId) => {
+  const schoolObjectId = safeObjectId(schoolId);
+  return schoolObjectId
+    ? { schoolId: { $in: [String(schoolId), schoolObjectId] } }
+    : { schoolId: String(schoolId) };
+};
+
+const buildTrackingUserFilter = (userId) => {
+  const userObjectId = safeObjectId(userId);
+  return userObjectId
+    ? { userId: { $in: [String(userId), userObjectId] } }
+    : { userId: String(userId) };
+};
+
+const resolveTrackingUserName = async ({ userId, schoolId, role }) => {
+  const schoolFilter = buildTrackingSchoolFilter(schoolId);
+  const userFilter = buildTrackingUserFilter(userId);
+  const userObjectId = safeObjectId(userId);
+  const roleValue = String(role || "").toUpperCase();
+
+  try {
+    if (roleValue === "STUDENT") {
+      const student = await db.collection("students").findOne(
+        activeStudentFilter({ ...schoolFilter, ...userFilter }),
+        { projection: { name: 1 } }
+      );
+      if (student?.name) return student.name;
+    }
+
+    if (roleValue === "TEACHER") {
+      const teacher = await db.collection("teachers").findOne(
+        activeTeacherFilter({ ...schoolFilter, ...userFilter }),
+        { projection: { name: 1 } }
+      );
+      if (teacher?.name) return teacher.name;
+    }
+
+    const [student, teacher] = await Promise.all([
+      db.collection("students").findOne(
+        activeStudentFilter({ ...schoolFilter, ...userFilter }),
+        { projection: { name: 1 } }
+      ),
+      db.collection("teachers").findOne(
+        activeTeacherFilter({ ...schoolFilter, ...userFilter }),
+        { projection: { name: 1 } }
+      ),
+    ]);
+
+    if (student?.name) return student.name;
+    if (teacher?.name) return teacher.name;
+
+    const usersQuery = userObjectId
+      ? { _id: userObjectId, ...schoolFilter }
+      : { _id: String(userId), ...schoolFilter };
+    const userDoc = await db.collection("users").findOne(usersQuery, {
+      projection: { name: 1, email: 1 },
+    });
+
+    if (userDoc?.name) return userDoc.name;
+    if (userDoc?.email) return userDoc.email;
+  } catch (err) {
+    console.warn(`?? Failed to resolve name for userId ${userId}:`, err.message);
+  }
+
+  return "Unknown User";
+};
 
 // Get concurrent users (currently logged-in users)
 app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
   try {
     const schoolId = String(req.user?.schoolId); // Get from token via requireAuth middleware
 
-    console.log('🔍 ConcurrentUsers: Querying for schoolId:', schoolId);
+    console.log('?? ConcurrentUsers: Querying for schoolId:', schoolId);
 
     // Get all login events without matching logout events in the last 24 hours
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -11581,7 +13878,7 @@ app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), req
       },
     ]).toArray();
 
-    console.log('📊 ConcurrentUsers: Found', recentLogins.length, 'login events');
+    console.log('?? ConcurrentUsers: Found', recentLogins.length, 'login events');
 
     // Get logout times for these users
     const logoutTimes = await db.collection("sessionLogs").aggregate([
@@ -11603,7 +13900,7 @@ app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), req
       },
     ]).toArray();
 
-    console.log('📊 ConcurrentUsers: Found', logoutTimes.length, 'logout events');
+    console.log('?? ConcurrentUsers: Found', logoutTimes.length, 'logout events');
 
     // Find active users (logged in after latest logout)
     const activeUsersWithoutNames = recentLogins
@@ -11622,41 +13919,12 @@ app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), req
     // Fetch user names from students/teachers collections
     const activeUsers = await Promise.all(
       activeUsersWithoutNames.map(async (user) => {
-        let userName = "Unknown User";
-        
-        try {
-          // Try to find in students collection (by userId field)
-          const student = await db.collection("students").findOne(activeStudentFilter({
-            userId: user.userId,
-            schoolId: schoolId,
-          }));
-          
-          if (student?.name) {
-            userName = student.name;
-          } else {
-            // Try to find in teachers collection (by userId field)
-            const teacher = await db.collection("teachers").findOne(activeTeacherFilter({
-              userId: user.userId,
-              schoolId: schoolId,
-            }));
-            
-            if (teacher?.name) {
-              userName = teacher.name;
-            } else {
-              // Try users collection as fallback
-              const userDoc = await db.collection("users").findOne({
-                _id: user.userId,
-              });
-              
-              if (userDoc?.name) {
-                userName = userDoc.name;
-              }
-            }
-          }
-        } catch (err) {
-          console.warn(`⚠️ Failed to fetch name for userId ${user.userId}:`, err.message);
-        }
-        
+        const userName = await resolveTrackingUserName({
+          userId: user.userId,
+          schoolId,
+          role: user.role,
+        });
+
         return {
           ...user,
           userName: userName,
@@ -11664,10 +13932,10 @@ app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), req
       })
     );
 
-    console.log('✅ ConcurrentUsers: Returning', activeUsers.length, 'active users with names');
+    console.log('? ConcurrentUsers: Returning', activeUsers.length, 'active users with names');
     res.json(activeUsers);
   } catch (error) {
-    console.error("❌ Error fetching concurrent users:", error);
+    console.error("? Error fetching concurrent users:", error);
     res.status(500).json({ error: "Failed to fetch concurrent users" });
   }
 });
@@ -11682,7 +13950,7 @@ app.get("/api/tracking/daily-stats", requireAuth, requireRole("ADMIN"), requireT
       return res.status(400).json({ error: "Date parameter required" });
     }
 
-    console.log('🔍 DailyStats: Querying for schoolId:', schoolId, 'date:', date, 'role:', role);
+    console.log('?? DailyStats: Querying for schoolId:', schoolId, 'date:', date, 'role:', role);
 
     // Parse the date to create range for the entire day
     const startOfDay = new Date(`${date}T00:00:00Z`);
@@ -11699,7 +13967,7 @@ app.get("/api/tracking/daily-stats", requireAuth, requireRole("ADMIN"), requireT
 
     // Get all session logs for the day
     const sessionLogs = await db.collection("sessionLogs").find(matchStage).toArray();
-    console.log('📊 DailyStats: Found', sessionLogs.length, 'session log entries');
+    console.log('?? DailyStats: Found', sessionLogs.length, 'session log entries');
 
     // Group by userId to pair logins with logouts
     const userSessions = {};
@@ -11724,46 +13992,17 @@ app.get("/api/tracking/daily-stats", requireAuth, requireRole("ADMIN"), requireT
     });
 
     const sessionsWithoutNames = Object.values(userSessions).filter(s => s.loginTime);
-    console.log('✅ DailyStats: Processed', sessionsWithoutNames.length, 'user sessions');
+    console.log('? DailyStats: Processed', sessionsWithoutNames.length, 'user sessions');
 
     // Fetch user names for each session
     const sessions = await Promise.all(
       sessionsWithoutNames.map(async (session) => {
-        let userName = "Unknown User";
-        
-        try {
-          // Try to find in students collection (by userId field)
-          const student = await db.collection("students").findOne(activeStudentFilter({
-            userId: session.userId,
-            schoolId: schoolId,
-          }));
-          
-          if (student?.name) {
-            userName = student.name;
-          } else {
-            // Try to find in teachers collection (by userId field)
-            const teacher = await db.collection("teachers").findOne(activeTeacherFilter({
-              userId: session.userId,
-              schoolId: schoolId,
-            }));
-            
-            if (teacher?.name) {
-              userName = teacher.name;
-            } else {
-              // Try users collection as fallback
-              const userDoc = await db.collection("users").findOne({
-                _id: session.userId,
-              });
-              
-              if (userDoc?.name) {
-                userName = userDoc.name;
-              }
-            }
-          }
-        } catch (err) {
-          console.warn(`⚠️ Failed to fetch name for userId ${session.userId}:`, err.message);
-        }
-        
+        const userName = await resolveTrackingUserName({
+          userId: session.userId,
+          schoolId,
+          role: session.role,
+        });
+
         return {
           ...session,
           userName: userName,
@@ -11777,7 +14016,7 @@ app.get("/api/tracking/daily-stats", requireAuth, requireRole("ADMIN"), requireT
       totalSessions: sessions.length,
     });
   } catch (error) {
-    console.error("❌ Error fetching daily stats:", error);
+    console.error("? Error fetching daily stats:", error);
     res.status(500).json({ error: "Failed to fetch daily statistics" });
   }
 });
@@ -11795,7 +14034,7 @@ app.post("/api/debug/create-sample-data", async (req, res) => {
     }
     
     const schoolId = school._id;
-    console.log(`🔄 Creating sample data for schoolId: ${schoolId}`);
+    console.log(`?? Creating sample data for schoolId: ${schoolId}`);
     
     // Sample data
     const classes = ["1", "2", "3", "4"];
@@ -11880,10 +14119,10 @@ app.post("/api/debug/create-sample-data", async (req, res) => {
       }
     }
     
-    console.log(`✅ Created ${createdCount} sample students, ${attendanceCount} attendance records, ${marksCount} marks`);
+    console.log(`? Created ${createdCount} sample students, ${attendanceCount} attendance records, ${marksCount} marks`);
     res.json({ success: true, message: `Created ${createdCount} students, ${attendanceCount} attendance, ${marksCount} marks` });
   } catch (error) {
-    console.error("❌ SAMPLE DATA ERROR:", error);
+    console.error("? SAMPLE DATA ERROR:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -11895,7 +14134,7 @@ app.post("/api/debug/create-sample-data", async (req, res) => {
 app.post("/api/admin/debug/create-sample-data", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
   try {
     const schoolId = req.user.schoolIdObj;
-    console.log(`🔄 Creating sample data for schoolId: ${schoolId}`);
+    console.log(`?? Creating sample data for schoolId: ${schoolId}`);
     
     // Sample data
     const classes = ["1", "2", "3", "4"];
@@ -11976,10 +14215,10 @@ app.post("/api/admin/debug/create-sample-data", requireAuth, requireRole("ADMIN"
       }
     }
     
-    console.log(`✅ Created ${createdCount} sample students and data`);
+    console.log(`? Created ${createdCount} sample students and data`);
     res.json({ success: true, message: `Created ${createdCount} sample students with attendance and marks` });
   } catch (error) {
-    console.error("❌ SAMPLE DATA ERROR:", error);
+    console.error("? SAMPLE DATA ERROR:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -12006,7 +14245,7 @@ app.get("/api/admin/debug/db-status", requireAuth, requireRole("ADMIN"), require
       sampleStudents: sampleStudents.map(s => ({ _id: s._id, schoolId: s.schoolId?.toString(), class: s.class, section: s.section, name: s.name })),
     });
   } catch (error) {
-    console.error("❌ DEBUG ERROR:", error);
+    console.error("? DEBUG ERROR:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -12019,7 +14258,7 @@ app.get("/api/admin/debug/db-status", requireAuth, requireRole("ADMIN"), require
 app.get("/api/admin/meta/classes-sections", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
   try {
     const schoolId = req.user.schoolIdObj; // Use ObjectId from middleware
-    console.log(`🎯 META: Fetching classes and sections for schoolId: ${schoolId}`);
+    console.log(`?? META: Fetching classes and sections for schoolId: ${schoolId}`);
     
     // Aggregate class/section metadata from students, teachers, and subjects for full coverage.
     const studentQuery = activeStudentFilter({ schoolId });
@@ -12053,7 +14292,7 @@ app.get("/api/admin/meta/classes-sections", requireAuth, requireRole("ADMIN"), r
       ...(teacherSectionsRaw || []),
       ...(subjectSectionsRaw || []),
     ];
-    console.log(`✅ Distinct class/section loaded for schoolId ${schoolId}`);
+    console.log(`? Distinct class/section loaded for schoolId ${schoolId}`);
 
     // Extract unique classes and sections
     const classesSet = new Set((classesRaw || []).map((value) => String(value || "").trim()).filter(Boolean));
@@ -12072,8 +14311,8 @@ app.get("/api/admin/meta/classes-sections", requireAuth, requireRole("ADMIN"), r
 
     const sections = Array.from(sectionsSet).sort();
 
-    console.log(`✅ Unique classes: ${classes.join(", ") || "NONE"}`);
-    console.log(`✅ Unique sections: ${sections.join(", ") || "NONE"}`);
+    console.log(`? Unique classes: ${classes.join(", ") || "NONE"}`);
+    console.log(`? Unique sections: ${sections.join(", ") || "NONE"}`);
 
     res.json({
       classes,
@@ -12081,7 +14320,7 @@ app.get("/api/admin/meta/classes-sections", requireAuth, requireRole("ADMIN"), r
       hasData: classes.length > 0 && sections.length > 0
     });
   } catch (error) {
-    console.error("❌ META ERROR:", error);
+    console.error("? META ERROR:", error);
     res.status(500).json({ error: "Failed to fetch classes and sections" });
   }
 });
@@ -12097,7 +14336,7 @@ app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requi
     const schoolId = req.user.schoolIdObj;
     let { class: classParam, section: sectionParam } = req.query;
     
-    console.log(`🔍 STUDENTS: Fetching for class=${classParam}, section=${sectionParam}, schoolId=${schoolId}`);
+    console.log(`?? STUDENTS: Fetching for class=${classParam}, section=${sectionParam}, schoolId=${schoolId}`);
     
     // Validate required params
     if (!classParam || !sectionParam) {
@@ -12108,7 +14347,7 @@ app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requi
     const classValue = isNaN(classParam) ? classParam : Number(classParam);
     const sectionValue = String(sectionParam).trim();
 
-    console.log(`📌 Query params after conversion: class=${classValue} (type: ${typeof classValue}), section=${sectionValue}`);
+    console.log(`?? Query params after conversion: class=${classValue} (type: ${typeof classValue}), section=${sectionValue}`);
 
     // Query students - try both number and string formats for class
     const query = activeStudentFilter({
@@ -12128,7 +14367,7 @@ app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requi
       db.collection("students").countDocuments(query),
     ]);
 
-    console.log(`✅ Found ${students.length} students for class ${classValue}, section ${sectionValue}`);
+    console.log(`? Found ${students.length} students for class ${classValue}, section ${sectionValue}`);
 
     // Format response - only return necessary fields
     const formattedStudents = students.map(s => ({
@@ -12148,7 +14387,7 @@ app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requi
       totalCount,
     });
   } catch (error) {
-    console.error("❌ STUDENTS ERROR:", error);
+    console.error("? STUDENTS ERROR:", error);
     res.status(500).json({ error: "Failed to fetch students" });
   }
 });
@@ -12160,6 +14399,9 @@ app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requi
 app.get("/api/admin/analytics", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
   try {
     const schoolId = req.user.schoolIdObj;
+    const cacheKey = buildCacheKey("admin-analytics", schoolId, req.query);
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
 
     const studentMatch = activeStudentFilter({ schoolId });
     const teacherMatch = activeTeacherFilter({ schoolId });
@@ -12379,7 +14621,7 @@ app.get("/api/admin/analytics", requireAuth, requireRole("ADMIN"), requireTenant
       })
       .slice(0, 30);
 
-    return res.json({
+    const response = {
       totalStudents,
       totalTeachers,
       classes,
@@ -12399,10 +14641,303 @@ app.get("/api/admin/analytics", requireAuth, requireRole("ADMIN"), requireTenant
       },
       alerts,
       generatedAt: new Date().toISOString(),
-    });
+    };
+    setCache(cacheKey, response);
+    return res.json(response);
   } catch (error) {
     console.error("ADMIN ANALYTICS ERROR:", error);
     return res.status(500).json({ error: "Failed to fetch admin analytics" });
+  }
+});
+
+/* ================================
+   ADMIN: TEACHER ANALYTICS
+   ================================= */
+app.get("/api/admin/analytics/teachers", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const cacheKey = buildCacheKey("admin-analytics-teachers", schoolId, req.query);
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+    const teacherDocs = await db
+      .collection("teachers")
+      .find(activeTeacherFilter({ schoolId }))
+      .project({ _id: 1, name: 1, class: 1, className: 1, section: 1 })
+      .toArray();
+
+    const attendanceByClass = await db.collection("attendance").aggregate([
+      { $match: { schoolId, submissionStatus: "SUBMITTED" } },
+      {
+        $group: {
+          _id: {
+            className: { $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } } },
+            sectionName: { $trim: { input: { $toString: { $ifNull: ["$section", ""] } } } },
+          },
+          totalRecords: { $sum: 1 },
+          present: {
+            $sum: {
+              $cond: [{ $eq: [{ $toUpper: { $ifNull: ["$status", ""] } }, "PRESENT"] }, 1, 0],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          className: "$_id.className",
+          sectionName: "$_id.sectionName",
+          attendancePercent: {
+            $cond: [{ $gt: ["$totalRecords", 0] }, { $multiply: [{ $divide: ["$present", "$totalRecords"] }, 100] }, 0],
+          },
+        },
+      },
+    ]).toArray();
+
+    const marksByClass = await db.collection("marks").aggregate([
+      { $match: { schoolId } },
+      {
+        $addFields: {
+          scoreNumeric: {
+            $convert: { input: "$score", to: "double", onError: null, onNull: null },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            className: { $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } } },
+            sectionName: { $trim: { input: { $toString: { $ifNull: ["$section", ""] } } } },
+          },
+          sumScore: { $sum: { $cond: [{ $ne: ["$scoreNumeric", null] }, "$scoreNumeric", 0] } },
+          totalEntries: { $sum: { $cond: [{ $ne: ["$scoreNumeric", null] }, 1, 0] } },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          className: "$_id.className",
+          sectionName: "$_id.sectionName",
+          classAverageScore: {
+            $cond: [{ $gt: ["$totalEntries", 0] }, { $divide: ["$sumScore", "$totalEntries"] }, 0],
+          },
+        },
+      },
+    ]).toArray();
+
+    const lowMarksStudents = await db.collection("marks").aggregate([
+      { $match: { schoolId } },
+      {
+        $addFields: {
+          scoreNumeric: {
+            $convert: { input: "$score", to: "double", onError: null, onNull: null },
+          },
+          studentKey: { $toString: { $ifNull: ["$studentId", "$studentUserId"] } },
+        },
+      },
+      { $match: { scoreNumeric: { $ne: null }, studentKey: { $ne: "" } } },
+      {
+        $group: {
+          _id: {
+            className: { $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } } },
+            sectionName: { $trim: { input: { $toString: { $ifNull: ["$section", ""] } } } },
+            studentKey: "$studentKey",
+          },
+          avgScore: { $avg: "$scoreNumeric" },
+        },
+      },
+      { $match: { avgScore: { $lt: 40 } } },
+      {
+        $project: {
+          _id: 0,
+          className: "$_id.className",
+          sectionName: "$_id.sectionName",
+          studentKey: "$_id.studentKey",
+        },
+      },
+    ]).toArray();
+
+    const lowAttendanceStudents = await db.collection("attendance").aggregate([
+      { $match: { schoolId, submissionStatus: "SUBMITTED" } },
+      {
+        $addFields: {
+          studentKey: { $toString: { $ifNull: ["$studentId", "$studentUserId"] } },
+        },
+      },
+      { $match: { studentKey: { $ne: "" } } },
+      {
+        $group: {
+          _id: {
+            className: { $trim: { input: { $toString: { $ifNull: ["$class", "$className"] } } } },
+            sectionName: { $trim: { input: { $toString: { $ifNull: ["$section", ""] } } } },
+            studentKey: "$studentKey",
+          },
+          totalRecords: { $sum: 1 },
+          present: {
+            $sum: {
+              $cond: [{ $eq: [{ $toUpper: { $ifNull: ["$status", ""] } }, "PRESENT"] }, 1, 0],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          className: "$_id.className",
+          sectionName: "$_id.sectionName",
+          studentKey: "$_id.studentKey",
+          attendancePercent: {
+            $cond: [{ $gt: ["$totalRecords", 0] }, { $multiply: [{ $divide: ["$present", "$totalRecords"] }, 100] }, 0],
+          },
+        },
+      },
+      { $match: { attendancePercent: { $lt: 60 } } },
+    ]).toArray();
+
+    const classKeyOf = (className, sectionName) => `${String(className || "").trim()}::${String(sectionName || "").trim()}`;
+    const attendanceMap = new Map();
+    const marksMap = new Map();
+
+    for (const row of attendanceByClass) {
+      const key = classKeyOf(row.className, row.sectionName);
+      if (key.startsWith("::")) continue;
+      attendanceMap.set(key, Math.max(0, Math.min(100, Number(row.attendancePercent || 0))));
+    }
+    for (const row of marksByClass) {
+      const key = classKeyOf(row.className, row.sectionName);
+      if (key.startsWith("::")) continue;
+      marksMap.set(key, Math.max(0, Math.min(100, Number(row.classAverageScore || 0))));
+    }
+
+    const riskByClass = new Map();
+    const upsertRisk = (className, sectionName, studentKey) => {
+      if (!studentKey) return;
+      const key = `${classKeyOf(className, sectionName)}::${String(studentKey)}`;
+      riskByClass.set(key, true);
+    };
+    for (const row of lowMarksStudents) upsertRisk(row.className, row.sectionName, row.studentKey);
+    for (const row of lowAttendanceStudents) upsertRisk(row.className, row.sectionName, row.studentKey);
+
+    const riskCountMap = new Map();
+    for (const key of riskByClass.keys()) {
+      const classKey = key.split("::").slice(0, 2).join("::");
+      riskCountMap.set(classKey, (riskCountMap.get(classKey) || 0) + 1);
+    }
+
+    const teachers = teacherDocs.map((t) => {
+      const className = String(t?.class || t?.className || "").trim();
+      const sectionName = String(t?.section || "").trim();
+      const key = classKeyOf(className, sectionName);
+      const classAverageScore = marksMap.get(key) || 0;
+      const classAttendancePercent = attendanceMap.get(key) || 0;
+      const studentsNeedingAttention = riskCountMap.get(key) || 0;
+      const performanceScore = Number((((classAverageScore + classAttendancePercent) / 2) || 0).toFixed(1));
+
+      return {
+        teacherId: String(t?._id || ""),
+        teacherName: String(t?.name || "Unknown Teacher"),
+        className,
+        sectionName,
+        classAverageScore: Number(classAverageScore.toFixed(1)),
+        classAttendancePercent: Number(classAttendancePercent.toFixed(1)),
+        studentsNeedingAttention,
+        performanceScore,
+        needsSupport: classAverageScore < 40 || classAttendancePercent < 60,
+      };
+    });
+
+    const totalTeachers = teachers.length;
+    const avgTeacherPerformance =
+      totalTeachers > 0
+        ? Number((teachers.reduce((sum, t) => sum + t.classAverageScore, 0) / totalTeachers).toFixed(1))
+        : 0;
+    const avgClassAttendance =
+      totalTeachers > 0
+        ? Number((teachers.reduce((sum, t) => sum + t.classAttendancePercent, 0) / totalTeachers).toFixed(1))
+        : 0;
+
+    const supportClasses = new Set();
+    for (const row of teachers) {
+      if (!row.needsSupport) continue;
+      supportClasses.add(classKeyOf(row.className, row.sectionName));
+    }
+
+    const topTeachers = [...teachers]
+      .sort((a, b) => b.performanceScore - a.performanceScore)
+      .slice(0, 5);
+
+    const response = {
+      overview: {
+        totalTeachers,
+        avgTeacherPerformance,
+        avgClassAttendance,
+        classesNeedingSupport: supportClasses.size,
+      },
+      teachers,
+      topTeachers,
+      generatedAt: new Date().toISOString(),
+    };
+    setCache(cacheKey, response);
+    return res.json(response);
+  } catch (error) {
+    console.error("ADMIN TEACHER ANALYTICS ERROR:", error);
+    return res.status(500).json({ error: "Failed to fetch teacher analytics" });
+  }
+});
+
+/* ================================
+   ADMIN: AUDIT LOGS
+   ================================= */
+app.get("/api/admin/audit-logs", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
+  try {
+    const schoolId = req.user.schoolIdObj;
+    const { action, userId, from, to } = req.query || {};
+    const { page, limit, skip } = getPagination(req.query, { page: 1, limit: 20 });
+
+    const query = { schoolId };
+
+    if (action && String(action).trim().toLowerCase() !== "all") {
+      query.action = String(action).trim().toUpperCase();
+    }
+
+    if (userId) {
+      const parsedUserId = safeObjectId(String(userId).trim());
+      query.userId = parsedUserId ? { $in: [parsedUserId, String(userId).trim()] } : String(userId).trim();
+    }
+
+    if (from || to) {
+      query.timestamp = {};
+      if (from) query.timestamp.$gte = new Date(from);
+      if (to) query.timestamp.$lte = new Date(to);
+    }
+
+    const [rows, totalCount] = await Promise.all([
+      db.collection("auditLogs")
+        .find(query)
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      db.collection("auditLogs").countDocuments(query),
+    ]);
+
+    const data = rows.map((row) => ({
+      ...row,
+      _id: String(row._id),
+      schoolId: row.schoolId ? String(row.schoolId) : null,
+      userId: row.userId ? String(row.userId) : null,
+      entityId: row.entityId ? String(row.entityId) : null,
+    }));
+
+    return res.json({
+      success: true,
+      data,
+      page,
+      totalPages: Math.max(1, Math.ceil(totalCount / limit)),
+      totalCount,
+    });
+  } catch (error) {
+    console.error("ADMIN AUDIT LOGS ERROR:", error);
+    return res.status(500).json({ error: "Failed to fetch audit logs" });
   }
 });
 
@@ -12418,7 +14953,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
     const filterClass = req.query.class ? String(req.query.class).trim() : null;
     const filterSection = req.query.section ? String(req.query.section).trim() : null;
     
-    console.log(`📊 CLASS COMPARISON: schoolId=${schoolId}, filterClass=${filterClass}, filterSection=${filterSection}`);
+    console.log(`?? CLASS COMPARISON: schoolId=${schoolId}, filterClass=${filterClass}, filterSection=${filterSection}`);
 
     // Get all students for this school
     let studentQuery = activeStudentFilter({ schoolId });
@@ -12431,10 +14966,10 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
       db.collection("students").find(studentQuery).toArray(),
       db.collection("students").countDocuments(studentQuery),
     ]);
-    console.log(`✅ Found ${students.length} students for query:`, studentQuery);
+    console.log(`? Found ${students.length} students for query:`, studentQuery);
 
     if (students.length === 0) {
-      console.log(`⚠️ No students found. Returning empty array.`);
+      console.log(`?? No students found. Returning empty array.`);
       return res.json({
         data: [],
         page: 1,
@@ -12456,13 +14991,13 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
     const attendanceRecords = await db.collection("attendance")
       .find({ schoolId, studentId: { $in: studentIds } })
       .toArray();
-    console.log(`✅ Found ${attendanceRecords.length} total attendance records`);
+    console.log(`? Found ${attendanceRecords.length} total attendance records`);
 
     // Get all marks records for this school
     const marksRecords = await db.collection("marks")
       .find({ schoolId, studentId: { $in: studentIds } })
       .toArray();
-    console.log(`✅ Found ${marksRecords.length} total marks records`);
+    console.log(`? Found ${marksRecords.length} total marks records`);
 
     // Create lookup maps for faster access
     const attendanceMap = {};
@@ -12470,7 +15005,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
 
     // Debug: show first few attendance studentIds
     if (attendanceRecords.length > 0) {
-      console.log(`📌 FIRST 5 ATTENDANCE studentIds:`);
+      console.log(`?? FIRST 5 ATTENDANCE studentIds:`);
       attendanceRecords.slice(0, 5).forEach(rec => {
         console.log(`   - ${rec.studentId} (type: ${typeof rec.studentId}, constructor: ${rec.studentId?.constructor?.name})`);
       });
@@ -12485,13 +15020,13 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
     });
 
     // Debug: show attendance map keys
-    console.log(`📌 ATTENDANCE MAP KEYS (${Object.keys(attendanceMap).length} unique students):`);
+    console.log(`?? ATTENDANCE MAP KEYS (${Object.keys(attendanceMap).length} unique students):`);
     Object.keys(attendanceMap).slice(0, 5).forEach(key => {
       console.log(`   - ${key}: ${attendanceMap[key].length} records`);
     });
 
     // Debug: Show actual attendance status values
-    console.log(`📌 SAMPLE ATTENDANCE STATUS VALUES:`);
+    console.log(`?? SAMPLE ATTENDANCE STATUS VALUES:`);
     attendanceRecords.slice(0, 10).forEach(rec => {
       console.log(`   - status: "${rec.status}" (type: ${typeof rec.status})`);
     });
@@ -12502,7 +15037,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
       const status = String(rec.status || 'null').toLowerCase();
       statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
-    console.log(`📌 ATTENDANCE STATUS COUNTS:`, statusCounts);
+    console.log(`?? ATTENDANCE STATUS COUNTS:`, statusCounts);
 
     marksRecords.forEach(record => {
       const studentIdStr = String(record.studentId);
@@ -12513,19 +15048,19 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
     });
 
     // Debug: show marks map keys
-    console.log(`📌 MARKS MAP KEYS (${Object.keys(marksMap).length} unique students):`);
+    console.log(`?? MARKS MAP KEYS (${Object.keys(marksMap).length} unique students):`);
     Object.keys(marksMap).slice(0, 5).forEach(key => {
       console.log(`   - ${key}: ${marksMap[key].length} records`);
     });
 
     // Debug: Show sample marks values
-    console.log(`📌 SAMPLE MARKS VALUES:`);
+    console.log(`?? SAMPLE MARKS VALUES:`);
     marksRecords.slice(0, 10).forEach(rec => {
       console.log(`   - marks: ${rec.marks} (type: ${typeof rec.marks}), subject: ${rec.subject}`);
     });
 
     // Debug: Show FULL marks document structure
-    console.log(`📌 SAMPLE FULL MARKS DOCUMENT:`);
+    console.log(`?? SAMPLE FULL MARKS DOCUMENT:`);
     if (marksRecords.length > 0) {
       console.log(JSON.stringify(marksRecords[0], null, 2));
     }
@@ -12548,7 +15083,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
     });
 
     // Debug: show student IDs and matching
-    console.log(`📌 FIRST 5 STUDENT IDs (students collection):`);
+    console.log(`?? FIRST 5 STUDENT IDs (students collection):`);
     students.slice(0, 5).forEach(s => {
       console.log(`   - ${s._id} (type: ${typeof s._id}, constructor: ${s._id?.constructor?.name})`);
     });
@@ -12627,7 +15162,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
 
       const overall = avgMarksPercent >= 75 ? 'Excellent' : avgMarksPercent >= 60 ? 'Good' : 'Needs Attention';
 
-      console.log(`📌 CLASS ${classGroup.class}-${classGroup.section}: students=${totalStudents} (with_attendance=${studentsWithAttendance}, with_marks=${studentsWithMarks}), totalAttendanceDays=${totalAttendanceDays}, totalPresentDays=${totalPresentDays}, attendance=${avgAttendancePercent}%, marks=${avgMarksPercent}%, status=${overall}`);
+      console.log(`?? CLASS ${classGroup.class}-${classGroup.section}: students=${totalStudents} (with_attendance=${studentsWithAttendance}, with_marks=${studentsWithMarks}), totalAttendanceDays=${totalAttendanceDays}, totalPresentDays=${totalPresentDays}, attendance=${avgAttendancePercent}%, marks=${avgMarksPercent}%, status=${overall}`);
       console.log(`   Attendance status breakdown:`, attendanceByStatus);
 
       return {
@@ -12663,7 +15198,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
         }
       : null;
 
-    console.log(`✅ CLASS COMPARISON: Returning ${classMetrics.length} classes`);
+    console.log(`? CLASS COMPARISON: Returning ${classMetrics.length} classes`);
     res.json({
       data: classMetrics,
       page: 1,
@@ -12679,7 +15214,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
       hasData: classMetrics.length > 0,
     });
   } catch (error) {
-    console.error("❌ CLASS COMPARISON ERROR:", error);
+    console.error("? CLASS COMPARISON ERROR:", error);
     res.status(500).json({ error: "Failed to fetch class comparison data", details: error.message });
   }
 });
@@ -12696,27 +15231,8 @@ app.use((err, req, res, _next) => {
     })
   );
   if (res.headersSent) return;
-  res.status(500).json({ error: "Internal server error" });
-});
-
-/* ================================
-   SPA FALLBACK - Serve index.html for client-side routing
-   ================================= */
-// All requests that don't match static files or API routes
-// should return index.html so React Router can handle them
-app.get("*", (req, res) => {
-  // Don't serve API routes (this shouldn't happen as they're already defined)
-  if (req.path.startsWith("/api/")) {
-    return res.status(404).json({ error: "API endpoint not found" });
-  }
-  
-  // For all other routes, serve index.html so React Router on the client handles it
-  const indexPath = path.join(frontendBuildPath, "index.html");
-  res.sendFile(indexPath, (err) => {
-    if (err) {
-      console.error("❌ Error serving index.html:", err);
-      res.status(500).json({ error: "Internal server error" });
-    }
+  res.status(err?.status || 500).json({
+    success: false,
+    message: "Internal server error",
   });
 });
-

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { TrendingUp, Award, AlertCircle, Filter } from 'lucide-react';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000';
   const [classComparison, setClassComparison] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedClass, setSelectedClass] = useState('');
@@ -25,7 +25,7 @@ const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
         setMetaLoading(true);
         setMetaError('');
         console.log('🔄 FETCHING: Classes and sections metadata...');
-        const response = await fetch(`${apiBase}/api/admin/meta/classes-sections`, {
+        const response = await fetch(`${API_URL}/api/admin/meta/classes-sections`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         console.log('📋 META RESPONSE: Status', response.status);
@@ -63,7 +63,7 @@ const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
         setLoading(true);
         
         // Build URL with query parameters
-        let url = `${apiBase}/api/admin/analytics/class-comparison`;
+        let url = `${API_URL}/api/admin/analytics/class-comparison`;
         const params = new URLSearchParams();
         if (selectedClass) params.append('class', selectedClass);
         if (selectedSection) params.append('section', selectedSection);
@@ -118,7 +118,7 @@ const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
     if (token && schoolId) {
       fetchClassComparison();
     }
-  }, [token, schoolId, selectedClass, selectedSection, apiBase]);
+  }, [token, schoolId, selectedClass, selectedSection]);
   // Fetch students when class and section are selected
   useEffect(() => {
     const fetchStudents = async () => {
@@ -133,7 +133,7 @@ const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
         setStudentsError('');
         console.log(`🔍 FETCHING: Students for class=${selectedClass}, section=${selectedSection}`);
         const response = await fetch(
-          `${apiBase}/api/admin/students-by-class?class=${selectedClass}&section=${selectedSection}`,
+          `${API_URL}/api/admin/students-by-class?class=${selectedClass}&section=${selectedSection}`,
           { headers: { 'Authorization': `Bearer ${token}` } }
         );
         
@@ -159,7 +159,7 @@ const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
     if (token) {
       fetchStudents();
     }
-  }, [selectedClass, selectedSection, token, apiBase]);
+  }, [selectedClass, selectedSection, token]);
   // Get unique classes and sections from fetched data (not from analytics data)
   const { uniqueClasses, uniqueSections } = useMemo(() => {
     console.log('📊 USING FETCHED CLASSES:', metaClasses);

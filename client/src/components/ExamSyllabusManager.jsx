@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-export default function ExamSyllabusManager({ token, teacher }) {
+export default function ExamSyllabusManager({ token }) {
   const toast = useToast();
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -18,11 +18,7 @@ export default function ExamSyllabusManager({ token, teacher }) {
   const [submitting, setSubmitting] = useState(false);
 
   // Fetch exams on mount
-  useEffect(() => {
-    fetchExams();
-  }, [token]);
-
-  const fetchExams = async () => {
+  const fetchExams = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/teacher/exam-syllabus`, {
@@ -38,7 +34,11 @@ export default function ExamSyllabusManager({ token, teacher }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, toast]);
+
+  useEffect(() => {
+    fetchExams();
+  }, [fetchExams]);
 
   // ===== CREATE NEW EXAM =====
   const handleCreateNewExam = async (e) => {
@@ -370,7 +370,7 @@ export default function ExamSyllabusManager({ token, teacher }) {
                 {/* Metadata */}
                 <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500">
                   Created on {new Date(exam.createdAt).toLocaleDateString()} •
-                  {exam.updatedAt && new Date(exam.updatedAt) !== new Date(exam.createdAt) && (
+                {exam.updatedAt && new Date(exam.updatedAt).getTime() !== new Date(exam.createdAt).getTime() && (
                     <>
                       {" "}
                       Updated {new Date(exam.updatedAt).toLocaleDateString()}

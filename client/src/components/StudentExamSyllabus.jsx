@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -10,35 +10,7 @@ export default function StudentExamSyllabus({ token, selectedExamId }) {
   const [expandedExamIds, setExpandedExamIds] = useState({});
   const [selectedExamData, setSelectedExamData] = useState(null);
 
-  // Fetch all exam syllabuses
-  useEffect(() => {
-    fetchExamSyllabuses();
-  }, [token]);
-
-  // Auto-expand selected exam when examId changes
-  useEffect(() => {
-    if (selectedExamId && examSyllabuses.length > 0) {
-      console.log("📖 StudentExamSyllabus: Auto-expanding exam ID:", selectedExamId);
-      
-      // Find the exam with matching ID
-      const selectedExam = examSyllabuses.find((exam) => exam._id === selectedExamId);
-      
-      if (selectedExam) {
-        console.log("✅ StudentExamSyllabus: Found exam:", selectedExam.examName);
-        setSelectedExamData(selectedExam);
-        setExpandedExamIds((prev) => ({
-          ...prev,
-          [selectedExamId]: true, // Auto-expand
-        }));
-      } else {
-        console.warn("⚠️ StudentExamSyllabus: Exam not found for ID:", selectedExamId);
-        setSelectedExamData(null);
-        toast.warning("Exam syllabus not found");
-      }
-    }
-  }, [selectedExamId, examSyllabuses, toast]);
-
-  const fetchExamSyllabuses = async () => {
+  const fetchExamSyllabuses = useCallback(async () => {
     setLoading(true);
     try {
       console.log("📡 StudentExamSyllabus: Fetching all exam syllabuses...");
@@ -63,7 +35,35 @@ export default function StudentExamSyllabus({ token, selectedExamId }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, toast]);
+
+  // Fetch all exam syllabuses
+  useEffect(() => {
+    fetchExamSyllabuses();
+  }, [fetchExamSyllabuses]);
+
+  // Auto-expand selected exam when examId changes
+  useEffect(() => {
+    if (selectedExamId && examSyllabuses.length > 0) {
+      console.log("📖 StudentExamSyllabus: Auto-expanding exam ID:", selectedExamId);
+
+      // Find the exam with matching ID
+      const selectedExam = examSyllabuses.find((exam) => exam._id === selectedExamId);
+
+      if (selectedExam) {
+        console.log("✅ StudentExamSyllabus: Found exam:", selectedExam.examName);
+        setSelectedExamData(selectedExam);
+        setExpandedExamIds((prev) => ({
+          ...prev,
+          [selectedExamId]: true, // Auto-expand
+        }));
+      } else {
+        console.warn("⚠️ StudentExamSyllabus: Exam not found for ID:", selectedExamId);
+        setSelectedExamData(null);
+        toast.warning("Exam syllabus not found");
+      }
+    }
+  }, [selectedExamId, examSyllabuses, toast]);
 
   const toggleExamExpanded = (examId) => {
     setExpandedExamIds((prev) => ({
@@ -155,7 +155,7 @@ export default function StudentExamSyllabus({ token, selectedExamId }) {
               {/* Footer */}
               <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500">
                 Created on {new Date(exam.createdAt).toLocaleDateString()}
-                {exam.updatedAt && new Date(exam.updatedAt) !== new Date(exam.createdAt) && (
+                {exam.updatedAt && new Date(exam.updatedAt).getTime() !== new Date(exam.createdAt).getTime() && (
                   <>
                     {" "}
                     • Updated {new Date(exam.updatedAt).toLocaleDateString()}

@@ -3,8 +3,8 @@ import { Bar, BarChart, CartesianGrid, Label, ResponsiveContainer, Tooltip, XAxi
 
 function MarksDistributionChart({ data = [] }) {
   return (
-    <div className="h-56 w-full">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full min-h-[280px] min-w-0">
+      <ResponsiveContainer width="100%" height={300} minWidth={280} minHeight={220} debounce={80}>
         <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
           <XAxis dataKey="label" tick={{ fill: "#cbd5e1", fontSize: 11 }}>

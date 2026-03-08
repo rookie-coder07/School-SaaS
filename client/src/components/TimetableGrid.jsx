@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 import { createNotification } from "../utils/notificationHelper";
 
@@ -42,11 +42,7 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
     [config.rows]
   );
 
-  useEffect(() => {
-    fetchConfigAndTimetable();
-  }, [token, isTeacher]);
-
-  const fetchConfigAndTimetable = async () => {
+  const fetchConfigAndTimetable = useCallback(async () => {
     setLoading(true);
     try {
       const configEndpoint = isTeacher ? "/api/teacher/timetable/config" : "/api/student/timetable/config";
@@ -77,7 +73,11 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
     } finally {
       setLoading(false);
     }
-  };
+  }, [isTeacher, token, toast]);
+
+  useEffect(() => {
+    fetchConfigAndTimetable();
+  }, [fetchConfigAndTimetable]);
 
   const getSubjectTone = (subjectName) => {
     const key = String(subjectName || "").trim().toLowerCase();

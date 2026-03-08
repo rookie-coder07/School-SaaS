@@ -1,0 +1,2109 @@
+{
+  "generatedAt": "2026-03-08T16:54:32.883Z",
+  "baseUrl": "http://localhost:5174",
+  "config": {
+    "allowDangerousClicks": false,
+    "quickMode": true
+  },
+  "pagesTested": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5174/admin/dashboard"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5174/admin/dashboard?section=students"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "url": "http://localhost:5174/admin/dashboard?section=teachers"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "url": "http://localhost:5174/admin/dashboard?section=analytics"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/teacher/dashboard"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/teacher/dashboard?section=attendance"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/teacher/dashboard?section=homework"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5174/dev-console/dashboard"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5174/dev-console/errors"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5174/dev-console/users"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5174/dev-console/data-explorer"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5174/dev-console/system-controls"
+    }
+  ],
+  "pageScreenshots": [
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Students.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Teachers.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Analytics.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Attendance.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Homework.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Dashboard.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Errors.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Users.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Data_Explorer.png",
+    "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-System_Controls.png"
+  ],
+  "consoleErrors": [
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "MARKS FETCH ERROR: TypeError: Failed to fetch\n    at fetchAllMarks (http://localhost:5174/src/pages/TeacherDashboard.jsx:547:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:563:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:07.081Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "MARKS FETCH ERROR: TypeError: Failed to fetch\n    at fetchAllMarks (http://localhost:5174/src/pages/TeacherDashboard.jsx:547:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:563:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:07.081Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "SUBJECTS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:582:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:669:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "SUBJECTS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:582:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:669:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "SUMMARY FETCH ERROR: TypeError: Failed to fetch\n    at fetchSummary (http://localhost:5174/src/pages/TeacherDashboard.jsx:941:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:960:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "SUMMARY FETCH ERROR: TypeError: Failed to fetch\n    at fetchSummary (http://localhost:5174/src/pages/TeacherDashboard.jsx:941:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:960:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "MARKS EXAMS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:625:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:670:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "MARKS EXAMS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:625:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:670:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "HOMEWORK FETCH ERROR: TypeError: Failed to fetch\n    at fetchHomework (http://localhost:5174/src/pages/TeacherDashboard.jsx:397:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:413:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:09.355Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "HOMEWORK FETCH ERROR: TypeError: Failed to fetch\n    at fetchHomework (http://localhost:5174/src/pages/TeacherDashboard.jsx:397:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:413:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:09.355Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "error",
+      "message": "MARKS FETCH ERROR: TypeError: Failed to fetch\n    at fetchAllMarks (http://localhost:5174/src/pages/TeacherDashboard.jsx:547:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:563:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:12.094Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "error",
+      "message": "MARKS EXAMS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:625:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:670:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:13.195Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "error",
+      "message": "SUBJECTS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:582:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:669:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:13.195Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "error",
+      "message": "SUMMARY FETCH ERROR: TypeError: Failed to fetch\n    at fetchSummary (http://localhost:5174/src/pages/TeacherDashboard.jsx:941:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:960:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:13.741Z"
+    }
+  ],
+  "reactWarnings": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T16:54:36.872Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T16:54:36.888Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T16:58:42.145Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T16:58:42.160Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:02:47.709Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:02:47.725Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:06:53.321Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:06:53.338Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:06:59.856Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:06:59.872Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:10:04.803Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:10:04.819Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "MARKS FETCH ERROR: TypeError: Failed to fetch\n    at fetchAllMarks (http://localhost:5174/src/pages/TeacherDashboard.jsx:547:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:563:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:07.081Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "MARKS FETCH ERROR: TypeError: Failed to fetch\n    at fetchAllMarks (http://localhost:5174/src/pages/TeacherDashboard.jsx:547:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:563:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:07.081Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "SUBJECTS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:582:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:669:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "SUBJECTS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:582:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:669:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "SUMMARY FETCH ERROR: TypeError: Failed to fetch\n    at fetchSummary (http://localhost:5174/src/pages/TeacherDashboard.jsx:941:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:960:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "SUMMARY FETCH ERROR: TypeError: Failed to fetch\n    at fetchSummary (http://localhost:5174/src/pages/TeacherDashboard.jsx:941:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:960:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "MARKS EXAMS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:625:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:670:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "MARKS EXAMS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:625:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:670:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:08.235Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "level": "error",
+      "message": "HOMEWORK FETCH ERROR: TypeError: Failed to fetch\n    at fetchHomework (http://localhost:5174/src/pages/TeacherDashboard.jsx:397:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:413:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:09.355Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "level": "error",
+      "message": "HOMEWORK FETCH ERROR: TypeError: Failed to fetch\n    at fetchHomework (http://localhost:5174/src/pages/TeacherDashboard.jsx:397:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:413:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:09.355Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:10:09.452Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:10:09.467Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "error",
+      "message": "MARKS FETCH ERROR: TypeError: Failed to fetch\n    at fetchAllMarks (http://localhost:5174/src/pages/TeacherDashboard.jsx:547:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:563:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:12.094Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "error",
+      "message": "MARKS EXAMS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:625:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:670:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:13.195Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "error",
+      "message": "SUBJECTS FETCH ERROR: TypeError: Failed to fetch\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:582:22\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:669:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:13.195Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "level": "error",
+      "message": "SUMMARY FETCH ERROR: TypeError: Failed to fetch\n    at fetchSummary (http://localhost:5174/src/pages/TeacherDashboard.jsx:941:23)\n    at http://localhost:5174/src/pages/TeacherDashboard.jsx:960:3\n    at Object.react_stack_bottom_frame (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:12907:13)\n    at runWithFiberInDEV (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:854:66)\n    at commitHookEffectListMount (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6620:153)\n    at commitHookPassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:6655:55)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7621:22)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)\n    at commitPassiveMountOnFiber (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7620:6)\n    at recursivelyTraversePassiveMountEffects (http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=f52eea5b:7609:5)",
+      "timestamp": "2026-03-08T17:10:13.741Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:10:15.538Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:10:15.553Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:10:18.704Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:10:18.719Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:10:22.015Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:10:22.032Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:10:26.317Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:10:26.331Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "level": "info",
+      "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "timestamp": "2026-03-08T17:10:30.264Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "level": "log",
+      "message": "✅ main.jsx loaded - React app initializing",
+      "timestamp": "2026-03-08T17:10:30.278Z"
+    }
+  ],
+  "networkErrors": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5000/api/tracking/session-log",
+      "method": "POST",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T16:54:36.836Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "url": "http://localhost:5000/api/dashboard/summary",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T16:58:42.478Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "url": "http://localhost:5000/api/dashboard/summary",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T16:58:42.478Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "url": "http://localhost:5000/api/dashboard/summary",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:02:48.051Z"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "url": "http://localhost:5000/api/dashboard/summary",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:06:53.660Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/tracking/session-log",
+      "method": "POST",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:06:59.825Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/attendance/summary?className=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:07:00.377Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/attendance/summary?className=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:05.312Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/marks",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:07.081Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/marks",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:07.081Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/class-analytics?exam=all&subject=all&timeRange=week",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:07.673Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/class-analytics?exam=all&subject=all&timeRange=week",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:07.673Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/subjects?class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:08.234Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/subjects?class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:08.234Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/exams?scope=marks&class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:08.234Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/exams?scope=marks&class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:08.234Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5000/api/teacher/homework",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.355Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5000/api/teacher/homework",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.355Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/AdminAnalyticsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/AdminAnalyticsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/AdminAnalyticsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/ConfirmationModal.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/ConfirmationModal.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/ConfirmationModal.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/analytics/SubjectPerformanceChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/analytics/SubjectPerformanceChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/analytics/SubjectPerformanceChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/UserTrackingDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/UserTrackingDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/UserTrackingDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/analytics/MarksDistributionChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/analytics/MarksDistributionChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/analytics/MarksDistributionChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/AdminAuditLogsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/AdminAuditLogsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/AdminAuditLogsDashboard.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "url": "http://localhost:5174/src/components/analytics/AttendanceTrendChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "url": "http://localhost:5174/src/components/analytics/AttendanceTrendChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5174/src/components/analytics/AttendanceTrendChart.jsx",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.423Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/attendance/summary?className=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:09.832Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/homework",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:11.990Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/marks",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:12.094Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/class-analytics?exam=all&subject=all&timeRange=week",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:12.653Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/exams?scope=marks&class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:13.194Z"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "url": "http://localhost:5000/api/teacher/subjects?class=1&section=A",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:13.195Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:17.101Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:17.101Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/logs?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:17.657Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:17.906Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:17.906Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:17.906Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:17.907Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:17.907Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/live-activity?limit=80",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:18.155Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/traces?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:18.406Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:18.673Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:18.673Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:20.089Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:20.089Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:20.089Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:20.089Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:20.089Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/logs?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:20.750Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:25.471Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=200&role=ADMIN&schoolId=6995bf63d34e4a34f7a3ae7e",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:25.719Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=200&role=ADMIN&schoolId=6995bf63d34e4a34f7a3ae7e",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:25.719Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=200&role=ADMIN&schoolId=6995bf63d34e4a34f7a3ae7e",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:25.719Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/live-activity?limit=80",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:25.719Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/live-activity?limit=80",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:25.719Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/traces?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:25.997Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/traces?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:25.997Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.222Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "url": "http://localhost:5000/api/dev/data/students?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.502Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "url": "http://localhost:5000/api/dev/data/students?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.502Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "url": "http://localhost:5000/api/dev/data/students?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.502Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/data/students?page=1&limit=200",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:28.502Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "url": "http://localhost:5000/api/dev/live-activity?limit=80",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:29.630Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/system-health",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:31.716Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/schools?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:31.716Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/errors?limit=50",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:31.716Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/voice-messages?limit=100",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:31.716Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/portal/overview",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:31.716Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/users?page=1&limit=1",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:31.716Z"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "url": "http://localhost:5000/api/dev/api-usage",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "timestamp": "2026-03-08T17:10:31.716Z"
+    }
+  ],
+  "failedApis": [],
+  "uiIssues": [
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 17,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T16:54:37.491Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Dashboard-zero_size_ui_elements-1772988877491.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 1,
+        "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(1)\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition bg-slate-700 text-cyan-400\">Dashboard</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T16:54:38.647Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Dashboard-button_click_failed-1772988878647.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 4,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(4)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T16:55:39.195Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Dashboard-button_click_failed-1772988939195.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 5,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(5)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T16:56:39.846Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Dashboard-button_click_failed-1772988999846.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 6,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(6)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T16:57:40.487Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Dashboard-button_click_failed-1772989060487.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Dashboard",
+      "routePath": "/admin/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 7,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(7)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T16:58:41.143Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Dashboard-button_click_failed-1772989121143.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 17,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T16:58:42.747Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Students-zero_size_ui_elements-1772989122747.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 1,
+        "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(1)\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition text-slate-300 hover:bg-slate-700/50\">Dashboard</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T16:58:44.254Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Students-button_click_failed-1772989124254.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 4,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(4)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T16:59:44.734Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Students-button_click_failed-1772989184734.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 5,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(5)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:00:45.369Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Students-button_click_failed-1772989245369.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 6,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(6)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:01:46.055Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Students-button_click_failed-1772989306055.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Students",
+      "routePath": "/admin/dashboard?section=students",
+      "type": "button_click_failed",
+      "details": {
+        "index": 7,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(7)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:02:46.718Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Students-button_click_failed-1772989366718.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 17,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 23,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 24,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 25,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 26,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 27,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 28,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 29,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 30,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 31,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 32,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 33,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 34,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 35,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 36,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 37,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 38,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 39,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 40,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 41,
+          "tag": "INPUT",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:02:48.326Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Teachers-zero_size_ui_elements-1772989368326.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 1,
+        "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(1)\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition text-slate-300 hover:bg-slate-700/50\">Dashboard</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:02:49.787Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Teachers-button_click_failed-1772989369787.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 4,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(4)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:03:50.302Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Teachers-button_click_failed-1772989430302.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 5,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(5)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:04:50.970Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Teachers-button_click_failed-1772989490970.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 6,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(6)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:05:51.627Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Teachers-button_click_failed-1772989551627.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Teachers",
+      "routePath": "/admin/dashboard?section=teachers",
+      "type": "button_click_failed",
+      "details": {
+        "index": 7,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(7)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:06:52.285Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Teachers-button_click_failed-1772989612285.png"
+    },
+    {
+      "portal": "admin",
+      "routeName": "Analytics",
+      "routePath": "/admin/dashboard?section=analytics",
+      "type": "button_click_failed",
+      "details": {
+        "index": 1,
+        "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(1)\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition\">…</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:06:55.134Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\admin-Analytics-button_click_failed-1772989615134.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 19,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:07:00.483Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Dashboard-zero_size_ui_elements-1772989620483.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 1,
+        "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(1)\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition bg-slate-700 text-cyan-400\">Dashboard</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <a href=\"/admin/login\" data-discover=\"true\">Admin Login</a> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <a href=\"/admin/login\" data-discover=\"true\">Admin Login</a> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  2 × retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m      - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:07:01.732Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Dashboard-button_click_failed-1772989621732.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 5,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(5)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:08:02.542Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Dashboard-button_click_failed-1772989682542.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 6,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(6)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:09:03.193Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Dashboard-button_click_failed-1772989743193.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Dashboard",
+      "routePath": "/teacher/dashboard",
+      "type": "button_click_failed",
+      "details": {
+        "index": 7,
+        "error": "locator.evaluate: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(7)\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:10:03.818Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Dashboard-button_click_failed-1772989803818.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 19,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:05.404Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Attendance-zero_size_ui_elements-1772989805404.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Attendance",
+      "routePath": "/teacher/dashboard?section=attendance",
+      "type": "button_click_failed",
+      "details": {
+        "index": 1,
+        "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(1)\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition text-slate-300 hover:bg-slate-700/50\">Dashboard</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <a href=\"/admin/login\" data-discover=\"true\">Admin Login</a> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <a href=\"/admin/login\" data-discover=\"true\">Admin Login</a> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  2 × retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m      - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:10:06.546Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Attendance-button_click_failed-1772989806546.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 19,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:10.039Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Homework-zero_size_ui_elements-1772989810039.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "type": "button_click_failed",
+      "details": {
+        "index": 1,
+        "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(1)\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition text-slate-300 hover:bg-slate-700/50\">Dashboard</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <a href=\"/admin/login\" data-discover=\"true\">Admin Login</a> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <a href=\"/admin/login\" data-discover=\"true\">Admin Login</a> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  2 × retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m      - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:10:11.137Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Homework-button_click_failed-1772989811137.png"
+    },
+    {
+      "portal": "teacher",
+      "routeName": "Homework",
+      "routePath": "/teacher/dashboard?section=homework",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 19,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:14.268Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\teacher-Homework-zero_size_ui_elements-1772989814268.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:16.170Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Dashboard-zero_size_ui_elements-1772989816170.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Dashboard",
+      "routePath": "/dev-console/dashboard",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:18.482Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Dashboard-zero_size_ui_elements-1772989818482.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:19.309Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Errors-zero_size_ui_elements-1772989819309.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:21.640Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Errors-zero_size_ui_elements-1772989821640.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Errors",
+      "routePath": "/dev-console/errors",
+      "type": "missing_data_table",
+      "details": {
+        "routePath": "/dev-console/errors"
+      },
+      "timestamp": "2026-03-08T17:10:21.834Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Errors-missing_data_table-1772989821834.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 33,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "index": 34,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:22.657Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Users-zero_size_ui_elements-1772989822657.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "type": "button_click_failed",
+      "details": {
+        "index": 1,
+        "error": "locator.click: Timeout 800ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button,[role=\\'button\\']:visible').nth(1)\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition text-slate-300 hover:bg-white/10 hover:text-white\">…</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <div>…</div> from <nav>…</nav> subtree intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+      },
+      "timestamp": "2026-03-08T17:10:24.328Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Users-button_click_failed-1772989824328.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Users",
+      "routePath": "/dev-console/users",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:26.077Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Users-zero_size_ui_elements-1772989826077.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:26.946Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Data_Explorer-zero_size_ui_elements-1772989826946.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "Data Explorer",
+      "routePath": "/dev-console/data-explorer",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:30.040Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-Data_Explorer-zero_size_ui_elements-1772989830040.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:30.946Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-System_Controls-zero_size_ui_elements-1772989830946.png"
+    },
+    {
+      "portal": "developer",
+      "routeName": "System Controls",
+      "routePath": "/dev-console/system-controls",
+      "type": "zero_size_ui_elements",
+      "details": [
+        {
+          "index": 15,
+          "tag": "BUTTON",
+          "text": "",
+          "width": 0,
+          "height": 0
+        }
+      ],
+      "timestamp": "2026-03-08T17:10:33.370Z",
+      "screenshot": "C:\\projects\\School-SaaS\\ui-test-report\\2026-03-08T16-54-32-879Z\\screenshots\\developer-System_Controls-zero_size_ui_elements-1772989833370.png"
+    }
+  ],
+  "portalLoginFailures": []
+}

@@ -15,6 +15,7 @@ import VoiceAnnouncements from "../components/VoiceAnnouncements";
 import NotificationDropdown from "../components/NotificationDropdown";
 import UserTrackingDashboard from "../components/UserTrackingDashboard";
 import AdminAnalyticsDashboard from "../components/AdminAnalyticsDashboard";
+import AdminAuditLogsDashboard from "../components/AdminAuditLogsDashboard";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const isConstrainedDevice = () => {
@@ -1110,36 +1111,64 @@ export default function AdminDashboard() {
   const reloadUsers = useCallback(async ({ signal } = {}) => {
     setLoading(true);
     try {
-      const studentParams = new URLSearchParams({
-        type: "students",
-        page: String(studentPage),
-        limit: "25",
-      });
-      const teacherParams = new URLSearchParams({
-        type: "teachers",
-        page: String(teacherPage),
-        limit: "25",
-      });
+      const isStudentsTab = activeTab === "students";
+      const isTeachersTab = activeTab === "teachers";
+      const studentParams = new URLSearchParams(
+        isStudentsTab
+          ? {
+              page: String(studentPage),
+              limit: "25",
+            }
+          : {
+              page: "1",
+              limit: "5000",
+            }
+      );
+      const teacherParams = new URLSearchParams(
+        isTeachersTab
+          ? {
+              type: "teachers",
+              page: String(teacherPage),
+              limit: "25",
+            }
+          : {
+              type: "teachers",
+              page: "1",
+              limit: "5000",
+            }
+      );
 
-      if (search.trim()) {
-        studentParams.set("search", search.trim());
-        teacherParams.set("search", search.trim());
-      }
-      if (studentFilterClass) studentParams.set("className", studentFilterClass);
-      if (studentFilterSection) studentParams.set("section", studentFilterSection);
-      if (teacherFilterClass) teacherParams.set("className", teacherFilterClass);
-      if (teacherFilterSection) teacherParams.set("section", teacherFilterSection);
+      if (isStudentsTab && search.trim()) studentParams.set("search", search.trim());
+      if (isTeachersTab && search.trim()) teacherParams.set("search", search.trim());
+      if (isStudentsTab && studentFilterClass) studentParams.set("className", studentFilterClass);
+      if (isStudentsTab && studentFilterSection) studentParams.set("section", studentFilterSection);
+      if (isTeachersTab && teacherFilterClass) teacherParams.set("className", teacherFilterClass);
+      if (isTeachersTab && teacherFilterSection) teacherParams.set("section", teacherFilterSection);
+
+      const studentsUrl = `${API_URL}/api/admin/students?${studentParams.toString()}`;
+      const teachersUrl = `${API_URL}/api/admin/users?${teacherParams.toString()}`;
+      console.log("AdminDashboard fetch URLs:", {
+        studentsUrl,
+        teachersUrl,
+        activeTab,
+        hasToken: Boolean(token),
+      });
 
       const [studentsRes, teachersRes] = await Promise.all([
-        fetch(`${API_URL}/api/admin/users?${studentParams.toString()}`, {
+        fetch(studentsUrl, {
           headers: { Authorization: `Bearer ${token}` },
           signal,
         }),
-        fetch(`${API_URL}/api/admin/users?${teacherParams.toString()}`, {
+        fetch(teachersUrl, {
           headers: { Authorization: `Bearer ${token}` },
           signal,
         }),
       ]);
+
+      console.log("AdminDashboard fetch status:", {
+        studentsStatus: studentsRes.status,
+        teachersStatus: teachersRes.status,
+      });
 
       if (!studentsRes.ok || !teachersRes.ok) {
         setStudents([]);
@@ -1151,12 +1180,30 @@ export default function AdminDashboard() {
       const studentsData = await studentsRes.json();
       const teachersData = await teachersRes.json();
 
-      setStudents(Array.isArray(studentsData?.data) ? studentsData.data : []);
+      const nextStudents = Array.isArray(studentsData?.students)
+        ? studentsData.students
+        : Array.isArray(studentsData?.data)
+        ? studentsData.data
+        : [];
+      setStudents(nextStudents);
       setTeachers(Array.isArray(teachersData?.data) ? teachersData.data : []);
       setStudentTotalPages(Number(studentsData?.totalPages || 1));
       setTeacherTotalPages(Number(teachersData?.totalPages || 1));
-      setStudentTotalCount(Number(studentsData?.totalCount || 0));
+      setStudentTotalCount(Number(studentsData?.totalCount || nextStudents.length || 0));
       setTeacherTotalCount(Number(teachersData?.totalCount || 0));
+      console.log(
+        "Students fetched:",
+        nextStudents.length,
+        "| tab:",
+        activeTab,
+        "| total:",
+        Number(studentsData?.totalCount || nextStudents.length || 0),
+        "| source:",
+        studentsData?.source || "unknown"
+      );
+      if (studentsData?.diagnostics) {
+        console.log("Students diagnostics:", studentsData.diagnostics);
+      }
     } catch (err) {
       if (err?.name === "AbortError") return;
       console.error("USERS FETCH ERROR:", err);
@@ -1168,6 +1215,7 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   }, [
+    activeTab,
     search,
     studentFilterClass,
     studentFilterSection,
@@ -1765,6 +1813,7 @@ export default function AdminDashboard() {
   const navItems = useMemo(() => ([
     { id: "dashboard", label: "Dashboard" },
     { id: "analytics", label: "Analytics" },
+    { id: "audit-logs", label: "Audit Logs" },
     { id: "students", label: "Students" },
     { id: "teachers", label: "Teachers" },
     { id: "migrate-student", label: "Migrate Student" },
@@ -1788,8 +1837,37 @@ export default function AdminDashboard() {
     return "Dashboard";
   }, [activeTab, navItems]);
 
+  const isAnalyticsView = activeTab === "analytics";
+  const isAuditLogsView = activeTab === "audit-logs";
+
+  if (isAnalyticsView) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] p-4 md:p-8 font-sans">
+        <div className="w-full">
+          <button
+            onClick={() => {
+              setActiveTab("dashboard");
+              navigate("/admin/dashboard");
+            }}
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition"
+          >
+            <span aria-hidden="true">←</span>
+            Back to Dashboard
+          </button>
+          <AdminAnalyticsDashboard token={token} schoolId={schoolId} teachers={teachers} students={students} />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-screen overflow-hidden flex flex-col lg:flex-row bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 font-sans">
+    <div
+      className={`h-screen overflow-hidden flex flex-col lg:flex-row font-sans ${
+        isAuditLogsView
+          ? "bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b]"
+          : "bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100"
+      }`}
+    >
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -1869,19 +1947,50 @@ export default function AdminDashboard() {
       {/* ===== MAIN CONTENT ===== */}
       <div className="flex-1 w-full lg:w-auto min-w-0 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3">
+        <div
+          className={`backdrop-blur-md px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3 ${
+            isAuditLogsView
+              ? "bg-slate-950/80 border-b border-white/10"
+              : "bg-white/80 border-b border-slate-200"
+          }`}
+        >
           <div className="flex items-center min-w-0">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
-              title="Toggle sidebar"
-            >
-              <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
+            {activeTab !== "analytics" && (
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className={`lg:hidden mr-3 p-2 rounded-lg transition ${
+                  isAuditLogsView ? "hover:bg-slate-800" : "hover:bg-slate-100"
+                }`}
+                title="Toggle sidebar"
+              >
+                <svg
+                  className={`w-6 h-6 ${isAuditLogsView ? "text-slate-100" : "text-slate-900"}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl md:text-3xl font-black text-slate-900 break-words">
+              {activeTab === "analytics" && (
+                <button
+                  onClick={() => {
+                    setActiveTab("dashboard");
+                    navigate("/admin/dashboard");
+                  }}
+                  className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline transition"
+                >
+                  <span aria-hidden="true">←</span>
+                  Back to Dashboard
+                </button>
+              )}
+              <h1
+                className={`text-xl md:text-3xl font-black break-words ${
+                  isAuditLogsView ? "text-slate-100" : "text-slate-900"
+                }`}
+              >
                 {activeTitle}
               </h1>
             </div>
@@ -1925,6 +2034,8 @@ export default function AdminDashboard() {
           className={`flex-1 overflow-y-auto overflow-x-hidden ${
             activeTab === "analytics"
               ? "bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] p-0 pb-16 md:pb-0"
+              : activeTab === "audit-logs"
+              ? "bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] p-3 md:p-6 lg:p-8 pb-20 md:pb-6"
               : "p-3 md:p-6 lg:p-8 pb-20 md:pb-6 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100"
           }`}
         >
@@ -1950,6 +2061,11 @@ export default function AdminDashboard() {
           {/* ===== ANALYTICS ===== */}
           {activeTab === "analytics" && (
             <AdminAnalyticsDashboard token={token} schoolId={schoolId} teachers={teachers} students={students} />
+          )}
+
+          {/* ===== AUDIT LOGS ===== */}
+          {activeTab === "audit-logs" && (
+            <AdminAuditLogsDashboard token={token} />
           )}
 
           {/* ===== STUDENTS ===== */}

@@ -475,6 +475,33 @@ export default function StudentDashboard() {
   const isMobileCallPreferred =
     typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
 
+  const isAnalyticsView = activeTab === "analytics";
+
+  if (isAnalyticsView) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-4 md:p-8 font-sans">
+        <div className="w-full">
+          <button
+            onClick={() => {
+              setActiveTab("dashboard");
+              navigate("/student/dashboard");
+            }}
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition"
+          >
+            <span aria-hidden="true">←</span>
+            Back to Dashboard
+          </button>
+          <StudentAnalyticsDashboard
+            endpoint={`${API_URL}/api/student/analytics`}
+            authToken={token}
+            onBack={() => navigate("/student/dashboard")}
+            hideInternalBackButton
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`h-screen ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"} flex flex-col lg:flex-row bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 font-sans`}>
       {/* ===== OVERLAY (Mobile) ===== */}
@@ -535,16 +562,30 @@ export default function StudentDashboard() {
         {/* Header */}
         <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3">
           <div className="flex items-center min-w-0">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
-              title="Toggle sidebar"
-            >
-              <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
+            {activeTab !== "analytics" && (
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
+                title="Toggle sidebar"
+              >
+                <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
             <div className="flex-1 min-w-0">
+              {activeTab === "analytics" && (
+                <button
+                  onClick={() => {
+                    setActiveTab("dashboard");
+                    navigate("/student/dashboard");
+                  }}
+                  className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline transition"
+                >
+                  <span aria-hidden="true">←</span>
+                  Back to Dashboard
+                </button>
+              )}
               <h1 className="text-xl md:text-3xl font-black text-slate-900 break-words">
                 {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
               </h1>

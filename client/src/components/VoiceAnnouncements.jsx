@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 import DateFilterBar from "./DateFilterBar";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
@@ -48,12 +48,7 @@ export default function VoiceAnnouncements({
 
   const token = getToken();
 
-  // Fetch announcements on mount
-  useEffect(() => {
-    fetchAnnouncements();
-  }, [endpoint, dateFilter.from, dateFilter.to]);
-
-  const fetchAnnouncements = async () => {
+  const fetchAnnouncements = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -105,7 +100,12 @@ export default function VoiceAnnouncements({
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFilter, endpoint, toast, token]);
+
+  // Fetch announcements on mount
+  useEffect(() => {
+    fetchAnnouncements();
+  }, [fetchAnnouncements]);
 
   const handleDeleteAnnouncement = async (announcementId) => {
     const confirmed = window.confirm("This will remove this message for all teachers and students. Continue?");

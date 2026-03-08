@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -136,6 +136,7 @@ export default function StudentAnalyticsDashboard({
   endpoint,
   authToken,
   onBack,
+  hideInternalBackButton = false,
 }) {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
@@ -204,9 +205,11 @@ export default function StudentAnalyticsDashboard({
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
         <div className="max-w-6xl mx-auto bg-red-500/20 border border-red-300/40 rounded-xl p-6 text-center text-red-100">
           <p className="font-semibold">Error: {error}</p>
-          <button onClick={onBack} className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
-            Go Back
-          </button>
+          {typeof onBack === "function" ? (
+            <button onClick={onBack} className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+              Go Back
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -221,9 +224,11 @@ export default function StudentAnalyticsDashboard({
 
       <div className="max-w-6xl mx-auto relative z-10">
         <div className="mb-8">
-          <button onClick={onBack} className="text-blue-300 hover:text-blue-200 font-semibold text-sm mb-4 flex items-center transition">
-            ← Back to Dashboard
-          </button>
+          {!hideInternalBackButton && typeof onBack === "function" ? (
+            <button onClick={onBack} className="text-blue-300 hover:text-blue-200 font-semibold text-sm mb-4 flex items-center transition">
+              ← Back to Dashboard
+            </button>
+          ) : null}
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
             <div className="flex-1 min-w-0">
               <h1 className="text-3xl md:text-5xl font-bold break-words text-white mb-2">{student.name}'s Learning Profile</h1>
