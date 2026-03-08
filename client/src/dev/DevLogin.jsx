@@ -1,7 +1,18 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { safeFetchJson } from "../utils/safeFetch";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const resolveApiUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol || "http:";
+    const host = window.location.hostname || "127.0.0.1";
+    return `${protocol}//${host}:5000`;
+  }
+  return "http://127.0.0.1:5000";
+};
+
+const API_URL = resolveApiUrl();
 
 export default function DevLogin() {
   const navigate = useNavigate();
@@ -16,19 +27,18 @@ export default function DevLogin() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/dev/login`, {
+      const { data: payload } = await safeFetchJson(`${API_URL}/api/dev/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim().toLowerCase() || "dev@school.local",
           accessCode: accessCode.trim() || "supersecretdevkey",
         }),
+        requestLabel: "dev-login",
       });
 
-      const payload = await response.json();
-
-      if (!response.ok || !payload?.token) {
-        setError(payload?.error || "Access denied. Please check your credentials.");
+      if (!payload?.token) {
+        setError("Access denied. Please check your credentials.");
         return;
       }
 
@@ -38,7 +48,12 @@ export default function DevLogin() {
       localStorage.setItem("userRole", "DEVELOPER");
       navigate("/dev-console", { replace: true });
     } catch (err) {
-      setError(err?.message || "Failed to connect to server");
+      const message = String(err?.message || "");
+      if (/Unexpected token '<'|DOCTYPE|html/i.test(message)) {
+        setError(`Developer API URL is incorrect (${API_URL}). Set VITE_API_URL to your backend (port 5000).`);
+      } else {
+        setError(message || "Failed to connect to server");
+      }
       console.error("Dev login error:", err);
     } finally {
       setLoading(false);
