@@ -1,31 +1,62 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { sessionTracker } from "../utils/sessionTracker";
+import FingerprintAuthActions from "../components/FingerprintAuthActions";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
 
+  const completeAdminLogin = (data) => {
+    localStorage.setItem("adminToken", data.token);
+    if (data.schoolName) {
+      localStorage.setItem("adminSchoolName", data.schoolName);
+    }
+
+    let adminUserId = null;
+    let schoolId = null;
+    try {
+      const tokenParts = data.token.split(".");
+      if (tokenParts.length === 3) {
+        const payload = JSON.parse(atob(tokenParts[1]));
+        if (payload.schoolId) {
+          localStorage.setItem("adminSchoolId", payload.schoolId);
+          schoolId = payload.schoolId;
+        }
+        if (payload.userId) {
+          adminUserId = payload.userId;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to extract token data:", err);
+    }
+
+    if (adminUserId && schoolId) {
+      sessionTracker.startSession(adminUserId, "ADMIN", schoolId);
+    }
+
+    navigate("/admin/dashboard");
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    setInfo("");
     setLoading(true);
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-      const endpoint = `${API_URL}/api/auth/login`;
-      const res = await fetch(
-        endpoint,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        }
-      );
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
       const data = await res.json();
 
@@ -34,46 +65,7 @@ export default function AdminLogin() {
         return;
       }
 
-      // ✅ Save token
-      localStorage.setItem("adminToken", data.token);
-      
-      // ✅ Save school name
-      if (data.schoolName) {
-        localStorage.setItem("adminSchoolName", data.schoolName);
-      }
-      
-      // ✅ Extract and save schoolId from token
-      let adminUserId = null;
-      let schoolId = null;
-      try {
-        const tokenParts = data.token.split('.');
-        if (tokenParts.length === 3) {
-          const payload = JSON.parse(atob(tokenParts[1]));
-          console.log('🔐 AdminLogin: Token payload:', payload);
-          
-          if (payload.schoolId) {
-            localStorage.setItem("adminSchoolId", payload.schoolId);
-            schoolId = payload.schoolId;
-          }
-          if (payload.userId) {
-            adminUserId = payload.userId;
-          }
-        }
-      } catch (err) {
-        console.error("❌ Failed to extract token data:", err);
-      }
-
-      console.log('🟢 AdminLogin: Starting session with -', { adminUserId, role: 'ADMIN', schoolId });
-      
-      // ✅ Start session tracking
-      if (adminUserId && schoolId) {
-        sessionTracker.startSession(adminUserId, "ADMIN", schoolId);
-      } else {
-        console.warn('⚠️ AdminLogin: Missing data for session tracking -', { adminUserId, schoolId });
-      }
-
-      // ✅ Redirect (DO NOT CHANGE)
-      navigate("/admin/dashboard");
+      completeAdminLogin(data);
     } catch (err) {
       console.error("ADMIN LOGIN ERROR:", err);
       setError("Server not responding");
@@ -81,6 +73,7 @@ export default function AdminLogin() {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen flex justify-center items-center bg-slate-50 px-4 py-8 font-sans">
@@ -96,6 +89,12 @@ export default function AdminLogin() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm font-semibold">
             {error}
+          </div>
+        )}
+
+        {info && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg mb-6 text-sm font-semibold">
+            {info}
           </div>
         )}
 
@@ -124,18 +123,16 @@ export default function AdminLogin() {
         >
           {loading ? "Logging in..." : "Login"}
         </button>
+
+        <FingerprintAuthActions
+          email={email}
+          password={password}
+          role="ADMIN"
+          onLoginSuccess={completeAdminLogin}
+          setError={setError}
+          setInfo={setInfo}
+        />
       </form>
     </div>
   );
 }
-
-const inputStyle = {
-  width: "100%",
-  padding: "12px 14px",
-  marginBottom: "14px",
-  borderRadius: "10px",
-  border: "1px solid #e2e8f0",
-  outline: "none",
-  fontSize: "14px",
-  fontWeight: "500",
-};

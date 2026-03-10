@@ -62,11 +62,9 @@ export default function NotificationDropdown({
   useEffect(() => {
     if (!isOpen || !token) return undefined;
     fetchNotifications(1, true);
-
-    // Auto-refresh every 10 seconds while dropdown is open
-    const interval = setInterval(() => fetchNotifications(1, true), 10000);
-    return () => clearInterval(interval);
-  }, [isOpen, token, fetchNotifications]);
+    if (onNotificationsUpdated) onNotificationsUpdated();
+    return undefined;
+  }, [isOpen, token, fetchNotifications, onNotificationsUpdated]);
 
   const handleMarkAsRead = async (notificationId) => {
     try {
@@ -274,11 +272,11 @@ export default function NotificationDropdown({
               >
                 {/* Notification Header */}
                 <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1">
-                    <p className="font-semibold text-white">
+                  <div className="flex-1 min-w-0 max-w-full">
+                    <p className="font-semibold text-white break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">
                       {notification.title}
                     </p>
-                    <p className="text-sm text-gray-300 mt-1">
+                    <p className="text-sm break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full text-gray-300 mt-1">
                       {notification.message}
                     </p>
                   </div>

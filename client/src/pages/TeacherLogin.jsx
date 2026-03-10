@@ -2,12 +2,16 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { sessionTracker } from "../utils/sessionTracker";
 import { useToast } from "../components/ToastProvider";
+import FingerprintAuthActions from "../components/FingerprintAuthActions";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function TeacherLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [forgotMessage, setForgotMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -16,74 +20,65 @@ export default function TeacherLogin() {
   const navigate = useNavigate();
   const toast = useToast();
 
+  const completeTeacherLogin = (data) => {
+    localStorage.setItem("teacherToken", data.token);
+    localStorage.setItem("teacherData", JSON.stringify(data.teacher || {}));
+    localStorage.setItem("teacherMustChangePassword", data.mustChangePassword ? "true" : "false");
+
+    if (data.schoolName) {
+      localStorage.setItem("teacherSchoolName", data.schoolName);
+    }
+
+    let teacherUserId = null;
+    let schoolId = null;
+    try {
+      const tokenParts = data.token.split(".");
+      if (tokenParts.length === 3) {
+        const payload = JSON.parse(atob(tokenParts[1]));
+        if (payload.schoolId) {
+          localStorage.setItem("teacherSchoolId", payload.schoolId);
+          schoolId = payload.schoolId;
+        }
+        if (payload.userId) {
+          teacherUserId = payload.userId;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to extract token data:", err);
+    }
+
+    if (teacherUserId && schoolId) {
+      sessionTracker.startSession(teacherUserId, "TEACHER", schoolId);
+    }
+
+    if (data.mustChangePassword) {
+      toast.success("Password reset detected. Please change your password now.");
+      navigate("/teacher/change-password", { replace: true });
+    } else {
+      navigate("/teacher/dashboard");
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    setInfo("");
     setLoading(true);
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-      const endpoint = `${API_URL}/api/auth/teacher/login`;
-      const res = await fetch(endpoint, {
+      const res = await fetch(`${API_URL}/api/auth/teacher/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         setError(data?.error || "Login failed");
-        setLoading(false);
         return;
       }
 
-      // store both token and teacher object (includes schoolId/class/section)
-      localStorage.setItem("teacherToken", data.token);
-      localStorage.setItem("teacherData", JSON.stringify(data.teacher || {}));
-      localStorage.setItem("teacherMustChangePassword", data.mustChangePassword ? "true" : "false");
-      
-      // ✅ Save school name
-      if (data.schoolName) {
-        localStorage.setItem("teacherSchoolName", data.schoolName);
-      }
-      
-      // ✅ Extract and save schoolId from token
-      let teacherUserId = null;
-      let schoolId = null;
-      try {
-        const tokenParts = data.token.split('.');
-        if (tokenParts.length === 3) {
-          const payload = JSON.parse(atob(tokenParts[1]));
-          console.log('🔐 TeacherLogin: Token payload:', payload);
-          
-          if (payload.schoolId) {
-            localStorage.setItem("teacherSchoolId", payload.schoolId);
-            schoolId = payload.schoolId;
-          }
-          if (payload.userId) {
-            teacherUserId = payload.userId;
-          }
-        }
-      } catch (err) {
-        console.error("❌ Failed to extract token data:", err);
-      }
-
-      console.log('🟢 TeacherLogin: Starting session with -', { teacherUserId, role: 'TEACHER', schoolId });
-      
-      // ✅ Start session tracking
-      if (teacherUserId && schoolId) {
-        sessionTracker.startSession(teacherUserId, "TEACHER", schoolId);
-      } else {
-        console.warn('⚠️ TeacherLogin: Missing data for session tracking -', { teacherUserId, schoolId });
-      }
-
-      if (data.mustChangePassword) {
-        toast.success("Password reset detected. Please change your password now.");
-        navigate("/teacher/change-password", { replace: true });
-      } else {
-        navigate("/teacher/dashboard");
-      }
+      completeTeacherLogin(data);
     } catch (err) {
       console.error("LOGIN ERROR:", err);
       setError("Server not responding. Try again.");
@@ -103,7 +98,6 @@ export default function TeacherLogin() {
 
     setForgotLoading(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
       const res = await fetch(`${API_URL}/api/auth/teacher/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -142,6 +136,12 @@ export default function TeacherLogin() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm font-semibold">
             {error}
+          </div>
+        )}
+
+        {info && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg mb-6 text-sm font-semibold">
+            {info}
           </div>
         )}
 
@@ -206,6 +206,15 @@ export default function TeacherLogin() {
         >
           {loading ? "Logging in..." : "Login"}
         </button>
+
+        <FingerprintAuthActions
+          email={email}
+          password={password}
+          role="TEACHER"
+          onLoginSuccess={completeTeacherLogin}
+          setError={setError}
+          setInfo={setInfo}
+        />
       </form>
     </div>
   );

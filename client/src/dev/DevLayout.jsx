@@ -20,29 +20,33 @@ import {
 } from "lucide-react";
 import DevToastHost from "./components/DevToastHost";
 
+const DEV_PORTAL_BASE = "/internal/dev-portal";
+const portalPath = (segment) => `${DEV_PORTAL_BASE}${segment}`;
+
 const dashboardItems = [
-  { label: "Dashboard", path: "/dev-console/dashboard", icon: LayoutDashboard },
+  { label: "Dashboard", path: portalPath("/dashboard"), icon: LayoutDashboard },
 ];
 
 const monitoringItems = [
-  { label: "System Health", path: "/dev-console/system", icon: Activity },
-  { label: "Errors", path: "/dev-console/errors", icon: ShieldAlert },
-  { label: "Logs", path: "/dev-console/logs", icon: ListChecks },
-  { label: "API Usage", path: "/dev-console/api-usage", icon: LineChart },
-  { label: "Live Activity", path: "/dev-console/live-activity", icon: Activity },
-  { label: "Traces", path: "/dev-console/traces", icon: BarChart3 },
+  { label: "System Health", path: portalPath("/system"), icon: Activity },
+  { label: "Errors", path: portalPath("/errors"), icon: ShieldAlert },
+  { label: "Logs", path: portalPath("/logs"), icon: ListChecks },
+  { label: "API Usage", path: portalPath("/api-usage"), icon: LineChart },
+  { label: "Live Activity", path: portalPath("/live-activity"), icon: Activity },
+  { label: "Traces", path: portalPath("/traces"), icon: BarChart3 },
 ];
 
 const platformItems = [
-  { label: "Schools", path: "/dev-console/schools", icon: School },
-  { label: "Users", path: "/dev-console/users", icon: Users },
-  { label: "Voice Messages", path: "/dev-console/voice-messages", icon: Mic2 },
-  { label: "Data Explorer", path: "/dev-console/data-explorer", icon: Database },
+  { label: "Schools", path: portalPath("/schools"), icon: School },
+  { label: "Users", path: portalPath("/users"), icon: Users },
+  { label: "Voice Messages", path: portalPath("/voice-messages"), icon: Mic2 },
+  { label: "Data Explorer", path: portalPath("/data-explorer"), icon: Database },
 ];
 
 const systemItems = [
-  { label: "System Controls", path: "/dev-console/system-controls", icon: Settings2 },
-  { label: "Audit Logs", path: "/dev-console/audit-logs", icon: BarChart3 },
+  { label: "System Controls", path: portalPath("/system-controls"), icon: Settings2 },
+  { label: "Audit Logs", path: portalPath("/audit-logs"), icon: BarChart3 },
+  { label: "Settings", path: "/settings", icon: Settings2 },
 ];
 
 const navSections = [
@@ -59,23 +63,11 @@ export default function DevLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState(searchParams.get("q") || "");
 
-  useEffect(() => {
-    const hasToken = Boolean(localStorage.getItem("developerToken"));
-    const role = String(localStorage.getItem("userRole") || "").toUpperCase();
-    if (!hasToken) {
-      navigate("/login", { replace: true });
-      return;
-    }
-    if (role !== "DEVELOPER") {
-      navigate("/dashboard", { replace: true });
-    }
-  }, [navigate]);
-
   const activePath = useMemo(() => {
     const current = String(location.pathname || "");
     const allItems = navSections.flatMap((section) => section.items);
     const found = allItems.find((item) => current === item.path || current.startsWith(`${item.path}/`));
-    return found?.path || "/dev-console/dashboard";
+    return found?.path || portalPath("/dashboard");
   }, [location.pathname]);
 
   useEffect(() => {
@@ -86,7 +78,7 @@ export default function DevLayout() {
     localStorage.removeItem("developerToken");
     localStorage.removeItem("devAccess");
     localStorage.removeItem("userRole");
-    navigate("/login", { replace: true });
+    navigate("/dev-login", { replace: true });
   };
 
   const handleApplyGlobalSearch = () => {
@@ -215,11 +207,13 @@ export default function DevLayout() {
                 className="hidden rounded-lg border border-white/20 bg-white/10 px-2 py-1.5 text-xs text-slate-100 md:block"
                 defaultValue=""
               >
-                <option value="" disabled>Quick Actions</option>
-                <option value="/dev-console/users">Open Users</option>
-                <option value="/dev-console/schools">Open Schools</option>
-                <option value="/dev-console/system-controls">System Controls</option>
-                <option value="/dev-console/audit-logs">Audit Logs</option>
+                <option value="" disabled>
+                  Quick Actions
+                </option>
+                <option value={portalPath("/users")}>Open Users</option>
+                <option value={portalPath("/schools")}>Open Schools</option>
+                <option value={portalPath("/system-controls")}>System Controls</option>
+                <option value={portalPath("/audit-logs")}>Audit Logs</option>
               </select>
               <button
                 type="button"
@@ -232,6 +226,9 @@ export default function DevLayout() {
           </header>
 
           <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-6">
+            <div className="mb-4 rounded-2xl border border-amber-500/50 bg-amber-600/10 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-amber-100">
+              ⚠ Internal Developer Platform Unauthorized access is prohibited. All actions are logged.
+            </div>
             <Outlet />
           </main>
         </div>

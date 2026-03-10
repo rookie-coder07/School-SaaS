@@ -6,6 +6,8 @@ import DevRowActionMenu from "../components/DevRowActionMenu";
 import { pushDevToast } from "../utils/devToast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const DEV_PORTAL_BASE = "/internal/dev-portal";
+const portalPath = (segment) => `${DEV_PORTAL_BASE}${segment}`;
 
 export default function DevSchoolsPage() {
   const token = localStorage.getItem("developerToken");
@@ -76,7 +78,7 @@ export default function DevSchoolsPage() {
     if (!schoolId) return;
     setSchoolSearch(schoolId);
     setPage(1);
-    navigate(`/dev-console/schools?schoolId=${schoolId}`);
+    navigate(`${portalPath("/schools")}?schoolId=${schoolId}`);
     showToast("School selected");
   };
 
@@ -236,7 +238,7 @@ export default function DevSchoolsPage() {
                           {
                             label: "Manage Users",
                             disabled: rowBusy,
-                            onClick: () => navigate(`/dev-console/users?schoolId=${school._id}`),
+                            onClick: () => navigate(`${portalPath("/users")}?schoolId=${school._id}`),
                           },
                           {
                             label: isEnabled ? "Disable School" : "Enable School",
@@ -246,7 +248,7 @@ export default function DevSchoolsPage() {
                           {
                             label: "Open Data Explorer",
                             disabled: rowBusy,
-                            onClick: () => navigate(`/dev-console/data-explorer?schoolId=${school._id}`),
+                            onClick: () => navigate(`${portalPath("/data-explorer")}?schoolId=${school._id}`),
                           },
                           {
                             label: "Delete School",
@@ -292,9 +294,13 @@ export default function DevSchoolsPage() {
                 <DevRowActionMenu
                   actions={[
                     { label: "View School", disabled: rowBusy, onClick: () => viewSchool(school) },
-                    { label: "Manage Users", disabled: rowBusy, onClick: () => navigate(`/dev-console/users?schoolId=${school._id}`) },
+                    { label: "Manage Users", disabled: rowBusy, onClick: () => navigate(`${portalPath("/users")}?schoolId=${school._id}`) },
                     { label: isEnabled ? "Disable School" : "Enable School", disabled: rowBusy, onClick: () => patchSchoolStatus(school, !isEnabled) },
-                    { label: "Open Data Explorer", disabled: rowBusy, onClick: () => navigate(`/dev-console/data-explorer?schoolId=${school._id}`) },
+                    {
+                      label: "Open Data Explorer",
+                      disabled: rowBusy,
+                      onClick: () => navigate(`${portalPath("/data-explorer")}?schoolId=${school._id}`),
+                    },
                     { label: "Delete School", danger: true, disabled: rowBusy, onClick: () => openDeleteModal(school) },
                   ]}
                 />

@@ -1,6 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import axios from "axios";
 import * as XLSX from "xlsx";
 import VoiceRecorder from "../components/VoiceRecorder";
 import VoiceAnnouncements from "../components/VoiceAnnouncements";
@@ -22,6 +21,7 @@ import { createNotification } from "../utils/notificationHelper";
 import { sessionTracker } from "../utils/sessionTracker";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
 import { FileSpreadsheet, Pencil, Trash2, Copy } from "lucide-react";
+import useUnreadCount from "../hooks/useUnreadCount";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const SUBJECTS_CACHE_TTL_MS = 15000;
@@ -47,6 +47,33 @@ const _sortStudentsByRollNo = (a, b) => {
 
 // Excel template download link
 const MARKS_TEMPLATE_URL = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,UEsDBBQABgAIAAAAIQDfpq/8FwEAABMFAAATAAAAeGwvd29ya3NoZWV0MS54bWykU0tugzAM/RVLT1WVpk0n7bRpN500TetFm0kxIFJiEJsCqvj7HKZp0nQnbMt+fu/t9xvM15sTYGJWCZDCGwRBKB7sRi2QuKVg3DkLUIh6FoxFy0mBrWGeMy0d3V3DEo/KPuUVplSYHvALM4sVlyxE8RN+c8n4QRYsxN0ECkN9G1cY8XvPYv8Rx1QwKBRKhSNhR3TBhMa8oGgWHW4nVIEXNyOKLZdApSb4fYmRupWKFR1N2bFmwSmwddFNCNXZMTGxD5Eev4OhXxw8Cr2/MUmZrfVZApAIqx3T1YKLdNQqwb9K0bwGGFNVTi6l0Y5E7M8KoVVFzn6MZqvJ0p6u0bfqfWoOj+ub3cqCRpP3NPCn6GFvz7v7UqpQvAAY2RnYy8X7V8bzpGfj90Y7+Bl1BLBwgHzXI+MQEAABMFAAAAAAAAAAAAAAAAAAATAAAAeGwvd29ya3NoZWV0MS54bWxQSwECLQAUAAYACAAAACEAB81yPjEBAAATBQATAAAAAAAAAAAAAAAAAAATAAAAeGwvd29ya3NoZWV0MS54bWxQSwUGAAAAAAEAAQA7AAAALgEAAAAA";
+
+const getVoiceMessageTypeMeta = (msg = {}) => {
+  const hasAudio = Boolean(msg?.audioUrl);
+  const hasText = Boolean(String(msg?.textMessage || "").trim());
+  if (hasAudio && hasText) return { label: "Voice + Text", className: "bg-indigo-100 text-indigo-700 border border-indigo-200" };
+  if (hasAudio) return { label: "Voice", className: "bg-blue-100 text-blue-700 border border-blue-200" };
+  if (hasText) return { label: "Text", className: "bg-emerald-100 text-emerald-700 border border-emerald-200" };
+  return { label: "Empty", className: "bg-slate-100 text-slate-600 border border-slate-200" };
+};
+
+const getAudioSourceType = (audioUrl = "") => {
+  const value = String(audioUrl || "").toLowerCase();
+  if (value.endsWith(".mp3")) return "audio/mpeg";
+  if (value.endsWith(".wav")) return "audio/wav";
+  if (value.endsWith(".ogg")) return "audio/ogg";
+  return "audio/webm";
+};
+
+const enforceSingleAudioPlayback = (event) => {
+  const currentAudio = event?.currentTarget;
+  if (!currentAudio) return;
+  document.querySelectorAll("audio").forEach((audioEl) => {
+    if (audioEl !== currentAudio) {
+      audioEl.pause();
+    }
+  });
+};
 
 export default function TeacherDashboard({ routeTab = "" }) {
   const [students, setStudents] = useState([]);
@@ -76,7 +103,6 @@ export default function TeacherDashboard({ routeTab = "" }) {
   const [message, _setMessage] = useState("");
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
 
   const teacher = useMemo(() => {
@@ -90,6 +116,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
   const section = teacher?.section;
   const schoolFeatures = teacher?.school?.features || teacher?.features || {};
   const token = localStorage.getItem("teacherToken");
+  const { unreadCount, refreshUnreadCount } = useUnreadCount(token, { pollIntervalMs: 30000 });
   const toast = useToast();
 
   // ===== HOMEWORK FORM STATE =====
@@ -174,6 +201,8 @@ export default function TeacherDashboard({ routeTab = "" }) {
   const [voiceMessageDeletingId, setVoiceMessageDeletingId] = useState(null);
   const [_audioFile, setAudioFile] = useState(null);
   const [_voiceLoading, setVoiceLoading] = useState(false);
+  const [voiceTextMessage, setVoiceTextMessage] = useState("");
+  const [voiceSendLoading, setVoiceSendLoading] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [broadcastToClass, setBroadcastToClass] = useState(true);
 
@@ -330,58 +359,6 @@ export default function TeacherDashboard({ routeTab = "" }) {
     navigate("/teacher/dashboard", { replace: true });
     setActiveTab("dashboard");
   }, [navigate]);
-
-  // Fetch unread notification count on mount and periodically
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchUnreadCount = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        setUnreadCount(response.data.unreadCount || 0);
-      } catch (err) {
-        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
-        console.error("Error fetching unread count:", err);
-        setUnreadCount(0);
-      }
-    };
-
-    if (token) {
-      fetchUnreadCount();
-      
-      // Poll every 30 seconds to keep count updated
-      const interval = setInterval(fetchUnreadCount, 30000);
-      return () => {
-        controller.abort();
-        clearInterval(interval);
-      };
-    }
-    return () => controller.abort();
-  }, [token]);
-
-  // Fetch unread count when notifications panel opens
-  useEffect(() => {
-    const controller = new AbortController();
-    if (showNotifications && token) {
-      const fetchUnreadCount = async () => {
-        try {
-          const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal,
-          });
-          setUnreadCount(response.data.unreadCount || 0);
-        } catch (err) {
-          if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
-          console.error("Error fetching unread count:", err);
-        }
-      };
-      
-      fetchUnreadCount();
-    }
-    return () => controller.abort();
-  }, [showNotifications, token]);
 
   /* ===== FETCH CLASS SUMMARY ===== */
   useEffect(() => {
@@ -1023,6 +1000,74 @@ const handleDeleteVoiceMessage = async (voiceMessage) => {
     toast.error(err.message || "Failed to delete voice message");
   } finally {
     setVoiceMessageDeletingId(null);
+  }
+};
+
+const sendTeacherVoiceMessage = async (audioBlob = null) => {
+  if (!broadcastToClass && selectedStudents.length === 0) {
+    toast.warning("Please select at least one student");
+    return;
+  }
+
+  const hasAudio = Boolean(audioBlob);
+  const trimmedTextMessage = String(voiceTextMessage || "").trim();
+  if (!hasAudio && !trimmedTextMessage) {
+    toast.warning("Record audio or enter a text message");
+    return;
+  }
+
+  if (hasAudio && audioBlob.size === 0) {
+    toast.error("Audio recording is empty. Please record again.");
+    return;
+  }
+
+  setVoiceSendLoading(true);
+  setVoiceLoading(true);
+  try {
+    const formData = new FormData();
+    if (hasAudio) {
+      formData.append("audio", audioBlob, "recording.webm");
+    }
+    if (trimmedTextMessage) {
+      formData.append("textMessage", trimmedTextMessage);
+    }
+    if (broadcastToClass) {
+      formData.append("broadcastToClass", "true");
+    } else {
+      formData.append("targetStudentIds", JSON.stringify(selectedStudents));
+    }
+
+    const res = await fetch(`${API_URL}/api/teacher/voice-broadcast`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error || "Failed to send message");
+      return;
+    }
+
+    const sentMode = hasAudio && trimmedTextMessage ? "voice + text" : hasAudio ? "voice" : "text";
+    toast.success(`${sentMode} message sent to ${data.broadcastTo} student(s)`);
+    setAudioFile(null);
+    setVoiceTextMessage("");
+    setSelectedStudents([]);
+    const query = buildDateFilterQuery(voiceDateFilter);
+    const refreshRes = await fetch(`${API_URL}/api/teacher/voice-messages/mine?page=1&limit=20${query ? `&${query}` : ""}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const refreshData = await refreshRes.json();
+    const refreshList = Array.isArray(refreshData) ? refreshData : Array.isArray(refreshData?.data) ? refreshData.data : [];
+    setVoiceMessages(refreshList);
+    setVoicePage(Number(refreshData?.page || 1));
+    setVoiceTotalPages(Number(refreshData?.totalPages || 1));
+  } catch (err) {
+    console.error("VOICE/TEXT BROADCAST ERROR:", err);
+    toast.error("Failed to send message");
+  } finally {
+    setVoiceSendLoading(false);
+    setVoiceLoading(false);
   }
 };
 
@@ -1784,6 +1829,7 @@ useEffect(() => {
     { id: "exam-syllabus", label: "Exam Syllabus" },
     { id: "exam-timetable", label: "Exam Timetable" },
     { id: "password-resets", label: "Password Resets", feature: null },
+    { id: "settings", label: "Settings", feature: null },
   ]
   .filter((item) => {
     // If no feature requirement or no schoolFeatures loaded yet, show it
@@ -1877,6 +1923,11 @@ useEffect(() => {
             <button
               key={item.id}
               onClick={() => {
+                if (item.id === "settings") {
+                  setSidebarOpen(false);
+                  navigate("/settings");
+                  return;
+                }
                 skipQuerySectionSyncRef.current = true;
                 setActiveTab(item.id);
                 setSidebarOpen(false);
@@ -1987,16 +2038,7 @@ useEffect(() => {
             onClose={() => setShowNotifications(false)}
             token={localStorage.getItem("teacherToken")}
             toast={toast}
-            onNotificationsUpdated={async () => {
-              try {
-                const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
-                  headers: { Authorization: `Bearer ${token}` },
-                });
-                setUnreadCount(response.data.unreadCount || 0);
-              } catch (err) {
-                console.error("Error refreshing unread count:", err);
-              }
-            }}
+            onNotificationsUpdated={refreshUnreadCount}
           />
         )}
 
@@ -2624,7 +2666,7 @@ useEffect(() => {
 
               {/* Send Voice Message Form */}
               <div className="saas-card p-3 md:p-6 space-y-4">
-                <h3 className="font-bold text-slate-900">📢 Send Voice Message to Students</h3>
+                <h3 className="font-bold text-slate-900">📢 Send Voice/Text Message to Students</h3>
                 
                 <div className="flex items-center gap-2 text-slate-600 text-sm">
                   <input
@@ -2644,79 +2686,63 @@ useEffect(() => {
                   <div className="space-y-2">
                     <p className="text-xs text-slate-600 font-semibold">Select Students:</p>
                     <div className="max-h-40 overflow-y-auto space-y-2">
-                      {students.map((student) => (
-                        <label key={student._id} className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedStudents.includes(student._id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedStudents([...selectedStudents, student._id]);
-                              } else {
-                                setSelectedStudents(selectedStudents.filter((id) => id !== student._id));
-                              }
-                            }}
-                            className="w-4 h-4"
-                          />
-                          <span className="text-sm text-slate-700">{student.name}</span>
-                        </label>
-                      ))}
+                      {students.map((student) => {
+                        const recipientId = String(student.userId || student._id);
+                        return (
+                          <label key={student._id} className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedStudents.includes(recipientId)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedStudents([...selectedStudents, recipientId]);
+                                } else {
+                                  setSelectedStudents(selectedStudents.filter((id) => id !== recipientId));
+                                }
+                              }}
+                              className="w-4 h-4"
+                            />
+                            <span className="text-sm text-slate-700">{student.name}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
                 <VoiceRecorder
                   onRecordingComplete={async (audioBlob) => {
-                    if (!broadcastToClass && selectedStudents.length === 0) {
-                      toast.warning("Please select at least one student");
-                      return;
-                    }
-                    
-                    // Log blob size before upload
-                    console.log(`✅ TEACHER VOICE: Audio blob ready, size: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
-                    
-                    if (audioBlob.size === 0) {
-                      toast.error("Audio recording is empty. Please record again.");
-                      return;
-                    }
-                    
-                    setVoiceLoading(true);
-                    try {
-                      const formData = new FormData();
-                      formData.append("audio", audioBlob, "recording.webm");
-                      if (broadcastToClass) {
-                        formData.append("broadcastToClass", "true");
-                      } else {
-                        formData.append("targetStudentIds", JSON.stringify(selectedStudents));
-                      }
-
-                      console.log("📤 TEACHER VOICE: Uploading to /api/teacher/voice-broadcast");
-                      const res = await fetch(`${API_URL}/api/teacher/voice-broadcast`, {
-                        method: "POST",
-                        headers: { Authorization: `Bearer ${token}` },
-                        body: formData,
-                      });
-                      const data = await res.json();
-                      if (!res.ok) {
-                        console.error("❌ UPLOAD FAILED:", data);
-                        toast.error(data.error || "Failed to send voice message");
-                        return;
-                      }
-                      console.log(`✅ UPLOAD SUCCESS: Audio URL = ${data.audioUrl}`);
-                      toast.success(`Voice message sent to ${data.broadcastTo} student(s)`);
-                      setAudioFile(null);
-                      setSelectedStudents([]);
-                    } catch (err) {
-                      console.error("❌ VOICE BROADCAST ERROR:", err);
-                      toast.error("Failed to send voice message");
-                    } finally {
-                      setVoiceLoading(false);
-                    }
+                    await sendTeacherVoiceMessage(audioBlob);
                   }}
                   onError={(errMsg) => {
                     toast.error(errMsg);
                   }}
                 />
+                <div className="space-y-2">
+                  <label htmlFor="voiceTextMessage" className="block text-xs font-semibold text-slate-600">
+                    Text Message (optional)
+                  </label>
+                  <textarea
+                    id="voiceTextMessage"
+                    value={voiceTextMessage}
+                    onChange={(e) => setVoiceTextMessage(e.target.value)}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="Type a message for your students"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>You can send voice only, text only, or both.</span>
+                    <span>{String(voiceTextMessage || "").trim().length}/1000</span>
+                  </div>
+                  <button
+                    onClick={() => sendTeacherVoiceMessage(null)}
+                    disabled={voiceSendLoading}
+                    className="w-full rounded-lg bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {voiceSendLoading ? "Sending..." : "Send"}
+                  </button>
+                </div>
               </div>
 
               {/* Received Messages */}
@@ -2730,8 +2756,15 @@ useEffect(() => {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {voiceMessages.map((msg) => (
+                    {voiceMessages.map((msg) => {
+                      const typeMeta = getVoiceMessageTypeMeta(msg);
+                      return (
                       <ListItemCard key={msg._id}>
+                        <div className="mb-2">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${typeMeta.className}`}>
+                            {typeMeta.label}
+                          </span>
+                        </div>
                         <div className="flex items-center justify-between mb-3">
                           <div>
                             <div className="font-semibold text-slate-900 text-sm">From: {msg.senderName}</div>
@@ -2748,12 +2781,26 @@ useEffect(() => {
                             {voiceMessageDeletingId === msg._id ? "Deleting..." : "🗑️ Delete"}
                           </button>
                         </div>
-                        <audio controls className="w-full max-w-md">
-                          <source src={`${API_URL}${msg.audioUrl}`} type="audio/mpeg" />
-                          Your browser does not support the audio element.
-                        </audio>
+                        {msg.audioUrl && !msg.audioMissing ? (
+                          <div className="w-full min-w-0 max-w-full">
+                            <audio controls className="block w-full min-w-0 max-w-full" preload="metadata" onPlay={enforceSingleAudioPlayback}>
+                              <source src={`${API_URL}${msg.audioUrl}`} type={getAudioSourceType(msg.audioUrl)} />
+                              Your browser does not support the audio element.
+                            </audio>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-slate-500 break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">
+                            {msg.audioMissing && !msg.textMessage ? "Audio file is not available for this message." : "No audio attachment"}
+                          </div>
+                        )}
+                        {msg.textMessage ? (
+                          <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-sm text-slate-700 whitespace-pre-wrap break-words overflow-hidden [overflow-wrap:anywhere] max-w-full">
+                            {msg.textMessage}
+                          </div>
+                        ) : null}
                       </ListItemCard>
-                    ))}
+                      );
+                    })}
                     {voicePage < voiceTotalPages && (
                       <button
                         onClick={loadMoreVoiceMessages}

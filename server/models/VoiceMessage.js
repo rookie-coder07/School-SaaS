@@ -12,6 +12,7 @@ import { ObjectId } from "mongodb";
  *   senderId: ObjectId,       // User ID of the sender (admin)
  *   title: String,            // Optional title for the announcement
  *   audioUrl: String,         // Path to the audio file (/uploads/voice/filename.webm)
+ *   textMessage: String,      // Optional text message sent with/without audio
  *   audioDuration: Number,    // Duration in seconds
  *   fileSize: Number,         // File size in bytes
  *   createdAt: Date,          // When the message was created

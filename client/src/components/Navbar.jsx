@@ -1,47 +1,36 @@
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import NotificationBell from "./NotificationBell";
 import NotificationDropdown from "./NotificationDropdown";
+import useUnreadCount from "../hooks/useUnreadCount";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const resolveToken = () =>
+  localStorage.getItem("adminToken") ||
+  localStorage.getItem("teacherToken") ||
+  localStorage.getItem("studentToken") ||
+  localStorage.getItem("token");
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [token, setToken] = useState(null);
+  const { unreadCount, refreshUnreadCount } = useUnreadCount(token);
   const menuRef = useRef(null);
   const notificationsRef = useRef(null);
 
   // Get token from localStorage on mount
   useEffect(() => {
-    const storedToken = localStorage.getItem("token");
-    setToken(storedToken);
-  }, []);
-
-  // Fetch unread notification count when token is available
-  useEffect(() => {
-    if (!token) return;
-
-    const fetchUnreadCount = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setUnreadCount(response.data.unreadCount || 0);
-      } catch (err) {
-        console.error("Error fetching unread count:", err);
-      }
+    const syncToken = () => setToken(resolveToken());
+    syncToken();
+    window.addEventListener("storage", syncToken);
+    window.addEventListener("focus", syncToken);
+    document.addEventListener("visibilitychange", syncToken);
+    return () => {
+      window.removeEventListener("storage", syncToken);
+      window.removeEventListener("focus", syncToken);
+      document.removeEventListener("visibilitychange", syncToken);
     };
-
-    // Fetch immediately
-    fetchUnreadCount();
-
-    // Poll every 30 seconds
-    const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }, [token]);
+  }, []);
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -84,6 +73,7 @@ export default function Navbar() {
               isOpen={showNotifications}
               onClose={() => setShowNotifications(false)}
               token={token}
+              onNotificationsUpdated={refreshUnreadCount}
             />
           </div>
         )}
@@ -93,6 +83,9 @@ export default function Navbar() {
         <div ref={menuRef} style={styles.dropdown}>
           <Link to="/" onClick={() => setOpen(false)} style={styles.link}>
             Home
+          </Link>
+          <Link to="/settings" onClick={() => setOpen(false)} style={styles.link}>
+            Settings
           </Link>
           <Link to="/student/login" onClick={() => setOpen(false)} style={styles.link}>
             Student Login

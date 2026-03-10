@@ -18,6 +18,7 @@ export default function DevLogin() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [accessCode, setAccessCode] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -27,8 +28,14 @@ export default function DevLogin() {
     setLoading(true);
 
     try {
-      const normalizedEmail = email.trim().toLowerCase() || "dev@school.local";
-      const normalizedCode = accessCode.trim() || "supersecretdevkey";
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedPassword = password.trim();
+      const normalizedCode = accessCode.trim();
+
+      if (!normalizedEmail || !normalizedPassword || !normalizedCode) {
+        setError("Email, password, and access code are required.");
+        return;
+      }
 
       let payload;
       try {
@@ -37,6 +44,7 @@ export default function DevLogin() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: normalizedEmail,
+            password: normalizedPassword,
             accessCode: normalizedCode,
           }),
           requestLabel: "dev-login-primary",
@@ -49,7 +57,7 @@ export default function DevLogin() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: normalizedEmail,
-            password: normalizedCode,
+            password: normalizedPassword,
           }),
           requestLabel: "dev-login-fallback",
         });
@@ -65,7 +73,7 @@ export default function DevLogin() {
       localStorage.setItem("developerToken", payload.token);
       localStorage.setItem("devAccess", "true");
       localStorage.setItem("userRole", "DEVELOPER");
-      navigate("/dev-console", { replace: true });
+      navigate("/internal/dev-portal/dashboard", { replace: true });
     } catch (err) {
       const message = String(err?.message || "");
       if (/Unexpected token '<'|DOCTYPE|html/i.test(message)) {
@@ -113,6 +121,24 @@ export default function DevLogin() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="dev@school.local"
+                required
+                disabled={loading}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
+              />
+            </div>
+
+            {/* Password Input */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-semibold text-slate-200 mb-2">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                required
                 disabled={loading}
                 className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
               />
@@ -129,6 +155,7 @@ export default function DevLogin() {
                 value={accessCode}
                 onChange={(e) => setAccessCode(e.target.value)}
                 placeholder="Enter access code"
+                required
                 disabled={loading}
                 className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
               />

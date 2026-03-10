@@ -242,41 +242,106 @@ export default function devRoutes({
   router.get("/api-usage", async (_req, res) => {
     try {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const traces = await db.collection("requestTraces").find({ createdAt: { $gte: oneDayAgo } }).toArray();
-      const endpointMap = new Map();
-      const requestTimelineByHour = new Map();
-      for (const row of traces) {
-        const endpoint = String(row.route || "unknown");
-        const item = endpointMap.get(endpoint) || { endpoint, count: 0, totalMs: 0, maxMs: 0 };
-        const ms = Number(row.responseTime || 0);
-        item.count += 1;
-        item.totalMs += ms;
-        item.maxMs = Math.max(item.maxMs, ms);
-        endpointMap.set(endpoint, item);
-        const hour = new Date(row.createdAt || Date.now()).toISOString().slice(0, 13);
-        requestTimelineByHour.set(hour, (requestTimelineByHour.get(hour) || 0) + 1);
-      }
-      const topEndpoints = Array.from(endpointMap.values()).sort((a, b) => b.count - a.count).slice(0, 10).map((entry) => ({
-        _id: entry.endpoint,
-        endpoint: entry.endpoint,
-        count: entry.count,
-        avgMs: Math.round(entry.totalMs / Math.max(1, entry.count)),
-        maxMs: entry.maxMs,
+      const traceMatch = { createdAt: { $gte: oneDayAgo } };
+      const [apiRequestsToday, topEndpointRows, slowestEndpointRows, requestTimelineRows] = await Promise.all([
+        db.collection("requestTraces").countDocuments(traceMatch),
+        db
+          .collection("requestTraces")
+          .aggregate([
+            { $match: traceMatch },
+            {
+              $group: {
+                _id: { $ifNull: ["$route", "unknown"] },
+                count: { $sum: 1 },
+                totalMs: {
+                  $sum: {
+                    $convert: { input: "$responseTime", to: "double", onError: 0, onNull: 0 },
+                  },
+                },
+                maxMs: {
+                  $max: {
+                    $convert: { input: "$responseTime", to: "double", onError: 0, onNull: 0 },
+                  },
+                },
+              },
+            },
+            { $sort: { count: -1, _id: 1 } },
+            { $limit: 10 },
+          ])
+          .toArray(),
+        db
+          .collection("requestTraces")
+          .aggregate([
+            { $match: traceMatch },
+            {
+              $group: {
+                _id: { $ifNull: ["$route", "unknown"] },
+                count: { $sum: 1 },
+                totalMs: {
+                  $sum: {
+                    $convert: { input: "$responseTime", to: "double", onError: 0, onNull: 0 },
+                  },
+                },
+                maxMs: {
+                  $max: {
+                    $convert: { input: "$responseTime", to: "double", onError: 0, onNull: 0 },
+                  },
+                },
+              },
+            },
+            {
+              $addFields: {
+                avgMs: {
+                  $cond: [{ $gt: ["$count", 0] }, { $divide: ["$totalMs", "$count"] }, 0],
+                },
+              },
+            },
+            { $sort: { avgMs: -1, _id: 1 } },
+            { $limit: 10 },
+          ])
+          .toArray(),
+        db
+          .collection("requestTraces")
+          .aggregate([
+            { $match: traceMatch },
+            {
+              $group: {
+                _id: {
+                  $dateToString: {
+                    format: "%Y-%m-%dT%H",
+                    date: "$createdAt",
+                    timezone: "UTC",
+                  },
+                },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { _id: 1 } },
+          ])
+          .toArray(),
+      ]);
+
+      const topEndpoints = topEndpointRows.map((entry) => ({
+        _id: entry._id,
+        endpoint: entry._id,
+        count: Number(entry.count || 0),
+        avgMs: Math.round(Number(entry.totalMs || 0) / Math.max(1, Number(entry.count || 0))),
+        maxMs: Number(entry.maxMs || 0),
       }));
-      const slowestEndpoints = Array.from(endpointMap.values())
-        .sort((a, b) => b.totalMs / Math.max(1, b.count) - a.totalMs / Math.max(1, a.count))
-        .slice(0, 10)
-        .map((entry) => ({
-          endpoint: entry.endpoint,
-          avgMs: Math.round(entry.totalMs / Math.max(1, entry.count)),
-          maxMs: entry.maxMs,
-          count: entry.count,
-        }));
-      const requestTimeline = Array.from(requestTimelineByHour.entries()).map(([hour, count]) => ({ hour: `${hour}:00`, count }));
+      const slowestEndpoints = slowestEndpointRows.map((entry) => ({
+        endpoint: entry._id,
+        avgMs: Math.round(Number(entry.avgMs || 0)),
+        maxMs: Number(entry.maxMs || 0),
+        count: Number(entry.count || 0),
+      }));
+      const requestTimeline = requestTimelineRows.map((row) => ({
+        hour: `${String(row._id)}:00`,
+        count: Number(row.count || 0),
+      }));
       return res.json({
         success: true,
         data: {
-          apiRequestsToday: traces.length,
+          apiRequestsToday,
           topEndpoints,
           slowestEndpoints,
           requestTimeline,

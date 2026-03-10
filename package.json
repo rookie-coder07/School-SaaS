@@ -6,6 +6,10 @@
   "scripts": {
     "build:client": "cd client && npm run build",
     "start": "node server/server.js",
+    "seed:developer": "node server/scripts/seedDeveloper.js",
+    "reconcile:voice-audio": "node server/scripts/reconcileVoiceAudioFiles.js",
+    "smoke:dev-auth": "node server/scripts/smokeDevAuth.js",
+    "audit:tenant": "node server/scripts/auditTenantQueries.js",
     "dev": "node server/server.js",
     "start:prod": "node --max-old-space-size=2048 server/server.js",
     "perf:smoke": "node server/scripts/smoke-load.mjs",
@@ -24,6 +28,7 @@
     "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^13.3.0",
     "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",

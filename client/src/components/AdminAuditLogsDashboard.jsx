@@ -199,10 +199,10 @@ export default function AdminAuditLogsDashboard({ token }) {
             {filteredLogs.map((row, index) => (
               <div
                 key={row._id}
-                className={`rounded-[22px] border px-4 py-4 backdrop-blur-xl shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 ${LOG_CARD_THEMES[index % LOG_CARD_THEMES.length]}`}
+                className={`rounded-[22px] border px-4 py-4 min-w-0 max-w-full backdrop-blur-xl shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 ${LOG_CARD_THEMES[index % LOG_CARD_THEMES.length]}`}
               >
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
                     <span className="inline-flex items-center rounded-full border border-white/20 bg-slate-900/65 text-white px-2.5 py-1 text-[11px] font-bold tracking-wide">
                       {String(row?.action || "UNKNOWN").toUpperCase()}
                     </span>
@@ -213,12 +213,12 @@ export default function AdminAuditLogsDashboard({ token }) {
                       {String(row?.userRole || "UNKNOWN")}
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-slate-300">{formatDateTime(row?.timestamp)}</p>
+                  <p className="text-xs font-semibold text-slate-300 break-words [overflow-wrap:anywhere]">{formatDateTime(row?.timestamp)}</p>
                 </div>
-                <p className="mt-2 text-sm font-semibold text-slate-100">{row?.description || "-"}</p>
+                <p className="mt-2 text-sm font-semibold text-slate-100 break-words whitespace-pre-wrap [overflow-wrap:anywhere]">{row?.description || "-"}</p>
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-300">
-                  <p className="truncate"><span className="font-bold text-slate-200">Actor ID:</span> {row?.userId || "-"}</p>
-                  <p className="truncate"><span className="font-bold text-slate-200">Entity ID:</span> {row?.entityId || "-"}</p>
+                  <p className="break-words whitespace-normal [overflow-wrap:anywhere]"><span className="font-bold text-slate-200">Actor ID:</span> {row?.userId || "-"}</p>
+                  <p className="break-words whitespace-normal [overflow-wrap:anywhere]"><span className="font-bold text-slate-200">Entity ID:</span> {row?.entityId || "-"}</p>
                 </div>
               </div>
             ))}

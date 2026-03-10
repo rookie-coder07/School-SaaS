@@ -3,29 +3,13 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
-import DevProtectedRoute from "./components/DevProtectedRoute";
-import DeveloperRoute from "./components/DeveloperRoute";
+import DevRouteGuard from "./components/DevRouteGuard";
 import { FullPageLoader } from "./components/ui/Loaders";
 import AdminLogin from "./pages/AdminLogin";
 import StudentLogin from "./pages/StudentLogin";
 import TeacherLogin from "./pages/TeacherLogin";
 import DevLogin from "./dev/DevLogin";
 import DevLayout from "./dev/DevLayout";
-import DevDashboardPage from "./dev/pages/DevDashboardPage";
-import DevSchoolsPage from "./dev/pages/DevSchoolsPage";
-import DevUsersPage from "./dev/pages/DevUsersPage";
-import DevVoiceMessagesPage from "./dev/pages/DevVoiceMessagesPage";
-import DevDataExplorerPage from "./dev/pages/DevDataExplorerPage";
-import DevSystemControlsPage from "./dev/pages/DevSystemControlsPage";
-import DevAuditLogsPage from "./dev/pages/DevAuditLogsPage";
-import DevSystemPage from "./dev/pages/DevSystemPage";
-import DevErrorsPage from "./dev/pages/DevErrorsPage";
-import DevLogsPage from "./dev/pages/DevLogsPage";
-import DevApiPage from "./dev/pages/DevApiPage";
-import DevActivityPage from "./dev/pages/DevActivityPage";
-import DevFeaturesPage from "./dev/pages/DevFeaturesPage";
-import DevTracesPage from "./dev/pages/DevTracesPage";
-import DevToolsPage from "./dev/pages/DevToolsPage";
 import { lazyWithRetry } from "./utils/lazyWithRetry";
 
 const Home = lazyWithRetry(() => import("./pages/Home"), "HomePage");
@@ -43,12 +27,40 @@ const StudentAnalyticsDashboard = lazyWithRetry(
   () => import("./pages/StudentAnalyticsDashboard"),
   "StudentAnalyticsDashboardPage"
 );
+const DevDashboardPage = lazyWithRetry(() => import("./dev/pages/DevDashboardPage"), "DevDashboardPage");
+const DevSchoolsPage = lazyWithRetry(() => import("./dev/pages/DevSchoolsPage"), "DevSchoolsPage");
+const DevUsersPage = lazyWithRetry(() => import("./dev/pages/DevUsersPage"), "DevUsersPage");
+const DevVoiceMessagesPage = lazyWithRetry(() => import("./dev/pages/DevVoiceMessagesPage"), "DevVoiceMessagesPage");
+const DevDataExplorerPage = lazyWithRetry(() => import("./dev/pages/DevDataExplorerPage"), "DevDataExplorerPage");
+const DevSystemControlsPage = lazyWithRetry(() => import("./dev/pages/DevSystemControlsPage"), "DevSystemControlsPage");
+const DevAuditLogsPage = lazyWithRetry(() => import("./dev/pages/DevAuditLogsPage"), "DevAuditLogsPage");
+const DevSystemPage = lazyWithRetry(() => import("./dev/pages/DevSystemPage"), "DevSystemPage");
+const DevErrorsPage = lazyWithRetry(() => import("./dev/pages/DevErrorsPage"), "DevErrorsPage");
+const DevLogsPage = lazyWithRetry(() => import("./dev/pages/DevLogsPage"), "DevLogsPage");
+const DevApiPage = lazyWithRetry(() => import("./dev/pages/DevApiPage"), "DevApiPage");
+const DevActivityPage = lazyWithRetry(() => import("./dev/pages/DevActivityPage"), "DevActivityPage");
+const DevFeaturesPage = lazyWithRetry(() => import("./dev/pages/DevFeaturesPage"), "DevFeaturesPage");
+const DevTracesPage = lazyWithRetry(() => import("./dev/pages/DevTracesPage"), "DevTracesPage");
+const DevToolsPage = lazyWithRetry(() => import("./dev/pages/DevToolsPage"), "DevToolsPage");
+const SettingsPage = lazyWithRetry(() => import("./pages/SettingsPage"), "SettingsPage");
+const SettingsInfoPage = lazyWithRetry(() => import("./pages/SettingsInfoPage"), "SettingsInfoPage");
 
-const preloadLikelyRoutes = () => {
-  import("./pages/AdminDashboard");
-  import("./pages/TeacherDashboard");
-  import("./pages/StudentDashboard");
-  import("./pages/StudentAnalyticsDashboard");
+const DEV_PORTAL_BASE = "/internal/dev-portal";
+
+const preloadLikelyRoutes = (pathname = "") => {
+  if (pathname.startsWith("/admin/login")) {
+    import("./pages/AdminDashboard");
+    return;
+  }
+  if (pathname.startsWith("/teacher/login")) {
+    import("./pages/TeacherDashboard");
+    import("./pages/TeacherChangePassword");
+    return;
+  }
+  if (pathname.startsWith("/student/login")) {
+    import("./pages/StudentDashboard");
+    import("./pages/StudentAnalyticsDashboard");
+  }
 };
 
 const shouldSkipPreload = () => {
@@ -64,20 +76,22 @@ export default function App() {
   const location = useLocation();
   const hideNavbar =
     location.pathname.startsWith("/admin/dashboard") ||
-    location.pathname.startsWith("/teacher/") && location.pathname !== "/teacher/login" ||
+    (location.pathname.startsWith("/teacher/") && location.pathname !== "/teacher/login") ||
     location.pathname.startsWith("/student/dashboard") ||
-    location.pathname.startsWith("/dev-console");
+    location.pathname.startsWith("/dev-console") ||
+    location.pathname.startsWith(DEV_PORTAL_BASE);
 
   useEffect(() => {
     if (shouldSkipPreload()) return undefined;
     const scheduler = window.requestIdleCallback || ((cb) => setTimeout(cb, 1200));
-    const handle = scheduler(() => preloadLikelyRoutes());
+    const pathForIntent = location.pathname;
+    const handle = scheduler(() => preloadLikelyRoutes(pathForIntent));
     return () => {
       if (window.cancelIdleCallback && typeof handle === "number") {
         window.cancelIdleCallback(handle);
       }
     };
-  }, []);
+  }, [location.pathname]);
 
   return (
     <>
@@ -89,6 +103,8 @@ export default function App() {
           <Route path="/about" element={<About />} />
           <Route path="/admissions" element={<Admissions />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/info/:slug" element={<SettingsInfoPage />} />
 
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/login" element={<Navigate to="/dev-login" replace />} />
@@ -98,7 +114,7 @@ export default function App() {
               const role = String(localStorage.getItem("userRole") || "").toLowerCase();
               if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
               if (role === "teacher") return <Navigate to="/teacher/dashboard" replace />;
-              if (role === "developer") return <Navigate to="/dev-console/dashboard" replace />;
+              if (role === "developer") return <Navigate to={`${DEV_PORTAL_BASE}/dashboard`} replace />;
               return <Navigate to="/student/dashboard" replace />;
             })()}
           />
@@ -192,16 +208,14 @@ export default function App() {
           {/* 🔐 DEVELOPER PORTAL (ISOLATED IMPLEMENTATION) */}
           {/* ═══════════════════════════════════════════════════════════ */}
           <Route path="/dev-login" element={<DevLogin />} />
-          
-          {/* Developer Console with Nested Routes */}
+          <Route path="/dev-console/*" element={<DevConsoleRedirect />} />
+  {/* Developer Console with Nested Routes */}
           <Route
-            path="/dev-console"
+            path={`${DEV_PORTAL_BASE}/*`}
             element={
-              <DevProtectedRoute>
-                <DeveloperRoute>
-                  <DevLayout />
-                </DeveloperRoute>
-              </DevProtectedRoute>
+              <DevRouteGuard>
+                <DevLayout />
+              </DevRouteGuard>
             }
           >
             <Route index element={<Navigate to="dashboard" replace />} />
@@ -256,4 +270,12 @@ export default function App() {
       </Suspense>
     </>
   );
+}
+
+function DevConsoleRedirect() {
+  const location = useLocation();
+  const suffix = location.pathname.replace(/^\/dev-console/, "") || "/dashboard";
+  const normalizedSuffix = suffix.startsWith("/") ? suffix : `/${suffix}`;
+  const destination = `${DEV_PORTAL_BASE}${normalizedSuffix}${location.search}${location.hash}`;
+  return <Navigate to={destination} replace />;
 }

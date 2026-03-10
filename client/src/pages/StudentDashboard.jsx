@@ -23,6 +23,33 @@ import StudentAnalyticsDashboard from "../components/student/StudentAnalyticsDas
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const lazyFallback = <ListSkeleton rows={2} />;
 
+const getVoiceMessageTypeMeta = (msg = {}) => {
+  const hasAudio = Boolean(msg?.audioUrl);
+  const hasText = Boolean(String(msg?.textMessage || "").trim());
+  if (hasAudio && hasText) return { label: "Voice + Text", className: "bg-indigo-100 text-indigo-700 border border-indigo-200" };
+  if (hasAudio) return { label: "Voice", className: "bg-blue-100 text-blue-700 border border-blue-200" };
+  if (hasText) return { label: "Text", className: "bg-emerald-100 text-emerald-700 border border-emerald-200" };
+  return { label: "Empty", className: "bg-slate-100 text-slate-600 border border-slate-200" };
+};
+
+const getAudioSourceType = (audioUrl = "") => {
+  const value = String(audioUrl || "").toLowerCase();
+  if (value.endsWith(".mp3")) return "audio/mpeg";
+  if (value.endsWith(".wav")) return "audio/wav";
+  if (value.endsWith(".ogg")) return "audio/ogg";
+  return "audio/webm";
+};
+
+const enforceSingleAudioPlayback = (event) => {
+  const currentAudio = event?.currentTarget;
+  if (!currentAudio) return;
+  document.querySelectorAll("audio").forEach((audioEl) => {
+    if (audioEl !== currentAudio) {
+      audioEl.pause();
+    }
+  });
+};
+
 export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedExamId, setSelectedExamId] = useState(null);
@@ -44,6 +71,7 @@ export default function StudentDashboard() {
   const [events, setEvents] = useState([]);
   const [teacher, setTeacher] = useState(null);
   const [voiceMessages, setVoiceMessages] = useState([]);
+  const [failedVoiceAudioIds, setFailedVoiceAudioIds] = useState(() => new Set());
   const [voiceMessagesLoading, setVoiceMessagesLoading] = useState(false);
   const [voiceMessagesLoadingMore, setVoiceMessagesLoadingMore] = useState(false);
   const [voicePage, setVoicePage] = useState(1);
@@ -294,28 +322,31 @@ export default function StudentDashboard() {
     const fetchVoiceMessages = async () => {
       try {
         setVoiceMessagesLoading(true);
-        console.log("📡 STUDENT VOICE: Fetching voice messages from /api/student/voice-messages");
+        console.log("STUDENT VOICE: Fetching voice messages from /api/student/voice-messages");
         const dateQuery = buildDateFilterQuery(voiceDateFilter);
-        const res = await fetch(`${API_URL}/api/student/voice-messages?page=1&limit=20${dateQuery ? `&${dateQuery}` : ""}`, {
+        const selectedVoiceId = searchParams.get("id");
+        const voiceIdQuery = selectedVoiceId ? `&id=${encodeURIComponent(selectedVoiceId)}` : "";
+        const res = await fetch(`${API_URL}/api/student/voice-messages?page=1&limit=20${dateQuery ? `&${dateQuery}` : ""}${voiceIdQuery}`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
         if (!res.ok) {
-          console.warn("❌ STUDENT VOICE: Fetch failed with status", res.status);
+          console.warn("STUDENT VOICE: Fetch failed with status", res.status);
           setVoiceMessages([]);
+          setVoicePage(1);
+          setVoiceTotalPages(1);
           return;
         }
         const data = await res.json();
-        console.log(`✅ STUDENT VOICE: Fetched ${Array.isArray(data) ? data.length : 0} voice messages`);
-        if (Array.isArray(data)) {
-          data.forEach((msg) => {
-            console.log(`   📝 Message from ${msg.senderName}: ${msg.audioUrl}`);
-          });
-        }
-        setVoiceMessages(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+        console.log(`STUDENT VOICE: Fetched ${list.length} voice messages`);
+        setVoiceMessages(list);
+        setFailedVoiceAudioIds(new Set());
+        setVoicePage(Number(data?.page || 1));
+        setVoiceTotalPages(Number(data?.totalPages || 1));
       } catch (err) {
         if (err?.name === "AbortError") return;
-        console.error("❌ VOICE MESSAGES FETCH ERROR:", err);
+        console.error("VOICE MESSAGES FETCH ERROR:", err);
         setVoiceMessages([]);
       } finally {
         setVoiceMessagesLoading(false);
@@ -323,7 +354,8 @@ export default function StudentDashboard() {
     };
     if (token) fetchVoiceMessages();
     return () => controller.abort();
-  }, [activeTab, token, voiceDateFilter]);
+  }, [activeTab, token, voiceDateFilter, searchParams]);
+
 
   const loadMoreVoiceMessages = async () => {
     if (voiceMessagesLoadingMore || voicePage >= voiceTotalPages) return;
@@ -464,6 +496,7 @@ export default function StudentDashboard() {
     { id: "voice", label: "Voice Messages" },
     { id: "events", label: "Events" },
     { id: "profile", label: "Profile" },
+    { id: "settings", label: "Settings" },
     { id: "logout", label: "Logout" },
   ];
 
@@ -532,6 +565,11 @@ export default function StudentDashboard() {
                 if (item.id === "logout") {
                   setSidebarOpen(false);
                   handleLogout();
+                  return;
+                }
+                if (item.id === "settings") {
+                  setSidebarOpen(false);
+                  navigate("/settings");
                   return;
                 }
                 setActiveTab(item.id);
@@ -886,8 +924,15 @@ export default function StudentDashboard() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {voiceMessages.map((msg) => (
+                  {voiceMessages.map((msg) => {
+                    const typeMeta = getVoiceMessageTypeMeta(msg);
+                    return (
                     <ListItemCard key={msg._id}>
+                      <div className="mb-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${typeMeta.className}`}>
+                          {typeMeta.label}
+                        </span>
+                      </div>
                       <div className="flex items-center justify-between mb-3">
                         <div>
                           <div className="font-semibold text-slate-900 text-sm">
@@ -899,26 +944,43 @@ export default function StudentDashboard() {
                           </div>
                         </div>
                       </div>
-                      {msg.audioUrl ? (
+                      {msg.audioUrl && !msg.audioMissing && !failedVoiceAudioIds.has(String(msg._id)) ? (
+                        <div className="w-full min-w-0 max-w-full">
                         <audio 
                           controls 
-                          className="w-full max-w-md"
+                          className="block w-full min-w-0 max-w-full"
                           controlsList="nodownload"
-                          onError={(e) => {
-                            console.error("Audio loading error:", e);
-                            console.error("Audio URL:", `${API_URL}${msg.audioUrl}`);
+                          preload="metadata"
+                          onPlay={enforceSingleAudioPlayback}
+                          onError={() => {
+                            setFailedVoiceAudioIds((prev) => {
+                              const next = new Set(prev);
+                              next.add(String(msg._id));
+                              return next;
+                            });
                           }}
                           onLoadedMetadata={(e) => {
-                            console.log(`✅ Audio loaded: ${msg._id}, duration: ${e.target.duration}s`);
+                            console.log(`Audio loaded: ${msg._id}, duration: ${e.target.duration}s`);
                           }}>
-                          <source src={`${API_URL}${msg.audioUrl}`} type="audio/webm" />
+                          <source src={`${API_URL}${msg.audioUrl}`} type={getAudioSourceType(msg.audioUrl)} />
                           Your browser does not support the audio element.
                         </audio>
-                      ) : (
-                        <div className="text-sm text-red-500">Audio file not available</div>
-                      )}
+                        </div>
+                      ) : null}
+                      {(msg.audioMissing || (msg.audioUrl && failedVoiceAudioIds.has(String(msg._id)))) && !msg.textMessage ? (
+                        <div className="text-sm text-slate-500 break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">Audio file is not available for this message.</div>
+                      ) : null}
+                      {msg.textMessage ? (
+                        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-sm text-slate-700 whitespace-pre-wrap break-words overflow-hidden [overflow-wrap:anywhere] max-w-full">
+                          {msg.textMessage}
+                        </div>
+                      ) : null}
+                      {!msg.audioUrl && !msg.textMessage ? (
+                        <div className="text-sm text-red-500">Message content is not available</div>
+                      ) : null}
                     </ListItemCard>
-                  ))}
+                    );
+                  })}
                   {voicePage < voiceTotalPages && (
                     <button
                       onClick={loadMoreVoiceMessages}

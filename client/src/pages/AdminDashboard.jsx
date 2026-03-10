@@ -1,6 +1,5 @@
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import axios from "axios";
 import NotificationBell from "../components/NotificationBell";
 import ConfirmationModal from "../components/ConfirmationModal";
 import PageContainer from "../components/ui/PageContainer";
@@ -16,6 +15,7 @@ import NotificationDropdown from "../components/NotificationDropdown";
 import UserTrackingDashboard from "../components/UserTrackingDashboard";
 import AdminAnalyticsDashboard from "../components/AdminAnalyticsDashboard";
 import AdminAuditLogsDashboard from "../components/AdminAuditLogsDashboard";
+import useUnreadCount from "../hooks/useUnreadCount";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const isConstrainedDevice = () => {
@@ -26,7 +26,6 @@ const isConstrainedDevice = () => {
   const lowMemory = typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 4;
   return saveData || slowNetwork || lowMemory;
 };
-const UNREAD_POLL_INTERVAL_MS = isConstrainedDevice() ? 60000 : 30000;
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -36,7 +35,6 @@ export default function AdminDashboard() {
   const [message, _setMessage] = useState("");
   const [schoolId, setSchoolId] = useState("");
   const [schoolName, setSchoolName] = useState("");
-  const [unreadCount, setUnreadCount] = useState(0);
   const [dashboardSummary, setDashboardSummary] = useState({
     studentCount: 0,
     teacherCount: 0,
@@ -202,6 +200,9 @@ export default function AdminDashboard() {
   
   const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
   const token = localStorage.getItem("adminToken");
+  const { unreadCount, refreshUnreadCount } = useUnreadCount(token, {
+    pollIntervalMs: isConstrainedDevice() ? 60000 : 30000,
+  });
 
   // Logout
   const handleLogout = async () => {
@@ -304,60 +305,6 @@ export default function AdminDashboard() {
       setActiveTab(sectionParam);
     }
   }, [searchParams]);
-
-  // Fetch unread notification count on mount and when notifications panel opens
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchUnreadCount = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        setUnreadCount(response.data.unreadCount || 0);
-      } catch (err) {
-        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
-        console.error("Error fetching unread count:", err);
-        setUnreadCount(0);
-      }
-    };
-
-    if (token) {
-      const initialDelayMs = isConstrainedDevice() ? 1800 : 0;
-      const initialTimer = setTimeout(fetchUnreadCount, initialDelayMs);
-      
-      // Poll every 30 seconds to keep count updated
-      const interval = setInterval(fetchUnreadCount, UNREAD_POLL_INTERVAL_MS);
-      return () => {
-        controller.abort();
-        clearTimeout(initialTimer);
-        clearInterval(interval);
-      };
-    }
-    return () => controller.abort();
-  }, [token]);
-
-  // Fetch unread count when notifications panel opens
-  useEffect(() => {
-    const controller = new AbortController();
-    if (showNotifications && token) {
-      const fetchUnreadCount = async () => {
-        try {
-          const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal,
-          });
-          setUnreadCount(response.data.unreadCount || 0);
-        } catch (err) {
-          if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
-          console.error("Error fetching unread count:", err);
-        }
-      };
-      
-      fetchUnreadCount();
-    }
-    return () => controller.abort();
-  }, [showNotifications, token]);
 
   useEffect(() => {
     if (activeTab !== "students") {
@@ -1824,6 +1771,7 @@ export default function AdminDashboard() {
     { id: "tracking", label: "User Tracking" },
     { id: "reset-requests", label: "Reset Requests" },
     { id: "user-management", label: "User Management", children: userManagementItems },
+    { id: "settings", label: "Settings" },
   ]), [userManagementItems]);
 
   const activeTitle = useMemo(() => {
@@ -1893,6 +1841,11 @@ export default function AdminDashboard() {
             <div key={item.id} className="space-y-1">
               <button
                 onClick={() => {
+                  if (item.id === "settings") {
+                    setSidebarOpen(false);
+                    navigate("/settings");
+                    return;
+                  }
                   setActiveTab(item.id);
                   setSidebarOpen(false);
                 }}
@@ -2015,16 +1968,7 @@ export default function AdminDashboard() {
               token={localStorage.getItem("adminToken")}
               toast={toast}
               showBackdrop={false}
-              onNotificationsUpdated={async () => {
-                try {
-                  const response = await axios.get(`${API_URL}/api/notifications/unread-count`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                  });
-                  setUnreadCount(response.data.unreadCount || 0);
-                } catch (err) {
-                  console.error("Error refreshing unread count:", err);
-                }
-              }}
+              onNotificationsUpdated={refreshUnreadCount}
             />
           </Suspense>
         )}
@@ -2829,11 +2773,6 @@ export default function AdminDashboard() {
                       )}
                     </div>
                   )}
-                </div>
-
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-sm font-semibold text-emerald-800">Roll Number Handling</p>
-                  <p className="text-sm text-slate-700 mt-1">Keep current roll numbers</p>
                 </div>
 
                 <button

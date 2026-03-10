@@ -10,6 +10,12 @@ import jwt from "jsonwebtoken";
 import multer from "multer";
 import XLSX from "xlsx";
 import { MongoClient, ObjectId } from "mongodb";
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from "@simplewebauthn/server";
 import cluster from "cluster";
 import os from "os";
 import MockDatabase from "./mockDb.js";
@@ -21,6 +27,8 @@ import { createQaObservabilityMiddleware } from "./middleware/qaObservability.js
 import devIpGuard from "./middleware/devIpGuard.js";
 import createMaintenanceGuard from "./middleware/maintenanceGuard.js";
 import createUploadGuard from "./middleware/uploadGuard.js";
+import requireDeveloperGuard from "./middleware/requireDeveloper.js";
+import { applyTenantFilter } from "./middleware/tenantFilter.js";
 import { createAuditLogger } from "./services/auditLogService.js";
 import { createCacheService } from "./services/cacheService.js";
 import { DEVELOPER_ACTION_LOG_INDEXES } from "./models/DeveloperActionLog.js";
@@ -43,11 +51,17 @@ import {
 } from "./middleware/validators/accountValidator.js";
 import devRoutes from "./routes/devRoutes.js";
 import admissionRoutes from "./routes/admissionRoutes.js";
+import {
+  ensureDeveloperUser,
+  DEFAULT_DEVELOPER_EMAIL,
+  DEFAULT_DEVELOPER_PASSWORD,
+} from "./services/developerSeedService.js";
 
 // Load environment variables from .env file in server directory
 // We'll load the .env after __dirname is defined below
 
 const app = express();
+const webauthnChallengeStore = new Map();
 
 const wrapRouteHandler = (handler) => {
   if (typeof handler !== "function") return handler;
@@ -68,7 +82,7 @@ const patchExpressMethod = (target, methodName) => {
 });
 
 // Enable CORS with explicit options (Development + Production)
-// ?? Development Origins:
+// Development Origins:
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -78,7 +92,7 @@ const allowedOrigins = [
   "http://127.0.0.1:5175",
 ];
 
-// ?? Production Netlify Domain Support
+// Production Netlify Domain Support
 // Add explicit Netlify domain if set in env
 if (process.env.NETLIFY_DOMAIN) {
   allowedOrigins.push(`https://${process.env.NETLIFY_DOMAIN}`);
@@ -169,6 +183,9 @@ const appendTelemetryError = ({
     school: school ? String(school) : null,
     statusCode: Number(statusCode) || 500,
   });
+  if (apiTelemetry.errors.length > MAX_TELEMETRY_ERRORS) {
+    apiTelemetry.errors.splice(0, apiTelemetry.errors.length - MAX_TELEMETRY_ERRORS);
+  }
   if (Number(statusCode) >= 500) {
     queueBugReport({
       type: "api_error",
@@ -195,9 +212,6 @@ const appendTelemetryError = ({
         createdAt: new Date(),
       })
     ).catch(() => {});
-  }
-  if (apiTelemetry.errors.length > MAX_TELEMETRY_ERRORS) {
-    apiTelemetry.errors.splice(0, apiTelemetry.errors.length - MAX_TELEMETRY_ERRORS);
   }
 };
 
@@ -411,7 +425,7 @@ const envPath = path.join(__dirname, ".env");
 dotenv.config({ path: envPath });
 
 // Log environment loading
-console.log(`?? Loading .env from: ${envPath}`);
+console.log(`Loading .env from: ${envPath}`);
 console.log(`? JWT_SECRET loaded: ${process.env.JWT_SECRET ? "YES" : "NO"}`);
 console.log(`? MONGO_URI loaded: ${process.env.MONGO_URI ? "YES" : "NO"}`);
 
@@ -503,13 +517,43 @@ process.on("unhandledRejection", (reason) => {
   });
 });
 
-// ??? Serve uploaded files (voice recordings, documents, etc)
+// Serve uploaded files (voice recordings, documents, etc)
 // This makes /uploads/{filename} accessible publicly
 const uploadsPath = path.join(__dirname, "uploads");
+const legacyUploadsPath = path.resolve(process.cwd(), "uploads");
 app.use("/uploads", express.static(uploadsPath));
+if (legacyUploadsPath !== uploadsPath) {
+  // Backward compatibility for files saved with old relative upload paths.
+  app.use("/uploads", express.static(legacyUploadsPath));
+}
 console.log(`? Static file serving enabled at /uploads (${uploadsPath})`);
 
-// ?? Serve built React frontend from /client/dist
+const resolveVoiceFileCandidates = (audioUrl = "") => {
+  const value = String(audioUrl || "").trim();
+  if (!value.startsWith("/uploads/voice/")) return [];
+  const relativePath = value.replace(/^\//, "");
+  return [
+    path.join(__dirname, relativePath),
+    path.resolve(process.cwd(), relativePath),
+  ];
+};
+
+const isVoiceFileAvailable = (audioUrl = "") =>
+  resolveVoiceFileCandidates(audioUrl).some((candidatePath) => {
+    try {
+      return fs.existsSync(candidatePath);
+    } catch {
+      return false;
+    }
+  });
+
+const withAudioAvailability = (message = {}) => {
+  const hasAudio = Boolean(message?.audioUrl);
+  const audioMissing = hasAudio ? !isVoiceFileAvailable(message.audioUrl) : false;
+  return { ...message, audioMissing };
+};
+
+// Serve built React frontend from /client/dist
 // This allows the backend to serve the production build
 const frontendBuildPath = path.join(__dirname, "../client/dist");
 const frontendIndexPath = path.join(frontendBuildPath, "index.html");
@@ -530,7 +574,7 @@ app.use(
 );
 console.log(`? Frontend static files enabled at ${frontendBuildPath}`);
 if (!fs.existsSync(frontendIndexPath)) {
-  console.warn("?? Frontend build missing. Run: cd client && npm run build");
+  console.warn("Frontend build missing. Run: cd client && npm run build");
 }
 
 const safeObjectId = (id) => {
@@ -581,6 +625,7 @@ const TEACHER_ROLE_SCOPE_OR = [
 
 const CACHE_TTL_MS = 30 * 1000;
 const cacheService = createCacheService({ ttlMs: CACHE_TTL_MS });
+const inflightCacheRequests = new Map();
 const platformControlState = {
   maintenanceMode: false,
   uploadsDisabled: false,
@@ -594,6 +639,24 @@ const getCache = (key) => cacheService.get(key);
 const setCache = (key, value, ttlMs = CACHE_TTL_MS) => cacheService.set(key, value, ttlMs);
 const clearInMemoryCache = () => cacheService.clear();
 const buildCacheKey = (prefix, schoolId, query = {}) => cacheService.buildKey(prefix, schoolId, query);
+const getOrSetCache = async (key, producer, ttlMs = CACHE_TTL_MS) => {
+  const cached = getCache(key);
+  if (cached !== null && cached !== undefined) return cached;
+  if (inflightCacheRequests.has(key)) return inflightCacheRequests.get(key);
+
+  const pending = (async () => {
+    try {
+      const value = await producer();
+      setCache(key, value, ttlMs);
+      return value;
+    } finally {
+      inflightCacheRequests.delete(key);
+    }
+  })();
+
+  inflightCacheRequests.set(key, pending);
+  return pending;
+};
 
 const parseStudentObjectIds = (studentIds = []) => parseObjectIds(studentIds);
 const parseTeacherObjectIds = (teacherIds = []) => parseObjectIds(teacherIds);
@@ -678,7 +741,7 @@ const writeAuditLog = async ({ action, actorId = null, actorRole = null, schoolI
       createdAt: new Date(),
     });
   } catch (err) {
-    console.warn("?? AUDIT LOG WRITE FAILED:", err.message);
+    console.warn("AUDIT LOG WRITE FAILED:", err.message);
   }
 };
 
@@ -787,6 +850,65 @@ const filterScoresByActiveSubjects = (scores = [], activeSubjectKeys = new Set()
     return key && activeSubjectKeys.has(key);
   });
 
+const toFiniteNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const buildExamSubjectMaxMap = (examDoc = {}) => {
+  const map = new Map();
+  normalizeExamSubjects(examDoc?.subjects || []).forEach((subjectRow) => {
+    map.set(String(subjectRow.name || "").toLowerCase(), Number(subjectRow.maxMarks || 100));
+  });
+  return map;
+};
+
+const buildMarksAnalyticsEntries = ({
+  marksDocs = [],
+  examById = new Map(),
+  examFilter = "all",
+  subjectFilter = "all",
+}) => {
+  const normalizedExamFilter = String(examFilter || "all").trim().toLowerCase();
+  const normalizedSubjectFilter = String(subjectFilter || "all").trim().toLowerCase();
+  const entries = [];
+
+  (Array.isArray(marksDocs) ? marksDocs : []).forEach((mark) => {
+    const studentKey = String(mark?.studentId || "");
+    if (!studentKey) return;
+    const examDoc = mark?.examId ? examById.get(String(mark.examId)) : null;
+    const examLabel = String(mark?.examName || mark?.exam || examDoc?.name || "Exam").trim() || "Exam";
+    if (normalizedExamFilter !== "all" && examLabel.toLowerCase() !== normalizedExamFilter) return;
+
+    if (Array.isArray(mark?.scores) && mark.scores.length > 0) {
+      const maxBySubject = buildExamSubjectMaxMap(examDoc);
+      mark.scores.forEach((scoreRow) => {
+        const subject = normalizeSubjectName(scoreRow?.subject || "");
+        if (!subject) return;
+        if (normalizedSubjectFilter !== "all" && subject.toLowerCase() !== normalizedSubjectFilter) return;
+        const obtained = toFiniteNumber(scoreRow?.obtained);
+        if (obtained === null) return;
+        const maxMarks = Number(maxBySubject.get(subject.toLowerCase()) || 100);
+        const percent = maxMarks > 0 ? Math.max(0, Math.min(100, (obtained / maxMarks) * 100)) : Math.max(0, Math.min(100, obtained));
+        entries.push({ studentKey, subject, examLabel, percent });
+      });
+      return;
+    }
+
+    const subject = normalizeSubjectName(mark?.subject || mark?.subjectName || "Unknown");
+    if (normalizedSubjectFilter !== "all" && subject.toLowerCase() !== normalizedSubjectFilter) return;
+    const scoreRaw = mark?.score ?? mark?.marks ?? mark?.marksObtained;
+    if (String(scoreRaw || "").toUpperCase() === "ABSENT") return;
+    const obtained = toFiniteNumber(scoreRaw);
+    if (obtained === null) return;
+    const maxMarks = Number(mark?.maxMarks || 100);
+    const percent = maxMarks > 0 ? Math.max(0, Math.min(100, (obtained / maxMarks) * 100)) : Math.max(0, Math.min(100, obtained));
+    entries.push({ studentKey, subject, examLabel, percent });
+  });
+
+  return entries;
+};
+
 const parseCsvTextRows = (text = "") => {
   const lines = String(text)
     .split(/\r?\n/)
@@ -806,7 +928,7 @@ const parseCsvTextRows = (text = "") => {
 };
 
 /**
- * ?? Format process uptime into human-readable format
+ * Format process uptime into human-readable format
  * @param {number} seconds - Uptime in seconds
  * @returns {string} Formatted uptime string
  */
@@ -971,7 +1093,7 @@ async function runBestEffortTransaction(operationName, work) {
     });
     return result;
   } catch (error) {
-    console.warn(`?? ${operationName}: transaction unavailable/fallback -`, error.message);
+    console.warn(`${operationName}: transaction unavailable/fallback -`, error.message);
     return work(null);
   } finally {
     await session.endSession();
@@ -1089,33 +1211,20 @@ const attachMongoReconnectHandlers = () => {
 };
 
 async function seedDeveloperUser() {
+  if (!db) return null;
   try {
-    const existing = await db.collection("users").findOne({
-      email: "developer@example.com",
-      role: "DEVELOPER",
-    });
-
-    if (existing) {
-      console.log("? DEVELOPER user already exists");
-      return;
+    const { exists, insertedId, user } = await ensureDeveloperUser(db);
+    if (exists) {
+      console.log("✨ DEVELOPER user already exists:", user?.email || user?._id);
+      return user;
     }
-
-    // Hash password
-    const passwordHash = await bcrypt.hash("developer123", 10);
-
-    // Create DEVELOPER user
-    const result = await db.collection("users").insertOne({
-      email: "developer@example.com",
-      passwordHash,
-      role: "DEVELOPER",
-      createdAt: new Date(),
-    });
-
-    console.log("? DEVELOPER user created automatically on startup");
-    console.log("   ?? Email: developer@example.com");
-    console.log("   ?? Password: developer123");
+    console.log("✨ DEVELOPER user created automatically on startup:", insertedId);
+    console.log(`   ⚡ Email: ${DEFAULT_DEVELOPER_EMAIL}`);
+    console.log(`   ⚡ Password: ${DEFAULT_DEVELOPER_PASSWORD}`);
+    return { insertedId };
   } catch (err) {
-    console.warn("??  Could not auto-seed DEVELOPER user:", err.message);
+    console.warn("⚠ Could not auto-seed DEVELOPER user:", err?.message || err);
+    return null;
   }
 }
 
@@ -1142,6 +1251,10 @@ async function ensureMongoIndexes() {
       db.collection("homework").createIndexes([
         { key: { schoolId: 1 }, name: "homework_school_idx" },
       ]),
+      db.collection("exams").createIndexes([
+        { key: { schoolId: 1 }, name: "exams_school_idx" },
+        { key: { schoolId: 1, class: 1, section: 1 }, name: "exams_school_class_section_idx" },
+      ]),
       db.collection("marks").createIndexes([
         { key: { schoolId: 1, studentId: 1, examId: 1 }, name: "marks_school_student_exam_idx" },
         { key: { schoolId: 1, subject: 1, exam: 1 }, name: "marks_school_subject_exam_idx" },
@@ -1154,6 +1267,13 @@ async function ensureMongoIndexes() {
         { key: { schoolId: 1, senderId: 1, createdAt: -1 }, name: "voice_school_sender_createdAt_idx" },
         { key: { schoolId: 1, targetRole: 1, createdAt: -1 }, name: "voice_school_targetRole_createdAt_idx" },
       ]),
+      db.collection("timetables").createIndexes([
+        { key: { schoolId: 1 }, name: "timetables_school_idx" },
+        { key: { schoolId: 1, class: 1, section: 1 }, name: "timetables_school_class_section_idx" },
+      ]),
+      db.collection("analytics").createIndexes([
+        { key: { schoolId: 1 }, name: "analytics_school_idx" },
+      ]),
       db.collection("passwordResetRequests").createIndexes([
         { key: { schoolId: 1, status: 1, userType: 1, handlerId: 1 }, name: "resetreq_school_status_type_handler_idx" },
       ]),
@@ -1163,6 +1283,23 @@ async function ensureMongoIndexes() {
         { key: { schoolId: 1, action: 1, timestamp: -1 }, name: "audit_school_action_timestamp_idx" },
       ]),
       db.collection("developerActionLogs").createIndexes(DEVELOPER_ACTION_LOG_INDEXES),
+      db.collection("requestTraces").createIndexes([
+        { key: { createdAt: -1 }, name: "request_traces_createdAt_idx" },
+        { key: { route: 1, createdAt: -1 }, name: "request_traces_route_createdAt_idx" },
+        { key: { schoolId: 1, createdAt: -1 }, name: "request_traces_school_createdAt_idx" },
+      ]),
+      db.collection("activityLogs").createIndexes([
+        { key: { createdAt: -1 }, name: "activity_logs_createdAt_idx" },
+        { key: { schoolId: 1, createdAt: -1 }, name: "activity_logs_school_createdAt_idx" },
+      ]),
+      db.collection("sessionLogs").createIndexes([
+        { key: { schoolId: 1, recordedAt: -1 }, name: "session_logs_school_recordedAt_idx" },
+        { key: { schoolId: 1, userId: 1, recordedAt: -1 }, name: "session_logs_school_user_recordedAt_idx" },
+      ]),
+      db.collection("systemLogs").createIndexes([
+        { key: { timestamp: -1 }, name: "system_logs_timestamp_idx" },
+        { key: { level: 1, timestamp: -1 }, name: "system_logs_level_timestamp_idx" },
+      ]),
     ]);
 
     const usersCollection = db.collection("users");
@@ -1326,6 +1463,20 @@ async function ensureTenantValidators() {
           },
         },
       }),
+      applyValidator("teachers", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["name", "schoolId", "class", "section", "createdAt"],
+          properties: {
+            name: { bsonType: "string", minLength: 1 },
+            schoolId: { bsonType: "objectId" },
+            class: { bsonType: "string", minLength: 1 },
+            section: { bsonType: "string", minLength: 1 },
+            subject: { bsonType: "string" },
+            createdAt: { bsonType: "date" },
+          },
+        },
+      }),
       applyValidator("attendance", {
         $jsonSchema: {
           bsonType: "object",
@@ -1394,6 +1545,15 @@ async function ensureTenantValidators() {
           },
         },
       }),
+      applyValidator("analytics", {
+        $jsonSchema: {
+          bsonType: "object",
+          required: ["schoolId"],
+          properties: {
+            schoolId: { bsonType: "objectId" },
+          },
+        },
+      }),
     ]);
     console.log("MongoDB tenant validators ensured");
   } catch (err) {
@@ -1404,6 +1564,9 @@ async function ensureTenantValidators() {
 async function startServer() {
   try {
     const isProduction = process.env.NODE_ENV === "production";
+    if (isProduction && !process.env.DEVELOPER_ACCESS_CODE) {
+      throw new Error("DEVELOPER_ACCESS_CODE is required in production");
+    }
     if (client && process.env.MONGO_URI) {
       attachMongoReconnectHandlers();
       try {
@@ -1420,8 +1583,8 @@ async function startServer() {
         if (isProduction) {
           throw new Error(`MongoDB connection failed in production: ${mongoError.message}`);
         }
-        console.warn("??  MongoDB connection failed, running in fallback mode:", mongoError.message);
-        console.log("?? Tip: Install MongoDB locally or set MONGO_URI to a MongoDB Atlas connection string");
+        console.warn(" MongoDB connection failed, running in fallback mode:", mongoError.message);
+        console.log("Tip: Install MongoDB locally or set MONGO_URI to a MongoDB Atlas connection string");
         db = new MockDatabase();
         isMongoConnected = false;
         
@@ -1432,8 +1595,8 @@ async function startServer() {
       if (isProduction) {
         throw new Error("MONGO_URI is required in production");
       }
-      console.warn("??  MONGO_URI not set - running in fallback mode with in-memory database");
-      console.log("?? To enable MongoDB: Set MONGO_URI in .env file");
+      console.warn(" MONGO_URI not set - running in fallback mode with in-memory database");
+      console.log("To enable MongoDB: Set MONGO_URI in .env file");
       db = new MockDatabase();
       isMongoConnected = false;
       
@@ -1446,6 +1609,7 @@ async function startServer() {
     // Register API routes (must be before catch-all)
     app.use(
       "/api/dev",
+      requireDeveloperGuard,
       devRoutes({
         db,
         requireAuth,
@@ -1492,8 +1656,8 @@ async function startServer() {
     const PORT = process.env.PORT || 5000;
     
     const server = app.listen(PORT, "0.0.0.0", () => {
-      console.log(`?? Server running on port ${PORT}`);
-      console.log(`?? API URL: http://localhost:${PORT}`);
+      console.log(`Server running on port ${PORT}`);
+      console.log(`API URL: http://localhost:${PORT}`);
       console.log("Server ready for load testing");
       console.log(`? Health Check: GET http://localhost:${PORT}/`);
       if (process.env.CLUSTER_MODE !== "true") {
@@ -1617,15 +1781,16 @@ function requireTenantId(req, res, next) {
     return res.status(400).json({ error: "Invalid schoolId format" });
   }
   req.user.schoolIdObj = schoolObjectId;
+  req.tenantFilter = { schoolId: schoolObjectId };
   console.log("? TENANT CHECK: schoolId valid -", schoolObjectId.toString());
-  next();
+  return applyTenantFilter(req, res, next, schoolObjectId);
 }
 
 // Configure multer to save voice files in /uploads/voice/ directory
 const voiceUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
-      const dir = "uploads/voice";
+      const dir = path.join(uploadsPath, "voice");
       // Create directory if it doesn't exist
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -1653,7 +1818,7 @@ const upload = multer({
 app.get("/", publicRateLimit, (req, res) => {
   res.json({
     status: "OK",
-    message: "School SaaS Backend is running ??",
+    message: "School SaaS Backend is running",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
@@ -1801,6 +1966,281 @@ app.get("/api/debug/uploads", publicRateLimit, (req, res) => {
   }
 });
 
+const normalizeWebAuthnRole = (value = "") => String(value || "").trim().toUpperCase();
+const encodeBase64Url = (value) => Buffer.from(value).toString("base64url");
+const decodeBase64Url = (value = "") => Buffer.from(String(value || ""), "base64url");
+const getWebAuthnRPID = () => String(process.env.WEBAUTHN_RP_ID || "localhost").trim();
+const getWebAuthnOrigin = () => {
+  const raw = String(process.env.WEBAUTHN_ORIGIN || "http://localhost:5174").trim();
+  if (!raw) return ["http://localhost:5174"];
+  return raw.split(",").map((item) => item.trim()).filter(Boolean);
+};
+const getWebAuthnRPName = () => String(process.env.WEBAUTHN_RP_NAME || "School SaaS").trim();
+
+const setWebAuthnChallenge = (key, challenge, type) => {
+  webauthnChallengeStore.set(key, {
+    challenge: String(challenge || ""),
+    type,
+    expiresAt: Date.now() + (5 * 60 * 1000),
+  });
+};
+
+const consumeWebAuthnChallenge = (key, type) => {
+  const current = webauthnChallengeStore.get(key);
+  webauthnChallengeStore.delete(key);
+  if (!current) return null;
+  if (current.type !== type) return null;
+  if (current.expiresAt < Date.now()) return null;
+  return current.challenge;
+};
+
+const buildRoleLoginPayload = async (user) => {
+  if (!user?.schoolId) {
+    return { ok: false, status: 403, error: "Account missing school mapping" };
+  }
+
+  const school = await db.collection("schools").findOne({ _id: user.schoolId });
+  if (!school) return { ok: false, status: 403, error: "School not found for this account" };
+  if (!isSchoolActive(school)) return { ok: false, status: 403, error: "School is disabled. Contact administrator." };
+  const schoolName = school?.name || "School";
+
+  if (user.role === "ADMIN") {
+    const token = jwt.sign(
+      { userId: user._id.toString(), role: "ADMIN", schoolId: user.schoolId.toString() },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+    return { ok: true, body: { token, schoolName } };
+  }
+
+  if (user.role === "TEACHER") {
+    const teacher = await db.collection("teachers").findOne(activeTeacherFilter({ userId: user._id, schoolId: user.schoolId }));
+    if (!teacher) return { ok: false, status: 404, error: "Teacher profile not found" };
+    const token = jwt.sign(
+      {
+        userId: user._id.toString(),
+        teacherId: teacher._id.toString(),
+        role: "TEACHER",
+        class: teacher.class,
+        section: teacher.section,
+        schoolId: teacher.schoolId.toString(),
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+    return {
+      ok: true,
+      body: {
+        token,
+        schoolName,
+        mustChangePassword: Boolean(user?.forcePasswordChange),
+        teacher: {
+          ...teacher,
+          _id: teacher._id.toString(),
+          userId: teacher.userId?.toString?.() || teacher.userId,
+          schoolId: teacher.schoolId?.toString?.() || teacher.schoolId,
+        },
+      },
+    };
+  }
+
+  if (user.role === "STUDENT") {
+    const student = await db.collection("students").findOne(activeStudentFilter({ userId: user._id, schoolId: user.schoolId }));
+    if (!student) return { ok: false, status: 404, error: "Student profile not found" };
+    const token = jwt.sign(
+      {
+        userId: student.userId.toString(),
+        studentId: student._id.toString(),
+        schoolId: student.schoolId.toString(),
+        role: "STUDENT",
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+    return {
+      ok: true,
+      body: {
+        token,
+        schoolName,
+        mustChangePassword: Boolean(user?.forcePasswordChange),
+        student: {
+          ...student,
+          _id: student._id.toString(),
+          schoolId: student.schoolId?.toString?.() || student.schoolId,
+        },
+      },
+    };
+  }
+
+  return { ok: false, status: 403, error: "Fingerprint login not allowed for this role" };
+};
+
+app.post("/api/auth/webauthn/register/options", authLoginRateLimit, async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "").trim();
+    const role = normalizeWebAuthnRole(req.body?.role || "");
+    if (!email || !password || !role) return res.status(400).json({ error: "Email, password and role are required" });
+    if (!["ADMIN", "TEACHER", "STUDENT"].includes(role)) return res.status(400).json({ error: "Unsupported role" });
+
+    const user = await db.collection("users").findOne({ email, role });
+    if (!user) return res.status(404).json({ error: "Account not found" });
+    const passwordOk = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordOk) return res.status(401).json({ error: "Invalid credentials" });
+
+    const excludeCredentials = user?.webauthnCredentialID
+      ? [{ id: decodeBase64Url(user.webauthnCredentialID), type: "public-key", transports: user.webauthnTransports || ["internal"] }]
+      : [];
+
+    const options = await generateRegistrationOptions({
+      rpName: getWebAuthnRPName(),
+      rpID: getWebAuthnRPID(),
+      userID: encodeBase64Url(Buffer.from(user._id.toString())),
+      userName: user.email,
+      userDisplayName: user.name || user.email,
+      timeout: 60000,
+      attestationType: "none",
+      authenticatorSelection: {
+        residentKey: "preferred",
+        userVerification: "preferred",
+      },
+      excludeCredentials,
+    });
+
+    setWebAuthnChallenge(`register:${role}:${user._id.toString()}`, options.challenge, "register");
+    return res.json(options);
+  } catch (err) {
+    console.error("WEBAUTHN REGISTER OPTIONS ERROR:", err);
+    return res.status(500).json({ error: "Failed to generate WebAuthn registration options" });
+  }
+});
+
+app.post("/api/auth/webauthn/register/verify", authLoginRateLimit, async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const role = normalizeWebAuthnRole(req.body?.role || "");
+    const registrationResponse = req.body?.registrationResponse;
+    if (!email || !role || !registrationResponse) return res.status(400).json({ error: "Email, role and registrationResponse are required" });
+
+    const user = await db.collection("users").findOne({ email, role });
+    if (!user) return res.status(404).json({ error: "Account not found" });
+    const expectedChallenge = consumeWebAuthnChallenge(`register:${role}:${user._id.toString()}`, "register");
+    if (!expectedChallenge) return res.status(400).json({ error: "Registration challenge expired. Retry fingerprint setup." });
+
+    const verification = await verifyRegistrationResponse({
+      response: registrationResponse,
+      expectedChallenge,
+      expectedOrigin: getWebAuthnOrigin(),
+      expectedRPID: getWebAuthnRPID(),
+      requireUserVerification: true,
+    });
+
+    if (!verification.verified || !verification.registrationInfo?.credential) {
+      return res.status(400).json({ error: "Fingerprint registration verification failed" });
+    }
+
+    const credential = verification.registrationInfo.credential;
+    await db.collection("users").updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          webauthnCredentialID: encodeBase64Url(credential.id),
+          publicKey: encodeBase64Url(credential.publicKey),
+          counter: Number(credential.counter || 0),
+          webauthnTransports: registrationResponse?.response?.transports || ["internal"],
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    return res.json({ success: true, message: "Fingerprint registered successfully" });
+  } catch (err) {
+    console.error("WEBAUTHN REGISTER VERIFY ERROR:", err);
+    return res.status(500).json({ error: "Failed to verify fingerprint registration" });
+  }
+});
+
+app.post("/api/auth/webauthn/login/options", authLoginRateLimit, async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const role = normalizeWebAuthnRole(req.body?.role || "");
+    if (!email || !role) return res.status(400).json({ error: "Email and role are required" });
+
+    const user = await db.collection("users").findOne({ email, role });
+    if (!user || !user.webauthnCredentialID || !user.publicKey) {
+      return res.status(404).json({ error: "Fingerprint not registered for this account" });
+    }
+
+    const options = await generateAuthenticationOptions({
+      rpID: getWebAuthnRPID(),
+      timeout: 60000,
+      userVerification: "preferred",
+      allowCredentials: [
+        {
+          id: decodeBase64Url(user.webauthnCredentialID),
+          type: "public-key",
+          transports: user.webauthnTransports || ["internal"],
+        },
+      ],
+    });
+
+    setWebAuthnChallenge(`login:${role}:${user._id.toString()}`, options.challenge, "login");
+    return res.json(options);
+  } catch (err) {
+    console.error("WEBAUTHN LOGIN OPTIONS ERROR:", err);
+    return res.status(500).json({ error: "Failed to generate fingerprint login options" });
+  }
+});
+
+app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const role = normalizeWebAuthnRole(req.body?.role || "");
+    const authenticationResponse = req.body?.authenticationResponse;
+    if (!email || !role || !authenticationResponse) {
+      return res.status(400).json({ error: "Email, role and authenticationResponse are required" });
+    }
+
+    const user = await db.collection("users").findOne({ email, role });
+    if (!user || !user.webauthnCredentialID || !user.publicKey) {
+      return res.status(404).json({ error: "Fingerprint not registered for this account" });
+    }
+
+    const expectedChallenge = consumeWebAuthnChallenge(`login:${role}:${user._id.toString()}`, "login");
+    if (!expectedChallenge) return res.status(400).json({ error: "Login challenge expired. Retry fingerprint login." });
+
+    const verification = await verifyAuthenticationResponse({
+      response: authenticationResponse,
+      expectedChallenge,
+      expectedOrigin: getWebAuthnOrigin(),
+      expectedRPID: getWebAuthnRPID(),
+      requireUserVerification: true,
+      credential: {
+        id: user.webauthnCredentialID,
+        publicKey: decodeBase64Url(user.publicKey),
+        counter: Number(user.counter || 0),
+        transports: user.webauthnTransports || ["internal"],
+      },
+    });
+
+    if (!verification.verified) {
+      return res.status(401).json({ error: "Fingerprint verification failed" });
+    }
+
+    await db.collection("users").updateOne(
+      { _id: user._id },
+      { $set: { counter: Number(verification.authenticationInfo?.newCounter || user.counter || 0), updatedAt: new Date() } }
+    );
+
+    const payload = await buildRoleLoginPayload(user);
+    if (!payload.ok) return res.status(payload.status).json({ error: payload.error });
+    return res.json({ ...payload.body, loginMethod: "fingerprint" });
+  } catch (err) {
+    console.error("WEBAUTHN LOGIN VERIFY ERROR:", err);
+    return res.status(500).json({ error: "Failed to verify fingerprint login" });
+  }
+});
+
 /* ================================
    ADMIN LOGIN
    ================================= */
@@ -1811,13 +2251,13 @@ app.post("/api/auth/login", loginLimiter, loginValidator, validateRequest, async
     const usersCol = db.collection("users");
     const user = await usersCol.findOne({ email, role: "ADMIN" });
     if (!user) {
-      console.warn("?? ADMIN LOGIN FAILED: User not found");
+      console.warn("ADMIN LOGIN FAILED: User not found");
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) {
-      console.warn("?? ADMIN LOGIN FAILED: Wrong password for", email);
+      console.warn("ADMIN LOGIN FAILED: Wrong password for", email);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -1863,7 +2303,7 @@ app.post("/api/auth/student/login", loginLimiter, loginValidator, validateReques
     const studentPassword = body.password || "";
     
     if (!studentEmail || !studentPassword) {
-      console.warn("?? Missing email or password");
+      console.warn("Missing email or password");
       return res.status(400).json({ error: "Email and password required" });
     }
     
@@ -1875,14 +2315,14 @@ app.post("/api/auth/student/login", loginLimiter, loginValidator, validateReques
     });
 
     if (!user) {
-      console.warn(`?? STUDENT LOGIN FAILED: User not found for email: ${normalizedEmail}`);
+      console.warn(`STUDENT LOGIN FAILED: User not found for email: ${normalizedEmail}`);
       return res.status(401).json({ error: "Student not found" });
     }
 
     const match = await bcrypt.compare(studentPassword, user.passwordHash);
     
     if (!match) {
-      console.warn(`?? STUDENT LOGIN FAILED: Wrong password for email: ${normalizedEmail}`);
+      console.warn(`STUDENT LOGIN FAILED: Wrong password for email: ${normalizedEmail}`);
       return res.status(401).json({ error: "Wrong password" });
     }
 
@@ -1896,7 +2336,7 @@ app.post("/api/auth/student/login", loginLimiter, loginValidator, validateReques
     }));
 
     if (!student) {
-      console.warn(`?? STUDENT LOGIN FAILED: Student profile not found for email: ${normalizedEmail}`);
+      console.warn(`STUDENT LOGIN FAILED: Student profile not found for email: ${normalizedEmail}`);
       return res.status(404).json({ error: "Student profile not found" });
     }
 
@@ -2067,15 +2507,32 @@ app.get("/api/schools/:schoolId", requireAuth, requireTenantId, async (req, res)
 });
 
 /* ================================
-   ?? SECURE DEVELOPER LOGIN - ACCESS CODE BASED
+   SECURE DEVELOPER LOGIN - ACCESS CODE BASED
    ================================= */
 app.post("/api/dev/login", authLoginRateLimit, async (req, res) => {
   try {
-    const { email, accessCode } = req.body;
+    const emailInput = String(req.body?.email || "");
+    const passwordInput = String(req.body?.password || "");
+    const accessCodeInput = String(req.body?.accessCode || "");
+    const email = emailInput.trim().toLowerCase();
+    const password = passwordInput.trim();
+    const accessCode = accessCodeInput.trim();
 
-    // Validate inputs
-    if (!email || !accessCode) {
-      return res.status(400).json({ error: "Email and access code required" });
+    if (!email || !password || !accessCode) {
+      return res.status(400).json({
+        error: "Email, password and access code required",
+        success: false,
+        message: "Email, password and access code required",
+      });
+    }
+
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: "Invalid email format",
+        success: false,
+        message: "Invalid email format",
+      });
     }
 
     if (!process.env.JWT_SECRET) {
@@ -2083,54 +2540,102 @@ app.post("/api/dev/login", authLoginRateLimit, async (req, res) => {
       return res.status(500).json({ error: "Server configuration error" });
     }
 
-    // Get access code from environment
-    const correctAccessCode = process.env.DEV_ACCESS_CODE || "supersecretdevkey";
-
-    // Verify access code (case-sensitive for security)
-    if (accessCode !== correctAccessCode) {
-      console.warn("?? DEV LOGIN FAILED: Invalid access code for", email);
-      return res.status(401).json({ error: "Invalid access code. Access denied." });
+    if (!process.env.DEVELOPER_ACCESS_CODE && process.env.DEV_ACCESS_CODE) {
+      console.warn("⚠ DEV_ACCESS_CODE is deprecated. Use DEVELOPER_ACCESS_CODE instead.");
     }
 
-    // Optional: Validate email format (basic validation)
-    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-    if (!emailRegex.test(email.trim())) {
-      return res.status(400).json({ error: "Invalid email format" });
+    const developerAccessCode = process.env.DEVELOPER_ACCESS_CODE || process.env.DEV_ACCESS_CODE;
+
+    if (!developerAccessCode) {
+      console.error("? DEVELOPER_ACCESS_CODE not configured");
+      return res.status(500).json({ error: "Developer access code not configured" });
     }
 
-    // ? DEVELOPER ROLE: Issue JWT token
+    if (accessCode !== developerAccessCode) {
+      console.warn("DEV LOGIN FAILED: Invalid access code for", email);
+      return res.status(403).json({
+        error: "Invalid developer access code",
+        success: false,
+        message: "Invalid developer access code",
+      });
+    }
+
+    if (!db) {
+      console.error("? DEV LOGIN FAILED: Database is not initialized yet");
+      return res.status(503).json({ error: "Developer infrastructure unavailable" });
+    }
+
+    const developerUser = await db.collection("users").findOne({
+      email,
+      isDeleted: { $ne: true },
+    });
+
+    if (!developerUser) {
+      console.warn("DEV LOGIN FAILED: Developer account not found for", email);
+      return res.status(403).json({
+        error: "Developer account not found. Please run the developer seed script or contact the platform administrator.",
+        success: false,
+        message: "Developer account not found. Please run the developer seed script or contact the platform administrator.",
+      });
+    }
+
+    if (String(developerUser.role || "").toUpperCase() !== "DEVELOPER") {
+      console.warn("DEV LOGIN BLOCKED: Role mismatch for", email, developerUser.role);
+      return res.status(403).json({
+        error: "Developer access required",
+        success: false,
+        message: "Developer access required",
+      });
+    }
+
+    const passwordHash = String(developerUser.passwordHash || "");
+    const passwordMatch = await bcrypt.compare(password, passwordHash);
+    if (!passwordMatch) {
+      console.warn("DEV LOGIN FAILED: Invalid password for", email);
+      return res.status(401).json({
+        error: "Invalid credentials",
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    const developerId =
+      developerUser._id?.toString?.() ||
+      (developerUser.userId ? String(developerUser.userId) : null) ||
+      null;
+
     const token = jwt.sign(
-      { 
-        developerEmail: email.toLowerCase().trim(),
+      {
+        userId: developerId,
+        developerEmail: email,
         role: "DEVELOPER",
         schoolId: null,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "1h" }
     );
 
-    // Log successful developer login
     console.log("? DEVELOPER LOGIN - Developer:", email, "at", new Date().toISOString());
 
-    // Create system log entry
     try {
       await db.collection("systemLogs").insertOne({
         timestamp: new Date(),
         level: "INFO",
         category: "DEV_LOGIN",
         message: `Developer accessed: ${email}`,
-        icon: "??",
+        icon: "shield",
         developer: email,
       });
     } catch (logErr) {
-      console.error("?? Failed to log dev login:", logErr);
+      console.error("Failed to log dev login:", logErr);
     }
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
       token,
-      message: "Developer access granted"
+      developerEmail: email,
+      message: "Developer access granted",
     });
   } catch (err) {
     console.error("? DEVELOPER LOGIN ERROR:", err.message || err);
@@ -2139,7 +2644,7 @@ app.post("/api/dev/login", authLoginRateLimit, async (req, res) => {
 });
 
 /* ================================
-   ?? LEGACY DEVELOPER LOGIN (Support old endpoint)
+   LEGACY DEVELOPER LOGIN (Support old endpoint)
    ================================= */
 app.post("/api/auth/developer/login", authLoginRateLimit, developerLoginValidator, validateRequest, async (req, res) => {
   try {
@@ -2160,13 +2665,13 @@ app.post("/api/auth/developer/login", authLoginRateLimit, developerLoginValidato
     });
 
     if (!user) {
-      console.warn("?? DEVELOPER LOGIN FAILED: User not found for", email);
+      console.warn("DEVELOPER LOGIN FAILED: User not found for", email);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) {
-      console.warn("?? DEVELOPER LOGIN FAILED: Wrong password for", email);
+      console.warn("DEVELOPER LOGIN FAILED: Wrong password for", email);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -2308,9 +2813,11 @@ app.post("/api/auth/teacher/forgot-password", forgotPasswordRateLimit, teacherFo
       if (teacherId) {
         teacher = await db.collection("teachers").findOne(activeTeacherFilter({ _id: teacherId }));
         if (teacher?.userId) {
+          const teacherSchoolId = safeObjectId(teacher.schoolId);
           user = await db.collection("users").findOne({
             _id: safeObjectId(teacher.userId),
             role: "TEACHER",
+            ...(teacherSchoolId ? { schoolId: teacherSchoolId } : {}),
             isDeleted: { $ne: true },
           });
         }
@@ -2325,9 +2832,11 @@ app.post("/api/auth/teacher/forgot-password", forgotPasswordRateLimit, teacherFo
           })
         );
         if (teacher?.userId) {
+          const teacherSchoolId = safeObjectId(teacher.schoolId);
           user = await db.collection("users").findOne({
             _id: safeObjectId(teacher.userId),
             role: "TEACHER",
+            ...(teacherSchoolId ? { schoolId: teacherSchoolId } : {}),
             isDeleted: { $ne: true },
           });
         }
@@ -2644,7 +3153,17 @@ const handleChangePassword = async (req, res) => {
     const userId = safeObjectId(req.user?.userId);
     if (!userId) return res.status(400).json({ error: "Invalid user id" });
 
-    const user = await db.collection("users").findOne({ _id: userId, isDeleted: { $ne: true } });
+    const tokenSchoolIdObj = req.user?.schoolId ? safeObjectId(req.user.schoolId) : null;
+    if (req.user?.role !== "DEVELOPER" && !tokenSchoolIdObj) {
+      return res.status(400).json({ error: "Tenant context missing" });
+    }
+
+    const userFilter = {
+      _id: userId,
+      isDeleted: { $ne: true },
+      ...(req.user?.role === "DEVELOPER" ? {} : { schoolId: tokenSchoolIdObj }),
+    };
+    const user = await db.collection("users").findOne(userFilter);
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const ok = await bcrypt.compare(String(currentPassword), String(user.passwordHash || ""));
@@ -2657,7 +3176,7 @@ const handleChangePassword = async (req, res) => {
 
     const passwordHash = await bcrypt.hash(String(newPassword), 10);
     await db.collection("users").updateOne(
-      { _id: userId },
+      userFilter,
       {
         $set: {
           passwordHash,
@@ -2756,7 +3275,7 @@ app.get("/api/student/dashboard", requireAuth, requireRole("STUDENT"), requireTe
     let mustChangePassword = false;
     // include email + password-change flag from users collection
     try {
-      const user = await db.collection("users").findOne({ _id: student.userId });
+      const user = await db.collection("users").findOne({ _id: student.userId, schoolId: schoolObjectId });
       if (user && user.email) student.email = user.email;
       mustChangePassword = Boolean(user?.forcePasswordChange);
     } catch (e) {
@@ -2778,37 +3297,40 @@ app.get("/api/student/dashboard-summary", requireAuth, requireRole("STUDENT"), r
     const schoolObjectId = req.user.schoolIdObj;
     if (!userObjectId) return res.status(400).json({ error: "Invalid userId in token" });
     const cacheKey = buildCacheKey("student-dashboard-summary", schoolObjectId, { userId: String(userObjectId) });
-    const cached = getCache(cacheKey);
-    if (cached) return res.json(cached);
+    const response = await getOrSetCache(
+      cacheKey,
+      async () => {
+        const student = await db.collection("students").findOne(activeStudentFilter({
+          userId: userObjectId,
+          schoolId: schoolObjectId,
+        }));
+        if (!student) return null;
 
-    const student = await db.collection("students").findOne(activeStudentFilter({
-      userId: userObjectId,
-      schoolId: schoolObjectId,
-    }));
-    if (!student) return res.status(404).json({ error: "Student profile not found" });
+        const [attendanceCount, marksCount, unreadNotifications] = await Promise.all([
+          db.collection("attendance").countDocuments({ schoolId: schoolObjectId, studentId: student._id, submissionStatus: "SUBMITTED" }),
+          db.collection("marks").countDocuments({ schoolId: schoolObjectId, studentId: student._id }),
+          db.collection("notifications").countDocuments({
+            $and: [
+              { $or: [{ targetRole: "STUDENT" }, { targetRole: null }, { role: "STUDENT" }] },
+              { $or: [{ targetUser: userObjectId }, { targetUser: null }, { userId: userObjectId }] },
+              { isRead: false },
+              { $or: [{ schoolId: schoolObjectId }, { schoolId: null }] },
+              { isDeleted: { $ne: true } },
+            ],
+          }),
+        ]);
 
-    const [attendanceCount, marksCount, unreadNotifications] = await Promise.all([
-      db.collection("attendance").countDocuments({ schoolId: schoolObjectId, studentId: student._id, submissionStatus: "SUBMITTED" }),
-      db.collection("marks").countDocuments({ schoolId: schoolObjectId, studentId: student._id }),
-      db.collection("notifications").countDocuments({
-        $and: [
-          { $or: [{ targetRole: "STUDENT" }, { targetRole: null }, { role: "STUDENT" }] },
-          { $or: [{ targetUser: userObjectId }, { targetUser: null }, { userId: userObjectId }] },
-          { isRead: false },
-          { $or: [{ schoolId: schoolObjectId }, { schoolId: null }] },
-          { isDeleted: { $ne: true } },
-        ],
-      }),
-    ]);
-
-    const response = {
-      className: student.class || "",
-      section: student.section || "",
-      attendanceCount,
-      marksCount,
-      unreadNotifications,
-    };
-    setCache(cacheKey, response);
+        return {
+          className: student.class || "",
+          section: student.section || "",
+          attendanceCount,
+          marksCount,
+          unreadNotifications,
+        };
+      },
+      20 * 1000
+    );
+    if (!response) return res.status(404).json({ error: "Student profile not found" });
     return res.json(response);
   } catch (err) {
     console.error("? STUDENT DASHBOARD SUMMARY ERROR:", err);
@@ -2887,6 +3409,15 @@ app.get("/api/student/marks", requireAuth, requireRole("STUDENT"), requireTenant
     if (!userObjectId) {
       return res.status(400).json({ error: "Invalid userId in token" });
     }
+    const marksCacheKey = buildCacheKey("student-marks", schoolObjectId, {
+      userId: String(userObjectId),
+      format,
+      page,
+      limit,
+      usePagination,
+    });
+    const cachedMarks = getCache(marksCacheKey);
+    if (cachedMarks) return res.json(cachedMarks);
 
     // ? TENANT SCOPED: Find student
     const student = await db.collection("students").findOne(activeStudentFilter({
@@ -2907,6 +3438,7 @@ app.get("/api/student/marks", requireAuth, requireRole("STUDENT"), requireTenant
         section: studentSection,
         isDeleted: { $ne: true },
       })
+      .project({ _id: 1, name: 1, date: 1, class: 1, section: 1, subjects: 1, createdAt: 1 })
       .sort({ createdAt: -1 })
       .toArray();
     const activeExamIdSet = new Set(activeExamDocs.map((e) => String(e._id)));
@@ -2943,13 +3475,16 @@ app.get("/api/student/marks", requireAuth, requireRole("STUDENT"), requireTenant
         .filter(Boolean);
       if (usePagination) {
         const totalCount = await db.collection("marks").countDocuments(baseQuery);
-        return res.json({
+        const pagedResponse = {
           data: sanitizedMarks,
           page,
           totalPages: Math.max(1, Math.ceil(totalCount / limit)),
           totalCount,
-        });
+        };
+        setCache(marksCacheKey, pagedResponse, 15 * 1000);
+        return res.json(pagedResponse);
       }
+      setCache(marksCacheKey, sanitizedMarks, 15 * 1000);
       return res.json(sanitizedMarks);
     }
 
@@ -2966,6 +3501,7 @@ app.get("/api/student/marks", requireAuth, requireRole("STUDENT"), requireTenant
             examId: { $in: examIds },
             scores: { $exists: true },
           })
+          .project({ examId: 1, scores: 1 })
           .toArray()
       : [];
     const marksByExamId = new Map(marksV2.map((m) => [String(m.examId), m]));
@@ -3031,10 +3567,14 @@ app.get("/api/student/marks", requireAuth, requireRole("STUDENT"), requireTenant
           return mark;
         })
         .filter(Boolean);
-      return res.json({ exams: [], legacyMarks });
+      const legacyResponse = { exams: [], legacyMarks };
+      setCache(marksCacheKey, legacyResponse, 15 * 1000);
+      return res.json(legacyResponse);
     }
 
-    return res.json({ exams, legacyMarks: [] });
+    const v2Response = { exams, legacyMarks: [] };
+    setCache(marksCacheKey, v2Response, 15 * 1000);
+    return res.json(v2Response);
   } catch (err) {
     console.error("? STUDENT MARKS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch marks" });
@@ -3069,11 +3609,25 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
 
     const studentId = student._id;
 
-    // ? Fetch student's marks
-    const marks = await db.collection("marks").find({
-      studentId: studentId,
-      schoolId,
-    }).sort({ createdAt: -1 }).toArray();
+    // ? Fetch student's marks (supports both legacy score docs and v2 scores[] docs)
+    const marks = await db.collection("marks")
+      .find({
+        studentId: studentId,
+        schoolId,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+    const examIds = marks
+      .map((row) => safeObjectId(row?.examId))
+      .filter(Boolean);
+    const examDocs = examIds.length
+      ? await db.collection("exams")
+          .find({ _id: { $in: examIds }, schoolId })
+          .project({ _id: 1, name: 1, subjects: 1 })
+          .toArray()
+      : [];
+    const examById = new Map(examDocs.map((examDoc) => [String(examDoc._id), examDoc]));
+    const markEntries = buildMarksAnalyticsEntries({ marksDocs: marks, examById });
 
     // ? Fetch student's attendance
     const attendance = await db.collection("attendance").find({
@@ -3091,13 +3645,9 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
 
     // 2. Subject-wise marks analysis
     const subjectMarksMap = {};
-    marks.forEach(m => {
-      if (!subjectMarksMap[m.subject]) {
-        subjectMarksMap[m.subject] = [];
-      }
-      if (m.score !== "ABSENT") {
-        subjectMarksMap[m.subject].push(Number(m.score));
-      }
+    markEntries.forEach((entry) => {
+      if (!subjectMarksMap[entry.subject]) subjectMarksMap[entry.subject] = [];
+      subjectMarksMap[entry.subject].push(entry.percent);
     });
 
     const subjectAnalysis = Object.entries(subjectMarksMap).map(([subject, scores]) => ({
@@ -3109,7 +3659,7 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
     }));
 
     // 3. Overall average marks
-    const allMarksScores = marks.filter(m => m.score !== "ABSENT").map(m => Number(m.score));
+    const allMarksScores = markEntries.map((entry) => Number(entry.percent));
     const overallAverage = allMarksScores.length > 0 ? Math.round(allMarksScores.reduce((a, b) => a + b, 0) / allMarksScores.length) : 0;
 
     // 4. Identify strongest and weakest subjects
@@ -3126,13 +3676,9 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
 
     // 6. Marks trends - group by exam
     const examMarksMap = {};
-    marks.forEach(m => {
-      if (!examMarksMap[m.exam]) {
-        examMarksMap[m.exam] = [];
-      }
-      if (m.score !== "ABSENT") {
-        examMarksMap[m.exam].push(Number(m.score));
-      }
+    markEntries.forEach((entry) => {
+      if (!examMarksMap[entry.examLabel]) examMarksMap[entry.examLabel] = [];
+      examMarksMap[entry.examLabel].push(entry.percent);
     });
 
     const examTrends = Object.entries(examMarksMap).map(([exam, scores]) => ({
@@ -3150,29 +3696,29 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
     const suggestions = [];
     
     if (attendancePercentage < 70) {
-      suggestions.push(`?? Your attendance is only ${attendancePercentage}%. Try to attend more classes regularly.`);
+      suggestions.push(`Your attendance is only ${attendancePercentage}%. Try to attend more classes regularly.`);
     } else if (attendancePercentage >= 90) {
-      suggestions.push(`? Excellent attendance of ${attendancePercentage}%. Keep it up!`);
+      suggestions.push(`Excellent attendance of ${attendancePercentage}%. Keep it up!`);
     }
 
     if (overallAverage >= 80) {
-      suggestions.push(`?? Great overall performance with an average of ${overallAverage}%. You're doing excellent!`);
+      suggestions.push(`Great overall performance with an average of ${overallAverage}%. You're doing excellent!`);
     } else if (overallAverage >= 60) {
-      suggestions.push(`?? Your average is ${overallAverage}/100. Focus on weak subjects for better performance.`);
+      suggestions.push(`Your average is ${overallAverage}/100. Focus on weak subjects for better performance.`);
     } else if (overallAverage > 0) {
-      suggestions.push(`?? Your overall marks are ${overallAverage}/100. Keep working hard and seek help when needed.`);
+      suggestions.push(`Your overall marks are ${overallAverage}/100. Keep working hard and seek help when needed.`);
     }
 
     if (weakestSubject) {
       if (weakestSubject.average < 40) {
-        suggestions.push(`?? You're struggling in ${weakestSubject.subject} (avg: ${weakestSubject.average}/100). Consider extra practice or guidance.`);
+        suggestions.push(`You're struggling in ${weakestSubject.subject} (avg: ${weakestSubject.average}/100). Consider extra practice or guidance.`);
       } else if (weakestSubject.average < 60) {
-        suggestions.push(`?? ${weakestSubject.subject} needs more attention (avg: ${weakestSubject.average}/100). More practice recommended.`);
+        suggestions.push(`${weakestSubject.subject} needs more attention (avg: ${weakestSubject.average}/100). More practice recommended.`);
       }
     }
 
     if (bestSubject && bestSubject.average >= 80) {
-      suggestions.push(`? Your strength is ${bestSubject.subject} (avg: ${bestSubject.average}/100). Great job!`);
+      suggestions.push(`Your strength is ${bestSubject.subject} (avg: ${bestSubject.average}/100). Great job!`);
     }
 
     // 9. Prepare response data
@@ -3196,7 +3742,7 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
       },
       marks: {
         overallAverage,
-        totalExams: marks.length,
+        totalExams: new Set(markEntries.map((entry) => entry.examLabel)).size,
         subjects: subjectAnalysis,
         bestSubject,
         weakestSubject,
@@ -3210,7 +3756,11 @@ app.get("/api/student/analytics", requireAuth, requireRole("STUDENT"), requireTe
       }
     };
 
-    res.json(responseData);
+    res.json({
+      success: true,
+      analytics: responseData,
+      ...responseData,
+    });
   } catch (err) {
     console.error("? STUDENT ANALYTICS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch student analytics" });
@@ -3261,7 +3811,9 @@ app.get(
       }
 
       const match = {
-        ...classFilter,
+        schoolId,
+        class: String(className),
+        ...(section ? { section: String(section) } : {}),
         submissionStatus: "SUBMITTED",
         $or: [
           { studentId: { $in: validAttendanceKeys } },
@@ -3769,7 +4321,7 @@ app.get("/api/teacher/attendance", requireAuth, requireRole("TEACHER"), requireT
 
     const schoolId = req.user.schoolIdObj;
 
-    console.log("?? [GET] Fetching attendance for DATE ONLY:", date, "class:", className, "section:", section);
+    console.log("[GET] Fetching attendance for DATE ONLY:", date, "class:", className, "section:", section);
 
     const normalizedClassName = String(className || "").trim();
     const normalizedSection = String(section || "").trim();
@@ -3789,7 +4341,7 @@ app.get("/api/teacher/attendance", requireAuth, requireRole("TEACHER"), requireT
     };
 
     const records = await db.collection("attendance").find(query).toArray();
-    console.log("?? [GET] Found", records.length, "records for date:", date);
+    console.log("[GET] Found", records.length, "records for date:", date);
 
     // ? Get total class size
     const totalStudents = await db.collection("students").countDocuments({
@@ -3802,68 +4354,79 @@ app.get("/api/teacher/attendance", requireAuth, requireRole("TEACHER"), requireT
       isDeleted: { $ne: true },
     });
 
-    console.log("?? [GET] Total students in class:", totalStudents);
+    console.log("[GET] Total students in class:", totalStudents);
 
     // ? Count by status from THIS DATE ONLY
     const presentCount = records.filter((r) => String(r.status || "").toUpperCase() === "PRESENT").length;
     const absentCount = records.filter((r) => String(r.status || "").toUpperCase() === "ABSENT").length;
     const leaveCount = records.filter((r) => String(r.status || "").toUpperCase() === "LEAVE").length;
 
-    console.log("?? [GET] Date:", date, "| Present:", presentCount, "Absent:", absentCount, "Leave:", leaveCount, "Total students:", totalStudents);
+    console.log("[GET] Date:", date, "| Present:", presentCount, "Absent:", absentCount, "Leave:", leaveCount, "Total students:", totalStudents);
 
     // ? Get ALL students in the class
     const allClassStudents = await db
       .collection("students")
       .find({
         section: normalizedSection,
-        $or: [
-          { class: { $in: classMatchValues } },
-          { className: { $in: classMatchValues } },
-        ],
+        $or: [{ class: { $in: classMatchValues } }, { className: { $in: classMatchValues } }],
         ...(schoolId ? { schoolId } : {}),
         isDeleted: { $ne: true },
       })
+      .project({ _id: 1, rollNo: 1 })
       .sort({ rollNo: 1 })
       .toArray();
 
-    // ? For EACH student in the class, calculate their overall attendance percentage (lifetime)
-    // This ensures all students show their percentage, even if they don't have a record for this date
-    const enhancedRecords = [];
-    for (const student of allClassStudents) {
-      const studentId = safeObjectId(student._id);  // ? Convert to ObjectId to match database storage
-      
-      // Get ALL attendance records for this student (across all dates)
-      const allStudentRecords = await db.collection("attendance").find({
-        studentId: studentId,  // ? Query with ObjectId, not string
-        ...(schoolId ? { schoolId } : {}),
-      }).toArray();
-      
-      const studentPresentCount = allStudentRecords.filter(r => r.status === "PRESENT").length;
-      const studentTotalRecords = allStudentRecords.length;
-      const overallPercentage = studentTotalRecords > 0 ? Math.round((studentPresentCount / studentTotalRecords) * 100) : 0;
-      
-      // Find if this student has a record for THIS specific date
-      const dateRecord = records.find(r => String(r.studentId) === String(studentId));
-      
+    const allStudentIds = allClassStudents
+      .map((student) => safeObjectId(student._id))
+      .filter(Boolean);
+    const lifetimeStatsRows = allStudentIds.length
+      ? await db
+          .collection("attendance")
+          .aggregate([
+            { $match: { studentId: { $in: allStudentIds }, ...(schoolId ? { schoolId } : {}) } },
+            {
+              $group: {
+                _id: "$studentId",
+                total: { $sum: 1 },
+                present: {
+                  $sum: {
+                    $cond: [
+                      { $eq: [{ $toUpper: { $ifNull: ["$status", ""] } }, "PRESENT"] },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
+          ])
+          .toArray()
+      : [];
+
+    const lifetimeStatsByStudentId = new Map(
+      lifetimeStatsRows.map((row) => [String(row._id), { total: Number(row.total || 0), present: Number(row.present || 0) }])
+    );
+    const dateRecordByStudentId = new Map(records.map((row) => [String(row.studentId), row]));
+
+    // ? Build response without per-student round trips (prevents N+1 queries)
+    const enhancedRecords = allClassStudents.map((student) => {
+      const studentId = safeObjectId(student._id);
+      const stats = lifetimeStatsByStudentId.get(String(studentId)) || { total: 0, present: 0 };
+      const overallPercentage = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
+      const dateRecord = dateRecordByStudentId.get(String(studentId));
+
       if (dateRecord) {
-        console.log("?? [GET] Student", String(studentId).slice(0, 8) + "... is", dateRecord.status, "on", date, " | Lifetime:", overallPercentage + "%", `(${studentPresentCount}/${studentTotalRecords})`);
-        enhancedRecords.push({
-          ...dateRecord,
-          overallPercentage,  // ? Each student's lifetime percentage
-        });
-      } else {
-        // Student has no record for this date - add with default PRESENT and their overall percentage
-        console.log("?? [GET] Student", String(studentId).slice(0, 8) + "... has NO record on", date, " | Lifetime:", overallPercentage + "%", `(${studentPresentCount}/${studentTotalRecords})`);
-        enhancedRecords.push({
-          studentId: studentId,
-          date: String(date),
-          status: null,  // No status yet
-          class: normalizedClassName,
-          section: normalizedSection,
-          overallPercentage,  // ? Each student's lifetime percentage
-        });
+        return { ...dateRecord, overallPercentage };
       }
-    }
+      return {
+        studentId,
+        date: String(date),
+        status: null,
+        class: normalizedClassName,
+        section: normalizedSection,
+        overallPercentage,
+      };
+    });
 
     // ? Check finalization status for this date
     let isFinalized = false;
@@ -3872,7 +4435,7 @@ app.get("/api/teacher/attendance", requireAuth, requireRole("TEACHER"), requireT
       isFinalized = finalizedStates.includes(true);
     }
 
-    console.log("?? [GET] isFinalized:", isFinalized);
+    console.log("[GET] isFinalized:", isFinalized);
 
     return res.json({
       date: String(date),
@@ -3914,9 +4477,9 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
     }
 
     console.log("? ATTENDANCE SAVE - schoolId:", schoolId, "class:", className, "section:", section, "date:", date);
-    console.log("?? [SAVE] Processing", records.length, "student records");
+    console.log("[SAVE] Processing", records.length, "student records");
 
-    // ?? CRITICAL: Check if ANY record for this date is already finalized
+    // CRITICAL: Check if ANY record for this date is already finalized
     const existingFinalized = await db.collection("attendance").findOne({
       schoolId,
       date: String(date),
@@ -3935,7 +4498,7 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
     for (const r of records) {
       const studentId = safeObjectId(r.studentUserId || r.studentId);
       if (!studentId) {
-        console.warn("?? [SAVE] Skipping record - invalid studentId:", r.studentUserId, r.studentId);
+        console.warn("[SAVE] Skipping record - invalid studentId:", r.studentUserId, r.studentId);
         continue;
       }
 
@@ -3963,7 +4526,7 @@ app.post("/api/teacher/attendance/save", requireAuth, requireRole("TEACHER"), re
         $setOnInsert: { createdAt: new Date() },
       };
 
-      console.log("?? [SAVE] Upserting record for student:", studentId.toString().slice(0, 8) + "...", "status:", r.status);
+      console.log("[SAVE] Upserting record for student:", studentId.toString().slice(0, 8) + "...", "status:", r.status);
 
       const result = await db.collection("attendance").updateOne(filter, update, { upsert: true });
       console.log("   Result - matched:", result.matchedCount, "upserted:", result.upsertedCount);
@@ -4031,7 +4594,7 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
 
     console.log("? ATTENDANCE SUBMIT - schoolId:", schoolId, "class:", className, "section:", section, "date:", date);
 
-    // ?? Check if already finalized
+    // Check if already finalized
     const alreadyFinalized = await db.collection("attendance").findOne({
       schoolId,
       date: String(date),
@@ -4041,7 +4604,7 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
     });
 
     if (alreadyFinalized) {
-      console.warn("?? [SUBMIT] Already finalized for:", date);
+      console.warn("[SUBMIT] Already finalized for:", date);
       return res.status(403).json({
         error: "This attendance is already finalized and cannot be modified",
       });
@@ -4073,7 +4636,7 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
     console.log("? [SUBMIT] UpdateMany result - matched:", result.matchedCount, "modified:", result.modifiedCount);
 
     if (result.matchedCount === 0) {
-      console.warn("?? [SUBMIT] No DRAFT records found. Checking what exists...");
+      console.warn("[SUBMIT] No DRAFT records found. Checking what exists...");
       const allRecords = await db.collection("attendance").find({
         schoolId,
         date: String(date),
@@ -4147,11 +4710,22 @@ app.post("/api/teacher/attendance/submit", requireAuth, requireRole("TEACHER"), 
    ================================= */
 app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTenantId, async (req, res) => {
   try {
-    console.log("? TEACHER TOKEN USER:", req.user);
+    const usePagination = Boolean(req.query.page || req.query.limit);
+    const { page, limit, skip } = getPagination(req.query, { limit: 25 });
 
     const className = String(req.user.class);
     const section = String(req.user.section);
     const schoolId = req.user.schoolIdObj; // From requireTenantId middleware
+    const cacheKey = buildCacheKey("teacher-students", schoolId, {
+      teacherUserId: String(req.user.userId || ""),
+      className,
+      section,
+      usePagination,
+      page,
+      limit,
+    });
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
 
     // ? TENANT & CLASS/SECTION SCOPED: Only students from same school, class, section
     const query = {
@@ -4160,8 +4734,6 @@ app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTen
       schoolId: schoolId,
       isDeleted: { $ne: true },
     };
-
-    console.log("? STUDENT QUERY - schoolId:", schoolId, "class:", className, "section:", section);
 
     const studentsCursor = db
       .collection("students")
@@ -4183,29 +4755,34 @@ app.get("/api/teacher/students", requireAuth, requireRole("TEACHER"), requireTen
     const students = await (usePagination ? studentsCursor.skip(skip).limit(limit) : studentsCursor).toArray();
     const totalCount = usePagination ? await db.collection("students").countDocuments(query) : students.length;
 
-    // ? Fetch emails from users collection
-    const studentsWithEmails = await Promise.all(
-      students.map(async (student) => {
-        const user = await db.collection("users").findOne({ _id: student.userId });
-        const studentData = {
-          ...student,
-          email: user?.email || "",
-        };
-        console.log("?? STUDENT WITH EMAIL:", { name: student.name, email: studentData.email });
-        return studentData;
-      })
-    );
+    // ? Fetch emails in one batched query to avoid per-student DB round trips
+    const userIds = students.map((student) => safeObjectId(student.userId)).filter(Boolean);
+    const users = userIds.length
+      ? await db
+          .collection("users")
+          .find({ _id: { $in: userIds }, schoolId })
+          .project({ _id: 1, email: 1 })
+          .toArray()
+      : [];
+    const emailByUserId = new Map(users.map((user) => [String(user._id), user.email || ""]));
+    const studentsWithEmails = students.map((student) => {
+      return {
+        ...student,
+        email: emailByUserId.get(String(student.userId)) || "",
+      };
+    });
 
-    console.log("? FOUND STUDENTS:", studentsWithEmails.length);
-    console.log("?? SAMPLE STUDENT:", studentsWithEmails[0]);
     if (usePagination) {
-      return res.json({
+      const response = {
         data: studentsWithEmails,
         page,
         totalPages: Math.max(1, Math.ceil(totalCount / limit)),
         totalCount,
-      });
+      };
+      setCache(cacheKey, response, 15 * 1000);
+      return res.json(response);
     }
+    setCache(cacheKey, studentsWithEmails, 15 * 1000);
     res.json(studentsWithEmails);
   } catch (err) {
     console.error("? TEACHER STUDENTS ERROR:", err);
@@ -4801,11 +5378,25 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
       return res.status(404).json({ error: "Student not found" });
     }
 
-    // ? Fetch student's marks
-    const marks = await db.collection("marks").find({
-      studentId: studentIdObj,
-      schoolId,
-    }).sort({ createdAt: -1 }).toArray();
+    // ? Fetch student's marks (supports both legacy score docs and v2 scores[] docs)
+    const marks = await db.collection("marks")
+      .find({
+        studentId: studentIdObj,
+        schoolId,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+    const examIds = marks
+      .map((row) => safeObjectId(row?.examId))
+      .filter(Boolean);
+    const examDocs = examIds.length
+      ? await db.collection("exams")
+          .find({ _id: { $in: examIds }, schoolId })
+          .project({ _id: 1, name: 1, subjects: 1 })
+          .toArray()
+      : [];
+    const examById = new Map(examDocs.map((examDoc) => [String(examDoc._id), examDoc]));
+    const markEntries = buildMarksAnalyticsEntries({ marksDocs: marks, examById });
 
     // ? Fetch student's attendance
     const attendance = await db.collection("attendance").find({
@@ -4823,13 +5414,9 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
 
     // 2. Subject-wise marks analysis
     const subjectMarksMap = {};
-    marks.forEach(m => {
-      if (!subjectMarksMap[m.subject]) {
-        subjectMarksMap[m.subject] = [];
-      }
-      if (m.score !== "ABSENT") {
-        subjectMarksMap[m.subject].push(Number(m.score));
-      }
+    markEntries.forEach((entry) => {
+      if (!subjectMarksMap[entry.subject]) subjectMarksMap[entry.subject] = [];
+      subjectMarksMap[entry.subject].push(entry.percent);
     });
 
     const subjectAnalysis = Object.entries(subjectMarksMap).map(([subject, scores]) => ({
@@ -4841,7 +5428,7 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
     }));
 
     // 3. Overall average marks
-    const allMarksScores = marks.filter(m => m.score !== "ABSENT").map(m => Number(m.score));
+    const allMarksScores = markEntries.map((entry) => Number(entry.percent));
     const overallAverage = allMarksScores.length > 0 ? Math.round(allMarksScores.reduce((a, b) => a + b, 0) / allMarksScores.length) : 0;
 
     // 4. Identify strongest and weakest subjects
@@ -4858,13 +5445,9 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
 
     // 6. Marks trends - group by exam (last 3 exams)
     const examMarksMap = {};
-    marks.forEach(m => {
-      if (!examMarksMap[m.exam]) {
-        examMarksMap[m.exam] = [];
-      }
-      if (m.score !== "ABSENT") {
-        examMarksMap[m.exam].push(Number(m.score));
-      }
+    markEntries.forEach((entry) => {
+      if (!examMarksMap[entry.examLabel]) examMarksMap[entry.examLabel] = [];
+      examMarksMap[entry.examLabel].push(entry.percent);
     });
 
     const examTrends = Object.entries(examMarksMap).map(([exam, scores]) => ({
@@ -4882,29 +5465,29 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
     const suggestions = [];
     
     if (attendancePercentage < 70) {
-      suggestions.push(`?? Attendance Alert: ${student.name} has attended only ${attendancePercentage}% of classes. Encourage regular attendance.`);
+      suggestions.push(`Attendance Alert: ${student.name} has attended only ${attendancePercentage}% of classes. Encourage regular attendance.`);
     } else if (attendancePercentage >= 90) {
-      suggestions.push(`? Excellent attendance of ${attendancePercentage}%. Keep it up!`);
+      suggestions.push(`Excellent attendance of ${attendancePercentage}%. Keep it up!`);
     }
 
     if (overallAverage >= 80) {
-      suggestions.push(`?? Strong overall performance with an average of ${overallAverage}%. ${student.name} is doing excellent!`);
+      suggestions.push(`Strong overall performance with an average of ${overallAverage}%. ${student.name} is doing excellent!`);
     } else if (overallAverage >= 60) {
-      suggestions.push(`?? Average performance of ${overallAverage}/100. Focus on weak subjects for improvement.`);
+      suggestions.push(`Average performance of ${overallAverage}/100. Focus on weak subjects for improvement.`);
     } else if (overallAverage > 0) {
-      suggestions.push(`?? Overall marks ${overallAverage}/100. Needs immediate academic support.`);
+      suggestions.push(`Overall marks ${overallAverage}/100. Needs immediate academic support.`);
     }
 
     if (weakestSubject) {
       if (weakestSubject.average < 40) {
-        suggestions.push(`?? ${student.name} is struggling in ${weakestSubject.subject} (avg: ${weakestSubject.average}/100). Consider extra coaching.`);
+        suggestions.push(`${student.name} is struggling in ${weakestSubject.subject} (avg: ${weakestSubject.average}/100). Consider extra coaching.`);
       } else if (weakestSubject.average < 60) {
-        suggestions.push(`?? ${weakestSubject.subject} needs attention (avg: ${weakestSubject.average}/100). More practice recommended.`);
+        suggestions.push(`${weakestSubject.subject} needs attention (avg: ${weakestSubject.average}/100). More practice recommended.`);
       }
     }
 
     if (bestSubject && bestSubject.average >= 80) {
-      suggestions.push(`? Strength: ${bestSubject.subject} (avg: ${bestSubject.average}/100) is a strong subject.`);
+      suggestions.push(`Strength: ${bestSubject.subject} (avg: ${bestSubject.average}/100) is a strong subject.`);
     }
 
     // 9. Prepare response data
@@ -4926,7 +5509,7 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
       },
       marks: {
         overallAverage,
-        totalExams: marks.length,
+        totalExams: new Set(markEntries.map((entry) => entry.examLabel)).size,
         subjects: subjectAnalysis,
         bestSubject,
         weakestSubject,
@@ -4940,7 +5523,11 @@ app.get("/api/teacher/students/:studentId/analytics", requireAuth, requireRole("
       }
     };
 
-    res.json(responseData);
+    res.json({
+      success: true,
+      analytics: responseData,
+      ...responseData,
+    });
   } catch (err) {
     console.error("? STUDENT ANALYTICS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch student analytics" });
@@ -4988,6 +5575,7 @@ app.post("/api/admin/add-student", requireAuth, requireRole("ADMIN"), requireTen
       email: String(email).toLowerCase(),
       passwordHash,
       role: "STUDENT",
+      schoolId,
       createdAt: new Date(),
     });
 
@@ -5064,6 +5652,7 @@ app.post("/api/admin/add-teacher", requireAuth, requireRole("ADMIN"), requireTen
       email: String(email).toLowerCase(),
       passwordHash,
       role: "TEACHER",
+      schoolId,
       createdAt: new Date(),
     });
 
@@ -5314,6 +5903,9 @@ app.get(
       const teacherAnd = [schoolScope];
 
       if (type === "students") {
+        const cacheKey = buildCacheKey("admin-users-students", schoolId, { search, className, section, page, limit });
+        const cached = getCache(cacheKey);
+        if (cached) return res.json(cached);
         if (searchRegex) studentAnd.push({ $or: [{ name: searchRegex }, { email: searchRegex }] });
         if (className) studentAnd.push({ $or: [{ class: className }, { className }] });
         if (section) studentAnd.push({ section });
@@ -5329,15 +5921,20 @@ app.get(
             .toArray(),
           db.collection("students").countDocuments(studentsQuery),
         ]);
-        return res.json({
+        const response = {
           data,
           page,
           totalPages: Math.max(1, Math.ceil(totalCount / limit)),
           totalCount,
-        });
+        };
+        setCache(cacheKey, response, 20 * 1000);
+        return res.json(response);
       }
 
       if (type === "teachers") {
+        const cacheKey = buildCacheKey("admin-users-teachers", schoolId, { search, className, section, page, limit });
+        const cached = getCache(cacheKey);
+        if (cached) return res.json(cached);
         if (searchRegex) teacherAnd.push({ $or: [{ name: searchRegex }, { email: searchRegex }] });
         if (className) teacherAnd.push({ $or: [{ class: className }, { className }] });
         if (section) teacherAnd.push({ section });
@@ -5353,12 +5950,14 @@ app.get(
             .toArray(),
           db.collection("teachers").countDocuments(teachersQuery),
         ]);
-        return res.json({
+        const response = {
           data,
           page,
           totalPages: Math.max(1, Math.ceil(totalCount / limit)),
           totalCount,
-        });
+        };
+        setCache(cacheKey, response, 20 * 1000);
+        return res.json(response);
       }
 
       const studentsQuery = activeStudentFilter({ $and: studentAnd });
@@ -6645,9 +7244,18 @@ const teacherClassAnalyticsHandler = async (req, res) => {
       }
     });
 
+    const examDocs = await db.collection("exams")
+      .find({
+        schoolId,
+        class: className,
+        section,
+        isDeleted: { $ne: true },
+      })
+      .project({ _id: 1, name: 1, subjects: 1 })
+      .toArray();
+    const examById = new Map(examDocs.map((examDoc) => [String(examDoc._id), examDoc]));
+
     const marksBaseQuery = { schoolId, class: className, section };
-    if (examFilter && examFilter.toLowerCase() !== "all") marksBaseQuery.exam = examFilter;
-    if (subjectFilter && subjectFilter.toLowerCase() !== "all") marksBaseQuery.subject = subjectFilter;
 
     const marks = await db.collection("marks")
       .find(marksBaseQuery)
@@ -6687,16 +7295,17 @@ const teacherClassAnalyticsHandler = async (req, res) => {
     const markPercentByStudent = new Map();
     const markTotalsByStudent = new Map();
     const subjectTotals = new Map();
+    const markEntries = buildMarksAnalyticsEntries({
+      marksDocs: marks,
+      examById,
+      examFilter,
+      subjectFilter,
+    });
 
-    marks.forEach((mark) => {
-      const studentKey = String(mark?.studentId || "");
+    markEntries.forEach((entry) => {
+      const studentKey = String(entry.studentKey || "");
       if (!studentMetaMap.has(studentKey)) return;
-
-      const scoreRaw = mark?.score ?? mark?.marks;
-      const score = Number(scoreRaw);
-      if (!Number.isFinite(score)) return;
-      const maxMarks = Number(mark?.maxMarks || 100);
-      const percent = maxMarks > 0 ? Math.max(0, Math.min(100, (score / maxMarks) * 100)) : Math.max(0, Math.min(100, score));
+      const percent = Number(entry.percent || 0);
 
       const current = markTotalsByStudent.get(studentKey) || { total: 0, count: 0 };
       current.total += percent;
@@ -6704,11 +7313,10 @@ const teacherClassAnalyticsHandler = async (req, res) => {
       markTotalsByStudent.set(studentKey, current);
       markPercentByStudent.set(studentKey, current.count ? Math.round(current.total / current.count) : 0);
 
-      const subject = String(mark?.subject || "Unknown");
-      const subjectAgg = subjectTotals.get(subject) || { total: 0, count: 0 };
+      const subjectAgg = subjectTotals.get(entry.subject) || { total: 0, count: 0 };
       subjectAgg.total += percent;
       subjectAgg.count += 1;
-      subjectTotals.set(subject, subjectAgg);
+      subjectTotals.set(entry.subject, subjectAgg);
     });
 
     const attendanceByStudent = new Map();
@@ -6839,21 +7447,21 @@ const teacherClassAnalyticsHandler = async (req, res) => {
     const classHealth = Math.round((avgMarks * 0.55) + (avgAttendance * 0.45));
     const classHealthStatus = classHealth >= 80 ? "Excellent" : classHealth >= 65 ? "Average" : "Needs Support";
 
-    const [examOptionsRaw, subjectOptionsRaw] = await Promise.all([
-      db.collection("marks").distinct("exam", { schoolId, class: className, section }),
-      db.collection("marks").distinct("subject", { schoolId, class: className, section }),
-    ]);
+    const examOptions = Array.from(
+      new Set(
+        examDocs
+          .map((examDoc) => String(examDoc?.name || "").trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 20);
+    const subjectOptions = Array.from(
+      new Set([
+        ...Array.from(subjectTotals.keys()),
+        ...examDocs.flatMap((examDoc) => normalizeExamSubjects(examDoc?.subjects || []).map((row) => String(row.name || "").trim())),
+      ].filter(Boolean))
+    ).slice(0, 20);
 
-    const examOptions = (Array.isArray(examOptionsRaw) ? examOptionsRaw : [])
-      .map((v) => String(v || "").trim())
-      .filter(Boolean)
-      .slice(0, 20);
-    const subjectOptions = (Array.isArray(subjectOptionsRaw) ? subjectOptionsRaw : [])
-      .map((v) => String(v || "").trim())
-      .filter(Boolean)
-      .slice(0, 20);
-
-    return res.json({
+    const analyticsPayload = {
       class: className,
       section,
       filters: {
@@ -6882,6 +7490,11 @@ const teacherClassAnalyticsHandler = async (req, res) => {
         score: classHealth,
         status: classHealthStatus,
       },
+    };
+    return res.json({
+      success: true,
+      analytics: analyticsPayload,
+      ...analyticsPayload,
     });
   } catch (err) {
     console.error("TEACHER CLASS ANALYTICS ERROR:", err);
@@ -7247,8 +7860,8 @@ app.put(
       const { fromClass, fromSection, toClass, toSection } = req.body;
       const schoolId = req.user.schoolIdObj;
 
-      // ?? DEBUG LOGGING
-      console.log("?? REASSIGN REQUEST DEBUG:");
+      // DEBUG LOGGING
+      console.log("REASSIGN REQUEST DEBUG:");
       console.log("  - Params ID:", req.params.id);
       console.log("  - TeacherId (after safeObjectId):", teacherId);
       console.log("  - SchoolId:", schoolId);
@@ -7606,7 +8219,7 @@ const handleDevRealisticSeed = async (req, res) => {
       return res.status(403).json({ error: "Forbidden - invalid dev key" });
     }
 
-    console.log("\n?? Starting realistic data seed...\n");
+    console.log("\nStarting realistic data seed...\n");
 
     const schoolsCol = db.collection("schools");
     const usersCol = db.collection("users");
@@ -7730,7 +8343,7 @@ const handleDevRealisticSeed = async (req, res) => {
         });
         adminsCreated++;
       }
-      console.log(`  ?? Admin: ${adminEmail}`);
+      console.log(`  Admin: ${adminEmail}`);
     }
 
     // ============================================
@@ -7876,7 +8489,7 @@ const handleDevRealisticSeed = async (req, res) => {
 
         // Log progress
         if ((s + 1) % 100 === 0) {
-          console.log(`  ?? ${s + 1}/${studentsPerSchool} students for ${school.name}...`);
+          console.log(`  ${s + 1}/${studentsPerSchool} students for ${school.name}...`);
         }
       }
 
@@ -7890,13 +8503,13 @@ const handleDevRealisticSeed = async (req, res) => {
     console.log("\n" + "=".repeat(60));
     console.log("? SEEDING COMPLETED SUCCESSFULLY");
     console.log("=".repeat(60));
-    console.log(`?? Summary:`);
+    console.log(`Summary:`);
     console.log(`   Schools created: ${schoolsCreated}`);
     console.log(`   Admins created: ${adminsCreated}`);
     console.log(`   Teachers created: ${teachersCreated}`);
     console.log(`   Students created: ~${studentsCreated}`);
     console.log("=".repeat(60));
-    console.log(`\n?? Test Credentials:`);
+    console.log(`\nTest Credentials:`);
     console.log(`   Admin 1: admin1@delhipublicacademy.edu.in / Password@123`);
     console.log(`   Admin 2: admin2@mumbaiinternationalschool.edu.in / Password@123`);
     console.log(`   Teachers: firstname.lastname### @schoolname.edu.in / Password@123`);
@@ -8303,28 +8916,46 @@ app.get(
   requireTenantId,
   async (req, res) => {
     try {
-      const { from, to } = req.query;
-      const teacher = await db.collection("teachers").findOne(activeTeacherFilter({
-        userId: new ObjectId(req.user.userId),
-        schoolId: req.user.schoolIdObj,
-      }));
+      const schoolId = req.user.schoolIdObj;
+      const teacherUserId = safeObjectId(req.user.userId);
+      if (!teacherUserId) return res.status(400).json({ error: "Invalid teacher user id" });
 
-      if (!teacher) {
-        return res.status(404).json({ error: "Teacher not found" });
-      }
-
-      const studentCount = await db.collection("students").countDocuments({
-        class: teacher.class,
-        section: teacher.section,
-        schoolId: req.user.schoolIdObj,
-        isDeleted: { $ne: true },
+      const tokenClass = String(req.user.class || "").trim();
+      const tokenSection = String(req.user.section || "").trim();
+      const cacheKey = buildCacheKey("teacher-class-summary", schoolId, {
+        teacherUserId: String(teacherUserId),
+        className: tokenClass,
+        section: tokenSection,
       });
 
-      res.json({
-        className: teacher.class,
-        section: teacher.section,
-        totalStudents: studentCount,
-      });
+      const response = await getOrSetCache(
+        cacheKey,
+        async () => {
+          let className = tokenClass;
+          let section = tokenSection;
+          if (!className || !section) {
+            const teacher = await db.collection("teachers").findOne(
+              activeTeacherFilter({ userId: teacherUserId, schoolId }),
+              { projection: { class: 1, section: 1 } }
+            );
+            if (!teacher) return null;
+            className = String(teacher.class || "").trim();
+            section = String(teacher.section || "").trim();
+          }
+
+          const totalStudents = await db.collection("students").countDocuments(activeStudentFilter({
+            class: className,
+            section,
+            schoolId,
+          }));
+
+          return { className, section, totalStudents };
+        },
+        20 * 1000
+      );
+
+      if (!response) return res.status(404).json({ error: "Teacher not found" });
+      res.json(response);
     } catch (err) {
       console.error("CLASS SUMMARY ERROR:", err);
       res.status(500).json({ error: "Failed to fetch class summary" });
@@ -8345,42 +8976,53 @@ app.get(
       const teacherUserId = safeObjectId(req.user.userId);
       const schoolId = req.user.schoolIdObj;
       if (!teacherUserId) return res.status(400).json({ error: "Invalid teacher user id" });
+      const cacheKey = buildCacheKey("teacher-dashboard-summary", schoolId, { teacherUserId: String(teacherUserId) });
+      const response = await getOrSetCache(
+        cacheKey,
+        async () => {
+          const teacher = await db.collection("teachers").findOne(
+            activeTeacherFilter({
+              userId: teacherUserId,
+              schoolId,
+            }),
+            { projection: { _id: 1, class: 1, section: 1 } }
+          );
+          if (!teacher) return null;
 
-      const teacher = await db.collection("teachers").findOne(activeTeacherFilter({
-        userId: teacherUserId,
-        schoolId,
-      }));
-      if (!teacher) return res.status(404).json({ error: "Teacher not found" });
+          const [studentCount, pendingResetRequests, unreadNotifications] = await Promise.all([
+            db.collection("students").countDocuments(activeStudentFilter({
+              schoolId,
+              class: teacher.class,
+              section: teacher.section,
+            })),
+            db.collection("passwordResetRequests").countDocuments({
+              schoolId,
+              teacherId: teacher._id,
+              status: "PENDING",
+            }),
+            db.collection("notifications").countDocuments({
+              $and: [
+                { $or: [{ targetRole: "TEACHER" }, { targetRole: null }, { role: "TEACHER" }] },
+                { $or: [{ targetUser: teacherUserId }, { targetUser: null }, { userId: teacherUserId }] },
+                { isRead: false },
+                { $or: [{ schoolId }, { schoolId: null }] },
+                { isDeleted: { $ne: true } },
+              ],
+            }),
+          ]);
 
-      const [studentCount, pendingResetRequests, unreadNotifications] = await Promise.all([
-        db.collection("students").countDocuments(activeStudentFilter({
-          schoolId,
-          class: teacher.class,
-          section: teacher.section,
-        })),
-        db.collection("passwordResetRequests").countDocuments({
-          schoolId,
-          teacherId: teacher._id,
-          status: "PENDING",
-        }),
-        db.collection("notifications").countDocuments({
-          $and: [
-            { $or: [{ targetRole: "TEACHER" }, { targetRole: null }, { role: "TEACHER" }] },
-            { $or: [{ targetUser: teacherUserId }, { targetUser: null }, { userId: teacherUserId }] },
-            { isRead: false },
-            { $or: [{ schoolId }, { schoolId: null }] },
-            { isDeleted: { $ne: true } },
-          ],
-        }),
-      ]);
-
-      return res.json({
-        className: teacher.class || "",
-        section: teacher.section || "",
-        studentCount,
-        pendingResetRequests,
-        unreadNotifications,
-      });
+          return {
+            className: teacher.class || "",
+            section: teacher.section || "",
+            studentCount,
+            pendingResetRequests,
+            unreadNotifications,
+          };
+        },
+        20 * 1000
+      );
+      if (!response) return res.status(404).json({ error: "Teacher not found" });
+      return res.json(response);
     } catch (err) {
       console.error("? TEACHER DASHBOARD SUMMARY ERROR:", err);
       return res.status(500).json({ error: "Failed to load teacher summary" });
@@ -8978,7 +9620,7 @@ app.delete(
 
 if (process.env.ENABLE_LEGACY_DEV_ROUTES === "true") {
 /* ================================
-   ???  DEVELOPER SYSTEM MONITORING (SECURE ENDPOINTS)
+    DEVELOPER SYSTEM MONITORING (SECURE ENDPOINTS)
    ================================= */
 
 /**
@@ -10374,7 +11016,7 @@ app.post("/api/admin/reset-password", requireAuth, requireRole("ADMIN"), require
     
     const passwordHash = await bcrypt.hash(newPassword, 10);
     const result = await usersCol.updateOne(
-      { _id: user._id },
+      { _id: user._id, schoolId },
       { $set: { passwordHash } }
     );
     
@@ -10409,7 +11051,7 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
     }
 
     // Log file details for debugging
-    console.log(`?? ADMIN VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
+    console.log(`ADMIN VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
 
     // Check for empty files
     if (req.file.size === 0) {
@@ -10448,6 +11090,7 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
       targetRole: "TEACHER",
       targetUserIds,
       audioUrl,
+      audioMissing: false,
       isDeleted: false,
       createdAt: new Date(),
     };
@@ -10490,13 +11133,11 @@ app.post("/api/admin/voice-broadcast", requireAuth, requireRole("ADMIN"), requir
   }
 });
 
-/**
- * TEACHER: POST /api/teacher/voice-broadcast
- * Teacher broadcasts a voice message to their class/section students
- */
-app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), requireTenantId, voiceUpload.single("audio"), async (req, res) => {
+const teacherVoiceBroadcastHandler = async (req, res) => {
   try {
-    const { targetStudentIds, broadcastToClass } = req.body;
+    const { broadcastToClass } = req.body;
+    const rawTargetStudentIds = req.body?.targetStudentIds;
+    const textMessage = String(req.body?.textMessage || "").trim();
     const schoolId = req.user.schoolIdObj;
     const senderId = safeObjectId(req.user.userId);
     const className = String(req.user.class || "").trim();
@@ -10504,15 +11145,17 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
     const config = await getTimetableConfigDoc({ schoolId, classId: className, sectionId: section });
     const periodRows = getPeriodRowsFromConfig(config);
 
-    if (!req.file) {
-      return res.status(400).json({ error: "No audio file uploaded" });
+    if (!req.file && !textMessage) {
+      return res.status(400).json({ error: "Either audio file or text message is required" });
     }
 
-    // Log file details for debugging
-    console.log(`?? TEACHER VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
+    if (req.file) {
+      // Log file details for debugging
+      console.log(`TEACHER VOICE UPLOAD: file=${req.file.filename}, size=${req.file.size} bytes, mimetype=${req.file.mimetype}`);
+    }
 
     // Check for empty files
-    if (req.file.size === 0) {
+    if (req.file && req.file.size === 0) {
       console.error("? TEACHER VOICE BROADCAST: Uploaded file is empty (0 bytes)");
       return res.status(400).json({ error: "Audio file is empty. Please record audio and try again." });
     }
@@ -10522,8 +11165,22 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
     }
 
     // Generate audio URL (public path to uploaded file)
-    const audioUrl = `/uploads/voice/${req.file.filename}`;
-    console.log(`? TEACHER VOICE BROADCAST: Audio URL = ${audioUrl}`);
+    const audioUrl = req.file ? `/uploads/voice/${req.file.filename}` : null;
+    if (audioUrl) {
+      console.log(`? TEACHER VOICE BROADCAST: Audio URL = ${audioUrl}`);
+    }
+
+    let targetStudentIds = [];
+    if (Array.isArray(rawTargetStudentIds)) {
+      targetStudentIds = rawTargetStudentIds;
+    } else if (typeof rawTargetStudentIds === "string" && rawTargetStudentIds.trim()) {
+      try {
+        const parsed = JSON.parse(rawTargetStudentIds);
+        if (Array.isArray(parsed)) targetStudentIds = parsed;
+      } catch {
+        // Keep empty array if malformed payload.
+      }
+    }
 
     // Determine target students
     let targetUserIds = [];
@@ -10553,6 +11210,8 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
       targetSection: section,
       targetUserIds,
       audioUrl,
+      audioMissing: false,
+      textMessage: textMessage || null,
       isDeleted: false,
       createdAt: new Date(),
     };
@@ -10560,18 +11219,31 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
     const result = await db.collection("voiceMessages").insertOne(voiceMessage);
     const voiceMessageId = result.insertedId;
 
+    const hasAudio = Boolean(audioUrl);
+    const hasText = Boolean(textMessage);
+    let notificationTitle = "New Voice Message";
+    let notificationMessage = `Your teacher sent a new voice message for class ${className}-${section}`;
+    if (!hasAudio && hasText) {
+      notificationTitle = "New Message from Teacher";
+      notificationMessage = `Your teacher sent a new message for class ${className}-${section}`;
+    } else if (hasAudio && hasText) {
+      notificationTitle = "New Voice + Text Message";
+      notificationMessage = `Your teacher sent a voice message and note for class ${className}-${section}`;
+    }
+
     // ? CREATE NOTIFICATIONS FOR ALL TARGET STUDENTS
     const notifications = targetUserIds.map((studentUserId) => ({
       userId: studentUserId,
       role: "STUDENT",
       schoolId,
-      title: "New Voice Message",
-      message: `Your teacher sent a new voice message for class ${className}-${section}`,
+      title: notificationTitle,
+      message: notificationMessage,
       type: "voice",
       targetRole: "STUDENT",
       targetUser: studentUserId,
       referenceId: voiceMessageId,
-      audioUrl: audioUrl,
+      audioUrl: audioUrl || null,
+      textMessage: textMessage || null,
       targetRoute: `/student/dashboard?section=voice&id=${voiceMessageId.toString()}`,
       isRead: false,
       createdAt: new Date(),
@@ -10587,13 +11259,23 @@ app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), re
       success: true,
       messageId: voiceMessageId.toString(),
       broadcastTo: targetUserIds.length,
-      audioUrl,
+      audioUrl: audioUrl || null,
+      textMessage: textMessage || "",
     });
   } catch (err) {
     console.error("? TEACHER VOICE BROADCAST ERROR:", err);
     res.status(500).json({ error: "Failed to broadcast voice message" });
   }
-});
+};
+
+/**
+ * TEACHER: POST /api/teacher/voice-broadcast
+ * Teacher sends voice/text/both to class or selected students
+ */
+app.post("/api/teacher/voice-broadcast", requireAuth, requireRole("TEACHER"), requireTenantId, voiceUpload.single("audio"), teacherVoiceBroadcastHandler);
+
+// Backward-compatible alias for new endpoint naming
+app.post("/api/teacher/voice-message", requireAuth, requireRole("TEACHER"), requireTenantId, voiceUpload.single("audio"), teacherVoiceBroadcastHandler);
 
 /**
  * TEACHER: GET /api/teacher/voice-messages/mine
@@ -10618,7 +11300,6 @@ app.get("/api/teacher/voice-messages/mine", requireAuth, requireRole("TEACHER"),
         targetRole: "STUDENT",
         isDeleted: { $ne: true },
         ...buildDateRangeQuery("createdAt", from, to),
-        $or: [{ type: "voice" }, { type: { $exists: false } }],
       };
 
     const cursor = db.collection("voiceMessages")
@@ -10628,7 +11309,7 @@ app.get("/api/teacher/voice-messages/mine", requireAuth, requireRole("TEACHER"),
     const totalCount = usePagination ? await db.collection("voiceMessages").countDocuments(query) : messages.length;
 
     const enrichedMessages = messages.map((msg) => ({
-      ...msg,
+      ...withAudioAvailability(msg),
       senderName: "You",
       _id: msg._id.toString(),
     }));
@@ -10669,11 +11350,22 @@ app.get("/api/teacher/voice-messages", requireAuth, requireRole("TEACHER"), requ
         targetRole: "STUDENT",
         isDeleted: { $ne: true },
         ...buildDateRangeQuery("createdAt", from, to),
-        $or: [{ type: "voice" }, { type: { $exists: false } }],
       };
     const cursor = db.collection("voiceMessages").find(query).sort({ createdAt: -1 });
-    const messages = await (usePagination ? cursor.skip(skip).limit(limit) : cursor).toArray();
-    const data = messages.map((msg) => ({ ...msg, senderName: "You", _id: msg._id.toString() }));
+    let messages = await (usePagination ? cursor.skip(skip).limit(limit) : cursor).toArray();
+
+    // Fallback: if role/target fields are inconsistent on voiceMessages docs,
+    // still allow records explicitly referenced by this student's notifications.
+    if (messages.length === 0 && notificationReferenceIds.length > 0) {
+      const fallbackQuery = {
+        schoolId,
+        _id: { $in: notificationReferenceIds },
+        isDeleted: { $ne: true },
+      };
+      const fallbackCursor = db.collection("voiceMessages").find(fallbackQuery).sort({ createdAt: -1 });
+      messages = await (usePagination ? fallbackCursor.skip(skip).limit(limit) : fallbackCursor).toArray();
+    }
+    const data = messages.map((msg) => ({ ...withAudioAvailability(msg), senderName: "You", _id: msg._id.toString() }));
     if (usePagination) {
       const totalCount = await db.collection("voiceMessages").countDocuments(query);
       return res.json({
@@ -10702,19 +11394,79 @@ app.get("/api/student/voice-messages", requireAuth, requireRole("STUDENT"), requ
     const { page, limit, skip } = getPagination(req.query, { limit: 20 });
     const schoolId = req.user.schoolIdObj;
     const userId = safeObjectId(req.user.userId);
+    const userIdRaw = String(req.user.userId || "").trim();
+    const role = req.user.role;
+    const requestedMessageId = safeObjectId(req.query?.id);
 
     if (!userId) {
       return res.status(400).json({ error: "Invalid user ID" });
     }
 
+    const referenceIdsRaw = await db.collection("notifications")
+      .find({
+        $and: [
+          {
+            $or: [{ targetRole: role }, { targetRole: null }, { role }],
+          },
+          {
+            $or: [
+              { targetUser: userId },
+              { targetUser: null },
+              { userId },
+              ...(userIdRaw ? [{ targetUser: userIdRaw }, { userId: userIdRaw }] : []),
+            ],
+          },
+          { schoolId },
+          { isDeleted: { $ne: true } },
+          { type: "voice" },
+          { referenceId: { $exists: true } },
+        ],
+      })
+      .project({ referenceId: 1 })
+      .limit(500)
+      .toArray();
+
+    const notificationReferenceIds = referenceIdsRaw
+      .map((n) => safeObjectId(n?.referenceId))
+      .filter(Boolean);
+
+    if (requestedMessageId) {
+      const directNotification = await db.collection("notifications").findOne({
+        $and: [
+          {
+            $or: [{ targetRole: role }, { targetRole: null }, { role }],
+          },
+          {
+            $or: [
+              { targetUser: userId },
+              { targetUser: null },
+              { userId },
+              ...(userIdRaw ? [{ targetUser: userIdRaw }, { userId: userIdRaw }] : []),
+            ],
+          },
+          { schoolId },
+          { isDeleted: { $ne: true } },
+          { referenceId: requestedMessageId },
+        ],
+      });
+
+      if (directNotification && !notificationReferenceIds.some((id) => String(id) === String(requestedMessageId))) {
+        notificationReferenceIds.push(requestedMessageId);
+      }
+    }
+
     const query = {
         schoolId,
         targetRole: "STUDENT",
-        targetUserIds: userId,
         senderRole: { $in: ["TEACHER", "teacher"] },
         isDeleted: { $ne: true },
         ...buildDateRangeQuery("createdAt", from, to),
-        $or: [{ type: "voice" }, { type: { $exists: false } }],
+        $or: [
+          { _id: { $in: notificationReferenceIds } },
+          { targetUserIds: userId },
+          { targetUser: userId },
+          ...(userIdRaw ? [{ targetUserIds: userIdRaw }, { targetUser: userIdRaw }] : []),
+        ],
       };
     const cursor = db.collection("voiceMessages").find(query).sort({ createdAt: -1 });
     const messages = await (usePagination ? cursor.skip(skip).limit(limit) : cursor).toArray();
@@ -10723,7 +11475,7 @@ app.get("/api/student/voice-messages", requireAuth, requireRole("STUDENT"), requ
       messages.map(async (msg) => {
         const teacher = await db.collection("teachers").findOne(activeTeacherFilter({ userId: msg.senderId }));
         return {
-          ...msg,
+          ...withAudioAvailability(msg),
           senderName: teacher?.name || "Teacher",
           _id: msg._id.toString(),
         };
@@ -10732,7 +11484,14 @@ app.get("/api/student/voice-messages", requireAuth, requireRole("STUDENT"), requ
 
     console.log("? STUDENT VOICE MESSAGES - Count:", enrichedMessages.length);
     if (usePagination) {
-      const totalCount = await db.collection("voiceMessages").countDocuments(query);
+      let totalCount = await db.collection("voiceMessages").countDocuments(query);
+      if (totalCount === 0 && notificationReferenceIds.length > 0) {
+        totalCount = await db.collection("voiceMessages").countDocuments({
+          schoolId,
+          _id: { $in: notificationReferenceIds },
+          isDeleted: { $ne: true },
+        });
+      }
       return res.json({
         data: enrichedMessages,
         page,
@@ -11184,7 +11943,7 @@ app.delete("/api/teacher/timetable/:id", requireAuth, requireRole("TEACHER"), re
 });
 
 /* ====================================================================
-   ?? EXAM-LEVEL SYLLABUS MANAGEMENT (New System)
+   EXAM-LEVEL SYLLABUS MANAGEMENT (New System)
    Supports multiple subjects per exam
    ==================================================================== */
 
@@ -11201,7 +11960,7 @@ app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requ
     const section = req.user.section;
     const teacherId = safeObjectId(req.user.userId);
 
-    console.log("?? CREATING EXAM SYLLABUS - Teacher:", teacherId, "Class:", className, "Section:", section, "School:", schoolId);
+    console.log("CREATING EXAM SYLLABUS - Teacher:", teacherId, "Class:", className, "Section:", section, "School:", schoolId);
 
     // Validate inputs
     if (!examName || !Array.isArray(subjects) || subjects.length === 0) {
@@ -11244,7 +12003,7 @@ app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requ
       updatedAt: new Date(),
     };
 
-    console.log("?? EXAM OBJECT:", JSON.stringify({
+    console.log("EXAM OBJECT:", JSON.stringify({
       schoolId: newExam.schoolId,
       class: newExam.class,
       section: newExam.section,
@@ -11266,12 +12025,12 @@ app.post("/api/teacher/exam-syllabus", requireAuth, requireRole("TEACHER"), requ
       })
       .toArray();
 
-    console.log("?? Found students for notification:", students.length, "in class:", className, "section:", section);
+    console.log("Found students for notification:", students.length, "in class:", className, "section:", section);
 
     if (students.length > 0) {
       const subjectList = newExam.subjects.map((s) => s.subjectName).join(", ");
       const notifications = students.map((student) => ({
-        title: `?? ${examName} Syllabus Available`,
+        title: `${examName} Syllabus Available`,
         message: `Syllabus for ${examName} (${subjectList}) has been shared`,
         type: "syllabus",
         targetRole: "STUDENT",
@@ -11669,7 +12428,7 @@ app.get("/api/student/exam-syllabus", requireAuth, requireRole("STUDENT"), requi
       return res.status(400).json({ error: "Invalid userId in token" });
     }
 
-    console.log("?? STUDENT EXAM SYLLABUS - Fetching for userId:", userObjectId, "schoolId:", schoolObjectId);
+    console.log("STUDENT EXAM SYLLABUS - Fetching for userId:", userObjectId, "schoolId:", schoolObjectId);
 
     // ? FIRST: Find student with userId and schoolId to get their class/section
     const student = await db.collection("students").findOne(activeStudentFilter({
@@ -11678,11 +12437,11 @@ app.get("/api/student/exam-syllabus", requireAuth, requireRole("STUDENT"), requi
     }));
 
     if (!student) {
-      console.warn("?? STUDENT EXAM SYLLABUS - Student not found");
+      console.warn("STUDENT EXAM SYLLABUS - Student not found");
       return res.status(404).json({ error: "Student profile not found" });
     }
 
-    console.log("?? STUDENT EXAM SYLLABUS - Found student class:", student.class, "section:", student.section);
+    console.log("STUDENT EXAM SYLLABUS - Found student class:", student.class, "section:", student.section);
 
     // ? NOW: Get exam syllabuses for this student's class and section
     const query = {
@@ -11704,7 +12463,7 @@ app.get("/api/student/exam-syllabus", requireAuth, requireRole("STUDENT"), requi
 
     console.log("? STUDENT EXAM SYLLABUSES - Count:", exams.length, "for class:", student.class, "section:", student.section);
     exams.forEach((exam) => {
-      console.log(`   ?? ${exam.examName} (ID: ${exam._id}, Subjects: ${exam.subjects?.length || 0})`);
+      console.log(`   ${exam.examName} (ID: ${exam._id}, Subjects: ${exam.subjects?.length || 0})`);
     });
 
     res.json({
@@ -12357,7 +13116,7 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
     const schoolId = req.user.schoolIdObj;
     const senderId = safeObjectId(req.user.userId);
 
-    console.log(`??? VOICE ANNOUNCE: Starting upload, file info:`, req.file ? {
+    console.log(`VOICE ANNOUNCE: Starting upload, file info:`, req.file ? {
       filename: req.file.filename,
       size: req.file.size,
       mimetype: req.file.mimetype,
@@ -12389,10 +13148,10 @@ app.post("/api/admin/voice-announce", requireAuth, requireRole("ADMIN"), require
     const filePath = req.file.path;
 
     console.log(`? VOICE ANNOUNCE: File uploaded successfully`);
-    console.log(`   ?? File path on disk: ${filePath}`);
-    console.log(`   ?? Public URL: ${audioUrl}`);
-    console.log(`   ?? Title: ${title || "School Announcement"}`);
-    console.log(`   ?? Broadcast to: ${broadcastTo}`);
+    console.log(`   File path on disk: ${filePath}`);
+    console.log(`   Public URL: ${audioUrl}`);
+    console.log(`   Title: ${title || "School Announcement"}`);
+    console.log(`   Broadcast to: ${broadcastTo}`);
 
     // Get all teachers and students for this school
     const [teachers, students] = await Promise.all([
@@ -12471,7 +13230,7 @@ app.get("/api/admin/voice-announces", requireAuth, requireRole("ADMIN"), require
   try {
     const { page, limit, skip } = getPagination(req.query, { limit: 20 });
     const usePagination = Boolean(req.query.page || req.query.limit);
-    console.log(`?? GET /api/admin/voice-announces - Admin ID: ${req.user.userId}`);
+    console.log(`GET /api/admin/voice-announces - Admin ID: ${req.user.userId}`);
     
     const schoolId = req.user.schoolIdObj;
     const senderId = safeObjectId(req.user.userId);
@@ -12481,7 +13240,7 @@ app.get("/api/admin/voice-announces", requireAuth, requireRole("ADMIN"), require
       return res.status(400).json({ error: "Invalid admin ID" });
     }
 
-    console.log(`?? Fetching announcements for schoolId: ${schoolId}, senderId: ${senderId}`);
+    console.log(`Fetching announcements for schoolId: ${schoolId}, senderId: ${senderId}`);
 
     // Get all unique announcements (we store them twice - once for teachers, once for students)
     // So we need to deduplicate by audioUrl
@@ -13746,7 +14505,7 @@ app.post("/api/tracking/session-log", requireAuth, requireTenantId, async (req, 
     const { userId, role, schoolId, eventType, startTime, duration, date } = req.body;
 
     if (!userId || !role || !schoolId || !eventType) {
-      console.warn('?? SessionLog: Missing fields -', { userId, role, schoolId, eventType });
+      console.warn('SessionLog: Missing fields -', { userId, role, schoolId, eventType });
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -13763,7 +14522,7 @@ app.post("/api/tracking/session-log", requireAuth, requireTenantId, async (req, 
       date: new Date(date).toISOString().split('T')[0],
     };
 
-    console.log('?? SessionLog: Storing event -', { 
+    console.log('SessionLog: Storing event -', { 
       userId: sessionLog.userId, 
       role: sessionLog.role, 
       schoolId: sessionLog.schoolId, 
@@ -13842,7 +14601,7 @@ const resolveTrackingUserName = async ({ userId, schoolId, role }) => {
     if (userDoc?.name) return userDoc.name;
     if (userDoc?.email) return userDoc.email;
   } catch (err) {
-    console.warn(`?? Failed to resolve name for userId ${userId}:`, err.message);
+    console.warn(`Failed to resolve name for userId ${userId}:`, err.message);
   }
 
   return "Unknown User";
@@ -13853,7 +14612,7 @@ app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), req
   try {
     const schoolId = String(req.user?.schoolId); // Get from token via requireAuth middleware
 
-    console.log('?? ConcurrentUsers: Querying for schoolId:', schoolId);
+    console.log('ConcurrentUsers: Querying for schoolId:', schoolId);
 
     // Get all login events without matching logout events in the last 24 hours
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -13878,7 +14637,7 @@ app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), req
       },
     ]).toArray();
 
-    console.log('?? ConcurrentUsers: Found', recentLogins.length, 'login events');
+    console.log('ConcurrentUsers: Found', recentLogins.length, 'login events');
 
     // Get logout times for these users
     const logoutTimes = await db.collection("sessionLogs").aggregate([
@@ -13900,7 +14659,7 @@ app.get("/api/tracking/concurrent-users", requireAuth, requireRole("ADMIN"), req
       },
     ]).toArray();
 
-    console.log('?? ConcurrentUsers: Found', logoutTimes.length, 'logout events');
+    console.log('ConcurrentUsers: Found', logoutTimes.length, 'logout events');
 
     // Find active users (logged in after latest logout)
     const activeUsersWithoutNames = recentLogins
@@ -13950,7 +14709,7 @@ app.get("/api/tracking/daily-stats", requireAuth, requireRole("ADMIN"), requireT
       return res.status(400).json({ error: "Date parameter required" });
     }
 
-    console.log('?? DailyStats: Querying for schoolId:', schoolId, 'date:', date, 'role:', role);
+    console.log('DailyStats: Querying for schoolId:', schoolId, 'date:', date, 'role:', role);
 
     // Parse the date to create range for the entire day
     const startOfDay = new Date(`${date}T00:00:00Z`);
@@ -13967,7 +14726,7 @@ app.get("/api/tracking/daily-stats", requireAuth, requireRole("ADMIN"), requireT
 
     // Get all session logs for the day
     const sessionLogs = await db.collection("sessionLogs").find(matchStage).toArray();
-    console.log('?? DailyStats: Found', sessionLogs.length, 'session log entries');
+    console.log('DailyStats: Found', sessionLogs.length, 'session log entries');
 
     // Group by userId to pair logins with logouts
     const userSessions = {};
@@ -14034,7 +14793,7 @@ app.post("/api/debug/create-sample-data", async (req, res) => {
     }
     
     const schoolId = school._id;
-    console.log(`?? Creating sample data for schoolId: ${schoolId}`);
+    console.log(`Creating sample data for schoolId: ${schoolId}`);
     
     // Sample data
     const classes = ["1", "2", "3", "4"];
@@ -14134,7 +14893,7 @@ app.post("/api/debug/create-sample-data", async (req, res) => {
 app.post("/api/admin/debug/create-sample-data", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
   try {
     const schoolId = req.user.schoolIdObj;
-    console.log(`?? Creating sample data for schoolId: ${schoolId}`);
+    console.log(`Creating sample data for schoolId: ${schoolId}`);
     
     // Sample data
     const classes = ["1", "2", "3", "4"];
@@ -14258,7 +15017,7 @@ app.get("/api/admin/debug/db-status", requireAuth, requireRole("ADMIN"), require
 app.get("/api/admin/meta/classes-sections", requireAuth, requireRole("ADMIN"), requireTenantId, async (req, res) => {
   try {
     const schoolId = req.user.schoolIdObj; // Use ObjectId from middleware
-    console.log(`?? META: Fetching classes and sections for schoolId: ${schoolId}`);
+    console.log(`META: Fetching classes and sections for schoolId: ${schoolId}`);
     
     // Aggregate class/section metadata from students, teachers, and subjects for full coverage.
     const studentQuery = activeStudentFilter({ schoolId });
@@ -14336,7 +15095,7 @@ app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requi
     const schoolId = req.user.schoolIdObj;
     let { class: classParam, section: sectionParam } = req.query;
     
-    console.log(`?? STUDENTS: Fetching for class=${classParam}, section=${sectionParam}, schoolId=${schoolId}`);
+    console.log(`STUDENTS: Fetching for class=${classParam}, section=${sectionParam}, schoolId=${schoolId}`);
     
     // Validate required params
     if (!classParam || !sectionParam) {
@@ -14347,7 +15106,7 @@ app.get("/api/admin/students-by-class", requireAuth, requireRole("ADMIN"), requi
     const classValue = isNaN(classParam) ? classParam : Number(classParam);
     const sectionValue = String(sectionParam).trim();
 
-    console.log(`?? Query params after conversion: class=${classValue} (type: ${typeof classValue}), section=${sectionValue}`);
+    console.log(`Query params after conversion: class=${classValue} (type: ${typeof classValue}), section=${sectionValue}`);
 
     // Query students - try both number and string formats for class
     const query = activeStudentFilter({
@@ -14953,7 +15712,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
     const filterClass = req.query.class ? String(req.query.class).trim() : null;
     const filterSection = req.query.section ? String(req.query.section).trim() : null;
     
-    console.log(`?? CLASS COMPARISON: schoolId=${schoolId}, filterClass=${filterClass}, filterSection=${filterSection}`);
+    console.log(`CLASS COMPARISON: schoolId=${schoolId}, filterClass=${filterClass}, filterSection=${filterSection}`);
 
     // Get all students for this school
     let studentQuery = activeStudentFilter({ schoolId });
@@ -14963,13 +15722,16 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
     if (filterSection) studentQuery.section = filterSection;
     
     const [students, totalStudentsCount] = await Promise.all([
-      db.collection("students").find(studentQuery).toArray(),
+      db.collection("students")
+        .find(studentQuery)
+        .project({ _id: 1, class: 1, className: 1, section: 1 })
+        .toArray(),
       db.collection("students").countDocuments(studentQuery),
     ]);
     console.log(`? Found ${students.length} students for query:`, studentQuery);
 
     if (students.length === 0) {
-      console.log(`?? No students found. Returning empty array.`);
+      console.log(`No students found. Returning empty array.`);
       return res.json({
         data: [],
         page: 1,
@@ -14986,83 +15748,79 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
       });
     }
 
-    // Get all attendance records for this school
     const studentIds = students.map((s) => s._id);
-    const attendanceRecords = await db.collection("attendance")
-      .find({ schoolId, studentId: { $in: studentIds } })
-      .toArray();
-    console.log(`? Found ${attendanceRecords.length} total attendance records`);
+    const [attendanceByStudentRows, marksByStudentSubjectRows] = studentIds.length
+      ? await Promise.all([
+          db
+            .collection("attendance")
+            .aggregate([
+              { $match: { schoolId, studentId: { $in: studentIds } } },
+              {
+                $group: {
+                  _id: "$studentId",
+                  totalAttendanceDays: { $sum: 1 },
+                  totalPresentDays: {
+                    $sum: {
+                      $cond: [
+                        { $eq: [{ $toLower: { $ifNull: ["$status", ""] } }, "present"] },
+                        1,
+                        0,
+                      ],
+                    },
+                  },
+                },
+              },
+            ])
+            .toArray(),
+          db
+            .collection("marks")
+            .aggregate([
+              { $match: { schoolId, studentId: { $in: studentIds } } },
+              {
+                $project: {
+                  studentId: 1,
+                  subject: { $ifNull: ["$subject", "N/A"] },
+                  score: {
+                    $convert: {
+                      input: "$score",
+                      to: "double",
+                      onError: 0,
+                      onNull: 0,
+                    },
+                  },
+                },
+              },
+              {
+                $group: {
+                  _id: { studentId: "$studentId", subject: "$subject" },
+                  totalScore: { $sum: "$score" },
+                  totalCount: { $sum: 1 },
+                },
+              },
+            ])
+            .toArray(),
+        ])
+      : [[], []];
 
-    // Get all marks records for this school
-    const marksRecords = await db.collection("marks")
-      .find({ schoolId, studentId: { $in: studentIds } })
-      .toArray();
-    console.log(`? Found ${marksRecords.length} total marks records`);
-
-    // Create lookup maps for faster access
-    const attendanceMap = {};
-    const marksMap = {};
-
-    // Debug: show first few attendance studentIds
-    if (attendanceRecords.length > 0) {
-      console.log(`?? FIRST 5 ATTENDANCE studentIds:`);
-      attendanceRecords.slice(0, 5).forEach(rec => {
-        console.log(`   - ${rec.studentId} (type: ${typeof rec.studentId}, constructor: ${rec.studentId?.constructor?.name})`);
+    const attendanceByStudentMap = new Map(
+      attendanceByStudentRows.map((row) => [
+        String(row._id),
+        {
+          totalAttendanceDays: Number(row.totalAttendanceDays || 0),
+          totalPresentDays: Number(row.totalPresentDays || 0),
+        },
+      ])
+    );
+    const marksByStudentMap = new Map();
+    for (const row of marksByStudentSubjectRows) {
+      const studentIdStr = String(row?._id?.studentId || "");
+      if (!studentIdStr) continue;
+      if (!marksByStudentMap.has(studentIdStr)) marksByStudentMap.set(studentIdStr, []);
+      marksByStudentMap.get(studentIdStr).push({
+        subject: String(row?._id?.subject || "N/A"),
+        totalScore: Number(row.totalScore || 0),
+        totalCount: Number(row.totalCount || 0),
       });
-    }
-
-    attendanceRecords.forEach(record => {
-      const studentIdStr = String(record.studentId);
-      if (!attendanceMap[studentIdStr]) {
-        attendanceMap[studentIdStr] = [];
-      }
-      attendanceMap[studentIdStr].push(record);
-    });
-
-    // Debug: show attendance map keys
-    console.log(`?? ATTENDANCE MAP KEYS (${Object.keys(attendanceMap).length} unique students):`);
-    Object.keys(attendanceMap).slice(0, 5).forEach(key => {
-      console.log(`   - ${key}: ${attendanceMap[key].length} records`);
-    });
-
-    // Debug: Show actual attendance status values
-    console.log(`?? SAMPLE ATTENDANCE STATUS VALUES:`);
-    attendanceRecords.slice(0, 10).forEach(rec => {
-      console.log(`   - status: "${rec.status}" (type: ${typeof rec.status})`);
-    });
-
-    // Count attendance by status
-    const statusCounts = {};
-    attendanceRecords.forEach(rec => {
-      const status = String(rec.status || 'null').toLowerCase();
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
-    });
-    console.log(`?? ATTENDANCE STATUS COUNTS:`, statusCounts);
-
-    marksRecords.forEach(record => {
-      const studentIdStr = String(record.studentId);
-      if (!marksMap[studentIdStr]) {
-        marksMap[studentIdStr] = [];
-      }
-      marksMap[studentIdStr].push(record);
-    });
-
-    // Debug: show marks map keys
-    console.log(`?? MARKS MAP KEYS (${Object.keys(marksMap).length} unique students):`);
-    Object.keys(marksMap).slice(0, 5).forEach(key => {
-      console.log(`   - ${key}: ${marksMap[key].length} records`);
-    });
-
-    // Debug: Show sample marks values
-    console.log(`?? SAMPLE MARKS VALUES:`);
-    marksRecords.slice(0, 10).forEach(rec => {
-      console.log(`   - marks: ${rec.marks} (type: ${typeof rec.marks}), subject: ${rec.subject}`);
-    });
-
-    // Debug: Show FULL marks document structure
-    console.log(`?? SAMPLE FULL MARKS DOCUMENT:`);
-    if (marksRecords.length > 0) {
-      console.log(JSON.stringify(marksRecords[0], null, 2));
     }
 
     // Group students by class and section
@@ -15083,7 +15841,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
     });
 
     // Debug: show student IDs and matching
-    console.log(`?? FIRST 5 STUDENT IDs (students collection):`);
+    console.log(`FIRST 5 STUDENT IDs (students collection):`);
     students.slice(0, 5).forEach(s => {
       console.log(`   - ${s._id} (type: ${typeof s._id}, constructor: ${s._id?.constructor?.name})`);
     });
@@ -15101,40 +15859,36 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
       let studentsWithMarks = 0;
       let attendanceByStatus = {};
       
-      classGroup.students.forEach((student, idx) => {
+      classGroup.students.forEach((student) => {
         const studentIdStr = String(student._id);
         
-        // Attendance calculation
-        const studentAttendance = attendanceMap[studentIdStr] || [];
-        if (studentAttendance.length > 0) studentsWithAttendance++;
-        
-        // Count by status for debugging
-        studentAttendance.forEach(a => {
-          const status = String(a.status || 'null').toLowerCase();
-          attendanceByStatus[status] = (attendanceByStatus[status] || 0) + 1;
-        });
-        
-        // Check for present status (case-insensitive)
-        const presentCount = studentAttendance.filter(a => {
-          const status = String(a.status || '').toLowerCase();
-          return status === 'present';
-        }).length;
-        
-        totalAttendanceDays += studentAttendance.length;
-        totalPresentDays += presentCount;
+        const studentAttendance = attendanceByStudentMap.get(studentIdStr) || {
+          totalAttendanceDays: 0,
+          totalPresentDays: 0,
+        };
+        if (studentAttendance.totalAttendanceDays > 0) studentsWithAttendance++;
+        totalAttendanceDays += studentAttendance.totalAttendanceDays;
+        totalPresentDays += studentAttendance.totalPresentDays;
+        attendanceByStatus.present = (attendanceByStatus.present || 0) + studentAttendance.totalPresentDays;
+        attendanceByStatus.nonPresent =
+          (attendanceByStatus.nonPresent || 0) +
+          Math.max(0, studentAttendance.totalAttendanceDays - studentAttendance.totalPresentDays);
 
         // Marks calculation
-        const studentMarks = marksMap[studentIdStr] || [];
+        const studentMarks = marksByStudentMap.get(studentIdStr) || [];
         if (studentMarks.length > 0) studentsWithMarks++;
         
         studentMarks.forEach(mark => {
-          const markValue = Number(mark.score) || 0;
-          allMarks.push(markValue);
-
-          if (!subjectMarks[mark.subject]) {
-            subjectMarks[mark.subject] = [];
+          const subject = String(mark.subject || "N/A");
+          if (!subjectMarks[subject]) {
+            subjectMarks[subject] = { sum: 0, count: 0 };
           }
-          subjectMarks[mark.subject].push(markValue);
+          subjectMarks[subject].sum += Number(mark.totalScore || 0);
+          subjectMarks[subject].count += Number(mark.totalCount || 0);
+          allMarks.push({
+            sum: Number(mark.totalScore || 0),
+            count: Number(mark.totalCount || 0),
+          });
         });
       });
 
@@ -15144,16 +15898,24 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
         : 0;
 
       // Calculate average marks percentage
-      const avgMarksPercent = allMarks.length > 0
-        ? Math.round(allMarks.reduce((a, b) => a + b, 0) / allMarks.length)
+      const marksTotals = allMarks.reduce(
+        (acc, item) => {
+          acc.sum += Number(item.sum || 0);
+          acc.count += Number(item.count || 0);
+          return acc;
+        },
+        { sum: 0, count: 0 }
+      );
+      const avgMarksPercent = marksTotals.count > 0
+        ? Math.round(marksTotals.sum / marksTotals.count)
         : 0;
 
       // Find top and weakest subjects
       const subjectAverages = {};
       Object.keys(subjectMarks).forEach(subject => {
-        const marksArray = subjectMarks[subject];
-        const avg = marksArray.reduce((a, b) => a + b, 0) / marksArray.length;
-        subjectAverages[subject] = Math.round(avg);
+        const subjectTotal = subjectMarks[subject];
+        const avg = subjectTotal.count > 0 ? subjectTotal.sum / subjectTotal.count : 0;
+        subjectAverages[subject] = Math.round(Number.isFinite(avg) ? avg : 0);
       });
 
       const sortedSubjects = Object.entries(subjectAverages).sort((a, b) => b[1] - a[1]);
@@ -15162,7 +15924,7 @@ app.get("/api/admin/analytics/class-comparison", requireAuth, requireRole("ADMIN
 
       const overall = avgMarksPercent >= 75 ? 'Excellent' : avgMarksPercent >= 60 ? 'Good' : 'Needs Attention';
 
-      console.log(`?? CLASS ${classGroup.class}-${classGroup.section}: students=${totalStudents} (with_attendance=${studentsWithAttendance}, with_marks=${studentsWithMarks}), totalAttendanceDays=${totalAttendanceDays}, totalPresentDays=${totalPresentDays}, attendance=${avgAttendancePercent}%, marks=${avgMarksPercent}%, status=${overall}`);
+      console.log(`CLASS ${classGroup.class}-${classGroup.section}: students=${totalStudents} (with_attendance=${studentsWithAttendance}, with_marks=${studentsWithMarks}), totalAttendanceDays=${totalAttendanceDays}, totalPresentDays=${totalPresentDays}, attendance=${avgAttendancePercent}%, marks=${avgMarksPercent}%, status=${overall}`);
       console.log(`   Attendance status breakdown:`, attendanceByStatus);
 
       return {

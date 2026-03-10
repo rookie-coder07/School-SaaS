@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { sessionTracker } from "../utils/sessionTracker";
+import FingerprintAuthActions from "../components/FingerprintAuthActions";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function StudentLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
@@ -14,78 +18,66 @@ export default function StudentLogin() {
 
   const navigate = useNavigate();
 
+  const completeStudentLogin = (data) => {
+    localStorage.setItem("studentToken", data.token);
+
+    if (data.schoolName) {
+      localStorage.setItem("studentSchoolName", data.schoolName);
+    }
+    if (data.mustChangePassword) {
+      localStorage.setItem("studentMustChangePassword", "1");
+    } else {
+      localStorage.removeItem("studentMustChangePassword");
+    }
+
+    let studentUserId = null;
+    let schoolId = null;
+    try {
+      const tokenParts = data.token.split(".");
+      if (tokenParts.length === 3) {
+        const payload = JSON.parse(atob(tokenParts[1]));
+        if (payload.schoolId) {
+          localStorage.setItem("studentSchoolId", payload.schoolId);
+          schoolId = payload.schoolId;
+        }
+        if (payload.userId) {
+          studentUserId = payload.userId;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to extract token data:", err);
+    }
+
+    if (studentUserId && schoolId) {
+      sessionTracker.startSession(studentUserId, "STUDENT", schoolId);
+    }
+
+    navigate("/student/dashboard");
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    setInfo("");
     setLoading(true);
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-      const endpoint = `${API_URL}/api/auth/student/login`;
-      const res = await fetch(
-        endpoint,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email, password }),
-        }
-      );
+      const res = await fetch(`${API_URL}/api/auth/student/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
       const data = await res.json();
 
       if (!res.ok) {
         setError(data?.error || "Login failed");
-        setLoading(false);
         return;
       }
 
-      // ✅ Save token safely
-      localStorage.setItem("studentToken", data.token);
-      
-      // ✅ Save school name
-      if (data.schoolName) {
-        localStorage.setItem("studentSchoolName", data.schoolName);
-      }
-      if (data.mustChangePassword) {
-        localStorage.setItem("studentMustChangePassword", "1");
-      } else {
-        localStorage.removeItem("studentMustChangePassword");
-      }
-      
-      // ✅ Extract and save schoolId from token
-      let studentUserId = null;
-      let schoolId = null;
-      try {
-        const tokenParts = data.token.split('.');
-        if (tokenParts.length === 3) {
-          const payload = JSON.parse(atob(tokenParts[1]));
-          console.log('🔐 StudentLogin: Token payload:', payload);
-          
-          if (payload.schoolId) {
-            localStorage.setItem("studentSchoolId", payload.schoolId);
-            schoolId = payload.schoolId;
-          }
-          if (payload.userId) {
-            studentUserId = payload.userId;
-          }
-        }
-      } catch (err) {
-        console.error("❌ Failed to extract token data:", err);
-      }
-
-      console.log('🟢 StudentLogin: Starting session with -', { studentUserId, role: 'STUDENT', schoolId });
-      
-      // ✅ Start session tracking
-      if (studentUserId && schoolId) {
-        sessionTracker.startSession(studentUserId, "STUDENT", schoolId);
-      } else {
-        console.warn('⚠️ StudentLogin: Missing data for session tracking -', { studentUserId, schoolId });
-      }
-
-      // ✅ Redirect
-      navigate("/student/dashboard");
+      completeStudentLogin(data);
     } catch (err) {
       console.error("LOGIN ERROR:", err);
       setError("Server not responding. Try again.");
@@ -103,7 +95,6 @@ export default function StudentLogin() {
     setForgotLoading(true);
     setForgotMessage("");
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
       const res = await fetch(`${API_URL}/api/student/password-reset-request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -140,6 +131,12 @@ export default function StudentLogin() {
           </div>
         )}
 
+        {info && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg mb-6 text-sm font-semibold">
+            {info}
+          </div>
+        )}
+
         <input
           type="email"
           placeholder="Email address"
@@ -165,6 +162,15 @@ export default function StudentLogin() {
         >
           {loading ? "Logging in..." : "Login"}
         </button>
+
+        <FingerprintAuthActions
+          email={email}
+          password={password}
+          role="STUDENT"
+          onLoginSuccess={completeStudentLogin}
+          setError={setError}
+          setInfo={setInfo}
+        />
 
         <button
           type="button"
@@ -217,14 +223,3 @@ export default function StudentLogin() {
     </div>
   );
 }
-
-const inputStyle = {
-  width: "100%",
-  padding: "12px 14px",
-  marginBottom: "14px",
-  borderRadius: "10px",
-  border: "1px solid #e2e8f0",
-  outline: "none",
-  fontSize: "14px",
-  fontWeight: "500",
-};

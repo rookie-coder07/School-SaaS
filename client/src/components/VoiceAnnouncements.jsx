@@ -256,7 +256,7 @@ export default function VoiceAnnouncements({
             </div>
 
             {announcement.audioUrl ? (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0 max-w-full">
                 <button
                   onClick={() => setPlayingId(playingId === announcement._id ? null : announcement._id)}
                   className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
@@ -269,11 +269,11 @@ export default function VoiceAnnouncements({
                   {playingId === announcement._id ? "⏸️" : "▶️"}
                 </button>
 
-                <div className="flex-1">
+                <div className="w-full min-w-0 max-w-full sm:flex-1">
                   <audio
                     key={`${announcement._id}-audio`}
                     controls
-                    className="w-full h-8"
+                    className="block w-full max-w-full min-w-0 h-8"
                     onPlay={() => setPlayingId(announcement._id)}
                     onPause={() => setPlayingId(null)}
                     onEnded={() => setPlayingId(null)}
@@ -288,7 +288,7 @@ export default function VoiceAnnouncements({
                 </div>
               </div>
             ) : (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm break-words whitespace-pre-wrap overflow-hidden [overflow-wrap:anywhere] max-w-full text-slate-700">
                 {announcement.message || "No message content."}
               </div>
             )}
