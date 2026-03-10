@@ -5,6 +5,7 @@
   "main": "server/server.js",
   "scripts": {
     "build:client": "cd client && npm run build",
+    "render-build": "npm install && cd client && npm install && npm run build",
     "start": "node server/server.js",
     "seed:developer": "node server/scripts/seedDeveloper.js",
     "reconcile:voice-audio": "node server/scripts/reconcileVoiceAudioFiles.js",

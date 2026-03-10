@@ -1564,8 +1564,15 @@ async function ensureTenantValidators() {
 async function startServer() {
   try {
     const isProduction = process.env.NODE_ENV === "production";
+    console.log("Environment:", process.env.NODE_ENV || "development");
+    console.log("Mongo URI loaded:", Boolean(process.env.MONGO_URI));
+    console.log("Developer access code loaded:", Boolean(process.env.DEVELOPER_ACCESS_CODE));
+    console.log("JWT secret loaded:", Boolean(process.env.JWT_SECRET));
     if (isProduction && !process.env.DEVELOPER_ACCESS_CODE) {
       throw new Error("DEVELOPER_ACCESS_CODE is required in production");
+    }
+    if (isProduction && !process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is required in production");
     }
     if (client && process.env.MONGO_URI) {
       attachMongoReconnectHandlers();
