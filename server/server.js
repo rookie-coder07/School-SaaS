@@ -62,6 +62,7 @@ import {
 
 const app = express();
 const webauthnChallengeStore = new Map();
+let developerLoginEnabled = true;
 
 const wrapRouteHandler = (handler) => {
   if (typeof handler !== "function") return handler;
@@ -1569,7 +1570,8 @@ async function startServer() {
     console.log("Developer access code loaded:", Boolean(process.env.DEVELOPER_ACCESS_CODE));
     console.log("JWT secret loaded:", Boolean(process.env.JWT_SECRET));
     if (isProduction && !process.env.DEVELOPER_ACCESS_CODE) {
-      throw new Error("DEVELOPER_ACCESS_CODE is required in production");
+      developerLoginEnabled = false;
+      console.warn("Developer access code missing. Developer login disabled.");
     }
     if (isProduction && !process.env.JWT_SECRET) {
       throw new Error("JWT_SECRET is required in production");
@@ -1577,10 +1579,28 @@ async function startServer() {
     if (client && process.env.MONGO_URI) {
       attachMongoReconnectHandlers();
       try {
-        await client.connect();
-        db = client.db(mongoDbName);
-        isMongoConnected = true;
-        console.log("? MongoDB connected successfully");
+        const maxAttempts = 5;
+        const delayMs = 5000;
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        let lastError = null;
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          try {
+            await client.connect();
+            db = client.db(mongoDbName);
+            isMongoConnected = true;
+            console.log(`? MongoDB connected successfully (attempt ${attempt})`);
+            break;
+          } catch (error) {
+            lastError = error;
+            console.error(`MongoDB connection attempt ${attempt} failed:`, error.message);
+            if (attempt < maxAttempts) {
+              await wait(delayMs);
+            }
+          }
+        }
+        if (!isMongoConnected) {
+          throw new Error(`MongoDB connection failed after ${maxAttempts} attempts: ${lastError?.message || "unknown error"}`);
+        }
         
         // Auto-seed developer user if MongoDB is connected
         await seedDeveloperUser();
@@ -2545,6 +2565,14 @@ app.post("/api/dev/login", authLoginRateLimit, async (req, res) => {
     if (!process.env.JWT_SECRET) {
       console.error("? JWT_SECRET not set in environment");
       return res.status(500).json({ error: "Server configuration error" });
+    }
+
+    if (!developerLoginEnabled) {
+      return res.status(503).json({
+        error: "Developer login disabled",
+        success: false,
+        message: "Developer login is disabled in production until access code is configured.",
+      });
     }
 
     if (!process.env.DEVELOPER_ACCESS_CODE && process.env.DEV_ACCESS_CODE) {
