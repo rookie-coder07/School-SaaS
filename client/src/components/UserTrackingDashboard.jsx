@@ -2,7 +2,7 @@ import { useCallback, useState, useEffect } from "react";
 import { useToast } from "./ToastProvider";
 
 export default function UserTrackingDashboard({ token }) {
-  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const API_URL = import.meta.env.VITE_API_URL;
   const toast = useToast();
 
   const [concurrentUsers, setConcurrentUsers] = useState([]);
@@ -313,3 +313,4 @@ export default function UserTrackingDashboard({ token }) {
     </div>
   );
 }
+

@@ -9,8 +9,13 @@
 
 const { MongoClient, ObjectId } = require("mongodb");
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017";
+const MONGO_URI = process.env.MONGO_URI;
 const DB_NAME = process.env.DB_NAME || "school-app";
+
+if (!MONGO_URI) {
+  console.error("MONGO_URI is required. Set it in your environment before running this script.");
+  process.exit(1);
+}
 
 async function migrateNotifications() {
   const client = new MongoClient(MONGO_URI);
@@ -98,7 +103,8 @@ async function migrateNotifications() {
       }
     }
 
-    console.log("\n📈 Migration Summary:");
+    console.log("
+📈 Migration Summary:");
     console.log(`   Total notifications: ${allNotifications.length}`);
     console.log(`   Notifications updated: ${migratedCount}`);
     console.log(`   Notifications skipped: ${allNotifications.length - migratedCount}`);

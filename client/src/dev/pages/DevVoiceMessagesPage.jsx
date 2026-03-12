@@ -5,7 +5,7 @@ import DevRowActionMenu from "../components/DevRowActionMenu";
 import { pushDevToast } from "../utils/devToast";
 import { getCachedValue } from "../utils/devApiCache";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const FILTERS_STORAGE_KEY = "dev_voice_filters_v1";
 const PRESETS_STORAGE_KEY = "dev_voice_filter_presets_v1";
 const DEV_SCHOOLS_CACHE_KEY = "dev_schools_meta_v1";

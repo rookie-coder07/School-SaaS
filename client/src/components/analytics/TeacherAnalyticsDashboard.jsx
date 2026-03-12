@@ -1,9 +1,9 @@
-﻿import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import AttendanceTrendChartStatic from "./AttendanceTrendChart";
 import MarksDistributionChartStatic from "./MarksDistributionChart";
 import SubjectPerformanceChartStatic from "./SubjectPerformanceChart";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const IS_DEV = Boolean(import.meta.env.DEV);
 
 const toNum = (value) => {
@@ -325,7 +325,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
                             {getInitials(row.name)}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-semibold text-slate-100">⚠ {toText(row.name, "Student")}</p>
+                            <p className="font-semibold text-slate-100">• {toText(row.name, "Student")}</p>
                             <p className="text-xs text-slate-300">{toText(row.issue, "Needs support")}</p>
                           </div>
                         </div>
@@ -348,7 +348,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
                             {getInitials(row.name)}
                           </div>
                           <span className="truncate font-semibold text-slate-100">
-                            {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"} {toText(row.name, "Student")}
+                            {idx === 0 ? "1st" : idx === 1 ? "2nd" : "3rd"} {toText(row.name, "Student")}
                           </span>
                         </div>
                         <span className="font-black text-emerald-200">{toNum(row.averageMarks)}%</span>
@@ -367,7 +367,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
                     <li className="text-slate-300">No insights generated yet.</li>
                   ) : (
                     data.quickInsights.map((insight, idx) => (
-                      <li key={`${idx}-${insight}`} className="rounded-lg border border-white/15 bg-slate-900/45 px-3 py-2">📊 {insight}</li>
+                      <li key={`${idx}-${insight}`} className="rounded-lg border border-white/15 bg-slate-900/45 px-3 py-2">• {insight}</li>
                     ))
                   )}
                 </ul>
@@ -418,7 +418,7 @@ export default function TeacherAnalyticsDashboard({ refreshKey = 0, onGoToStuden
                   <>
                     <ul className="space-y-1 text-xs text-slate-200">
                       {attendanceRiskStudents.map((row, idx) => (
-                        <li key={`${row.studentId || idx}`}>⚠ {toText(row.name, "Student")} - {toNum(row.attendance)}% attendance</li>
+                        <li key={`${row.studentId || idx}`}>• {toText(row.name, "Student")} - {toNum(row.attendance)}% attendance</li>
                       ))}
                     </ul>
                     <p className="mt-2 text-xs text-slate-300">These students may fall below the 75% attendance requirement.</p>

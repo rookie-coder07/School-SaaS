@@ -1,6 +1,8 @@
 import { useState } from "react";
+import PageContainer from "../components/ui/PageContainer";
+import PageIntro from "../components/ui/PageIntro";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function AdmissionForm() {
   const [formData, setFormData] = useState({
@@ -19,79 +21,68 @@ export default function AdmissionForm() {
     });
   }
 
-  // 🔴 HARD DEBUG VERSION — NO GUESSING
   async function handleSubmit(e) {
     e.preventDefault();
 
     try {
-      const response = await fetch(
-      `${API_URL}/api/admissions`,
-      {
+      const response = await fetch(`${API_URL}/api/admissions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(formData),
-});
+      });
 
-
-      // 🔍 DEBUG OUTPUTS
       alert("HTTP STATUS: " + response.status);
 
       const text = await response.text();
       alert("RESPONSE BODY: " + text);
-
     } catch (error) {
       alert("FETCH ERROR: " + error.message);
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-16 px-6">
-      <div className="max-w-3xl mx-auto bg-white p-10 rounded-xl shadow-md">
-        <h1 className="text-4xl font-bold mb-8 text-center">
-          Online Admission Form
-        </h1>
+    <PageContainer className="space-y-8">
+      <PageIntro
+        title="Online Admission Form"
+        description="Submit your admission request online. Our team will review and respond promptly."
+      />
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="saas-card p-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block mb-2 font-medium">
-              Student Full Name
-            </label>
+            <label className="block mb-2 text-sm font-semibold text-slate-700">Student Full Name</label>
             <input
               type="text"
               name="studentName"
               value={formData.studentName}
               onChange={handleChange}
               required
-              className="w-full border rounded-lg px-4 py-3"
+              className="saas-input"
             />
           </div>
 
           <div>
-            <label className="block mb-2 font-medium">
-              Date of Birth
-            </label>
+            <label className="block mb-2 text-sm font-semibold text-slate-700">Date of Birth</label>
             <input
               type="date"
               name="dob"
               value={formData.dob}
               onChange={handleChange}
               required
-              className="w-full border rounded-lg px-4 py-3"
+              className="saas-input"
             />
           </div>
 
           <div>
-            <label className="block mb-2 font-medium">
-              Class Applying For
-            </label>
+            <label className="block mb-2 text-sm font-semibold text-slate-700">Class Applying For</label>
             <select
               name="classApplying"
               value={formData.classApplying}
               onChange={handleChange}
               required
-              className="w-full border rounded-lg px-4 py-3"
+              className="saas-input"
             >
               <option value="">Select Class</option>
               <option>KG</option>
@@ -104,55 +95,49 @@ export default function AdmissionForm() {
           </div>
 
           <div>
-            <label className="block mb-2 font-medium">
-              Parent / Guardian Name
-            </label>
+            <label className="block mb-2 text-sm font-semibold text-slate-700">Parent / Guardian Name</label>
             <input
               type="text"
               name="parentName"
               value={formData.parentName}
               onChange={handleChange}
               required
-              className="w-full border rounded-lg px-4 py-3"
+              className="saas-input"
             />
           </div>
 
           <div>
-            <label className="block mb-2 font-medium">
-              Phone Number
-            </label>
+            <label className="block mb-2 text-sm font-semibold text-slate-700">Phone Number</label>
             <input
               type="tel"
               name="phone"
               value={formData.phone}
               onChange={handleChange}
               required
-              className="w-full border rounded-lg px-4 py-3"
+              className="saas-input"
             />
           </div>
 
           <div>
-            <label className="block mb-2 font-medium">
-              Email Address
-            </label>
+            <label className="block mb-2 text-sm font-semibold text-slate-700">Email Address</label>
             <input
               type="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
               required
-              className="w-full border rounded-lg px-4 py-3"
+              className="saas-input"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-blue-700 transition"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold text-sm hover:bg-blue-700 transition"
           >
             Submit Application
           </button>
         </form>
       </div>
-    </div>
+    </PageContainer>
   );
 }

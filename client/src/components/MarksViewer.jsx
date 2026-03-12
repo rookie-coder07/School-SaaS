@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 
 export default function MarksViewer({ token, teacher }) {
-  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const API_URL = import.meta.env.VITE_API_URL;
   const toast = useToast();
   const [marks, setMarks] = useState([]);
   const [students, setStudents] = useState([]);
@@ -435,3 +435,4 @@ export default function MarksViewer({ token, teacher }) {
     </div>
   );
 }
+

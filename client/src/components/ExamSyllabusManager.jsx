@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function ExamSyllabusManager({ token }) {
   const toast = useToast();
@@ -230,20 +230,20 @@ export default function ExamSyllabusManager({ token }) {
           <button
             onClick={handleUndoDelete}
             disabled={undoing}
-            className="px-3 py-2 text-xs font-semibold rounded-lg bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 transition disabled:opacity-50"
+            className="px-3 py-2 text-xs font-semibold rounded-lg bg-amber-500/20 text-amber-200 border border-amber-400/40 hover:bg-amber-500/30 transition disabled:opacity-50"
           >
             {undoing ? "Undoing..." : `Undo (${undoStack.length})`}
           </button>
         </div>
       )}
       {/* ===== CREATE NEW EXAM SECTION ===== */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/50 shadow-sm">
-        <h2 className="text-xl font-bold text-slate-900 mb-6">📝 Create New Exam</h2>
+      <div className="bg-slate-900/60 p-6 rounded-2xl border border-white/10 shadow-sm">
+        <h2 className="text-xl font-bold text-slate-100 mb-6">📝 Create New Exam</h2>
 
         <form onSubmit={handleCreateNewExam} className="space-y-6">
           {/* Exam Name */}
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
+            <label className="block text-sm font-semibold text-slate-200 mb-2">
               Exam Name *
             </label>
             <input
@@ -251,14 +251,14 @@ export default function ExamSyllabusManager({ token }) {
               value={newExamName}
               onChange={(e) => setNewExamName(e.target.value)}
               placeholder="e.g., Mid Term, Final Exam, Unit Test 1"
-              className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
               disabled={submitting}
             />
           </div>
 
           {/* Subject Name */}
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
+            <label className="block text-sm font-semibold text-slate-200 mb-2">
               First Subject Name *
             </label>
             <input
@@ -266,24 +266,24 @@ export default function ExamSyllabusManager({ token }) {
               value={newSubjectName}
               onChange={(e) => setNewSubjectName(e.target.value)}
               placeholder="e.g., Mathematics, English, Science"
-              className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
               disabled={submitting}
             />
           </div>
 
           {/* Syllabus Text */}
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
+            <label className="block text-sm font-semibold text-slate-200 mb-2">
               Syllabus Content *
             </label>
             <textarea
               value={newSyllabusText}
               onChange={(e) => setNewSyllabusText(e.target.value)}
               placeholder="Enter the complete syllabus content..."
-              className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-32 resize-none"
+              className="w-full px-4 py-3 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 h-32 resize-none"
               disabled={submitting}
             />
-            <p className="text-xs text-slate-500 mt-2">
+            <p className="text-xs text-slate-400 mt-2">
               💡 You can add more subjects after creating the exam
             </p>
           </div>
@@ -292,7 +292,7 @@ export default function ExamSyllabusManager({ token }) {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? "Creating..." : "✨ Create Exam"}
           </button>
@@ -301,14 +301,14 @@ export default function ExamSyllabusManager({ token }) {
 
       {/* ===== EXAMS LIST SECTION ===== */}
       <div>
-        <h2 className="text-xl font-bold text-slate-900 mb-6">Exam Syllabuses</h2>
+        <h2 className="text-xl font-bold text-slate-100 mb-6">Exam Syllabuses</h2>
 
         {loading ? (
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/50 text-center text-slate-500">
+          <div className="bg-slate-900/60 p-6 rounded-2xl border border-white/10 text-center text-slate-400">
             Loading exam syllabuses...
           </div>
         ) : exams.length === 0 ? (
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/50 text-center text-slate-500">
+          <div className="bg-slate-900/60 p-6 rounded-2xl border border-white/10 text-center text-slate-400">
             No exam syllabuses created yet. Create one above to get started!
           </div>
         ) : (
@@ -316,20 +316,20 @@ export default function ExamSyllabusManager({ token }) {
             {exams.map((exam) => (
               <div
                 key={exam._id}
-                className="bg-white rounded-2xl border border-slate-200/50 shadow-sm hover:shadow-md transition overflow-hidden"
+                className="bg-slate-900/60 rounded-2xl border border-white/10 shadow-sm hover:shadow-md transition overflow-hidden"
               >
                 {/* Exam Header */}
-                <div className="p-6 bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
+                <div className="p-6 bg-gradient-to-r from-emerald-500/10 to-teal-500/5 border-b border-white/10">
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="flex-1">
-                      <h3 className="text-lg font-bold text-slate-900">{exam.examName}</h3>
-                      <p className="text-sm text-slate-500 mt-1">
+                      <h3 className="text-lg font-bold text-slate-100">{exam.examName}</h3>
+                      <p className="text-sm text-slate-400 mt-1">
                         📍 {exam.class}-{exam.section} • {exam.subjects?.length || 0} subjects
                       </p>
                     </div>
                     <button
                       onClick={() => handleDeleteExam(exam._id)}
-                      className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded-lg transition text-sm"
+                      className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 font-semibold rounded-lg transition text-sm"
                     >
                       🗑 Delete Exam
                     </button>
@@ -354,12 +354,12 @@ export default function ExamSyllabusManager({ token }) {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-500">No subjects added yet</p>
+                    <p className="text-sm text-slate-400">No subjects added yet</p>
                   )}
 
                   {/* Add New Subject Section */}
-                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h4 className="font-semibold text-slate-700 mb-4">➕ Add New Subject to {exam.examName}</h4>
+                  <div className="mt-6 p-4 bg-emerald-500/10 border border-emerald-400/30 rounded-lg">
+                    <h4 className="font-semibold text-slate-200 mb-4">➕ Add New Subject to {exam.examName}</h4>
                     <AddSubjectForm
                       examId={exam._id}
                       onSubmit={handleAddSubjectToExam}
@@ -368,7 +368,7 @@ export default function ExamSyllabusManager({ token }) {
                 </div>
 
                 {/* Metadata */}
-                <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500">
+                <div className="px-6 py-3 bg-slate-900/50 border-t border-white/10 text-xs text-slate-400">
                   Created on {new Date(exam.createdAt).toLocaleDateString()} •
                 {exam.updatedAt && new Date(exam.updatedAt).getTime() !== new Date(exam.createdAt).getTime() && (
                     <>
@@ -408,24 +408,24 @@ function SubjectCard({
 
   if (isEditing) {
     return (
-      <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-lg space-y-3">
+      <div className="p-4 bg-amber-500/10 border-2 border-amber-400/40 rounded-lg space-y-3">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-2">Subject Name</label>
+          <label className="block text-sm font-semibold text-slate-200 mb-2">Subject Name</label>
           <input
             type="text"
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+            className="w-full px-3 py-2 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
             disabled={saving}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-2">Syllabus Text</label>
+          <label className="block text-sm font-semibold text-slate-200 mb-2">Syllabus Text</label>
           <textarea
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 h-24 resize-none"
+            className="w-full px-3 py-2 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 h-24 resize-none"
             disabled={saving}
           />
         </div>
@@ -434,14 +434,14 @@ function SubjectCard({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition text-sm disabled:opacity-50"
+            className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition text-sm disabled:opacity-50"
           >
             {saving ? "Saving..." : "✓ Save"}
           </button>
           <button
             onClick={onCancelEdit}
             disabled={saving}
-            className="px-3 py-2 bg-slate-300 hover:bg-slate-400 text-slate-700 font-semibold rounded-lg transition text-sm disabled:opacity-50"
+            className="px-3 py-2 bg-white/10 hover:bg-white/20 text-slate-200 font-semibold rounded-lg transition text-sm disabled:opacity-50"
           >
             ✕ Cancel
           </button>
@@ -451,25 +451,25 @@ function SubjectCard({
   }
 
   return (
-    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+    <div className="p-4 bg-slate-900/50 border border-white/10 rounded-lg">
       <div className="flex items-start justify-between gap-4 mb-2">
-        <h4 className="font-bold text-slate-900">{subject.subjectName}</h4>
+        <h4 className="font-bold text-slate-100">{subject.subjectName}</h4>
         <div className="flex gap-2 flex-shrink-0">
           <button
             onClick={onStartEdit}
-            className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm font-semibold rounded transition"
+            className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-sm font-semibold rounded transition"
           >
             ✎ Edit
           </button>
           <button
             onClick={() => onDelete(examId, subject._id)}
-            className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 text-sm font-semibold rounded transition"
+            className="px-3 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 text-sm font-semibold rounded transition"
           >
             🗑 Delete
           </button>
         </div>
       </div>
-      <p className="text-sm text-slate-600 whitespace-pre-wrap">{subject.syllabusText}</p>
+      <p className="text-sm text-slate-300 whitespace-pre-wrap">{subject.syllabusText}</p>
     </div>
   );
 }
@@ -506,23 +506,26 @@ function AddSubjectForm({ examId, onSubmit }) {
         value={subjectName}
         onChange={(e) => setSubjectName(e.target.value)}
         placeholder="Subject name..."
-        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+        className="w-full px-3 py-2 border border-emerald-400/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
         disabled={submitting}
       />
       <textarea
         value={syllabusText}
         onChange={(e) => setSyllabusText(e.target.value)}
         placeholder="Syllabus content..."
-        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none text-sm"
+        className="w-full px-3 py-2 border border-emerald-400/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 h-20 resize-none text-sm"
         disabled={submitting}
       />
       <button
         type="submit"
         disabled={submitting}
-        className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50 text-sm"
+        className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition disabled:opacity-50 text-sm"
       >
         {submitting ? "Adding..." : "✨ Add Subject"}
       </button>
     </form>
   );
 }
+
+
+

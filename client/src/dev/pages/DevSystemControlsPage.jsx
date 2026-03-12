@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import TypeConfirmModal from "../components/TypeConfirmModal";
 import { pushDevToast } from "../utils/devToast";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const toggleClass =
   "inline-flex h-6 w-11 items-center rounded-full border border-white/20 bg-white/10 p-1 transition peer-checked:bg-cyan-500/40";

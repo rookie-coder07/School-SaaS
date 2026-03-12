@@ -1,5 +1,7 @@
 import { useMemo } from "react";
+import { FileText, HelpCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import PageIntro from "../components/ui/PageIntro";
 
 const infoContent = {
   faq: {
@@ -12,7 +14,7 @@ const infoContent = {
       },
       {
         question: "How does fingerprint login work?",
-        answer: "After registering a device, enable Fingerprint Login to authenticate with your phone’s biometrics.",
+        answer: "After registering a device, enable Fingerprint Login to authenticate with your phone's biometrics.",
       },
     ],
   },
@@ -60,10 +62,18 @@ const infoContent = {
   },
 };
 
+const infoIcons = {
+  faq: HelpCircle,
+  terms: FileText,
+  privacy: ShieldCheck,
+  features: Sparkles,
+};
+
 export default function SettingsInfoPage() {
   const navigate = useNavigate();
   const { slug } = useParams();
   const content = useMemo(() => infoContent[slug] || null, [slug]);
+  const Icon = infoIcons[slug] || FileText;
 
   if (!content) {
     return (
@@ -72,6 +82,9 @@ export default function SettingsInfoPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.4em] text-slate-500">Settings</p>
           <h1 className="mt-4 text-2xl font-bold text-slate-900">Coming soon</h1>
           <p className="mt-2 text-sm text-slate-500">We are preparing this page for you.</p>
+          <div className="mx-auto mt-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400">
+            <FileText className="h-8 w-8" aria-hidden="true" />
+          </div>
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -93,11 +106,13 @@ export default function SettingsInfoPage() {
             onClick={() => navigate(-1)}
             className="text-sm font-semibold text-slate-500 underline-offset-4 hover:underline"
           >
-            ← Back
+            Back
           </button>
-          <p className="text-sm font-semibold uppercase tracking-[0.4em] text-slate-500">Settings</p>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">{content.title}</h1>
-          <p className="text-sm text-slate-500">{content.description}</p>
+          <PageIntro
+            title={content.title}
+            description={content.description}
+            icon={<Icon className="h-16 w-16" aria-hidden="true" />}
+          />
         </header>
 
         <div className="space-y-4 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">

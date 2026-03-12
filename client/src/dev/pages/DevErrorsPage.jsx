@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import EmptyState from "../../components/ui/EmptyState";
 import { AlertTriangle, Bug, Clock3, ShieldAlert } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const selectClass = "w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100";
 
 const getSeverity = (row) => {
@@ -209,6 +210,14 @@ export default function DevErrorsPage() {
           )}
         </section>
       )}
+
+      {!loading && filteredErrors.length === 0 ? (
+        <EmptyState
+          tone="dark"
+          title="No errors to show"
+          description="Great news - no recent errors have been recorded."
+        />
+      ) : null}
 
       {!loading && payload.recentErrors?.length > 0 && (
         <section className="rounded-2xl border border-slate-700 bg-slate-800 p-4">

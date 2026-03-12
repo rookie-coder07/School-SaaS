@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import VoiceRecorder from "../components/VoiceRecorder";
@@ -13,17 +13,46 @@ import TeacherSubjectsManager from "../components/TeacherSubjectsManager";
 import TimetableGrid from "../components/TimetableGrid";
 import TeacherAnalyticsDashboard from "../components/analytics/TeacherAnalyticsDashboard";
 import PageContainer from "../components/ui/PageContainer";
-import { Card, StatCard } from "../components/ui/Card";
+import PageIntro from "../components/ui/PageIntro";
+import DashboardHero from "../components/ui/DashboardHero";
+import AnalyticsCard from "../components/ui/AnalyticsCard";
+import { Card } from "../components/ui/Card";
 import ListItemCard from "../components/ui/ListItemCard";
 import { ListSkeleton } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
 import { useToast } from "../components/ToastProvider";
-import { createNotification } from "../utils/notificationHelper";
+import { createNotification, notifyAttendanceMarked } from "../utils/notificationHelper";
 import { sessionTracker } from "../utils/sessionTracker";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
-import { FileSpreadsheet, Pencil, Trash2, Copy } from "lucide-react";
+import {
+  ArrowLeft,
+  BarChart3,
+  BookOpen,
+  BookOpenCheck,
+  CalendarCheck,
+  CalendarClock,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  ClipboardList,
+  ClipboardPlus,
+  FileSpreadsheet,
+  LayoutDashboard,
+  Megaphone,
+  Mic2,
+  LogOut,
+  Search,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  UserCircle2,
+  Users,
+  Copy,
+} from "lucide-react";
 import useUnreadCount from "../hooks/useUnreadCount";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const SUBJECTS_CACHE_TTL_MS = 15000;
 const MARKS_EXAMS_CACHE_TTL_MS = 15000;
 const subjectsCache = new Map();
@@ -52,7 +81,7 @@ const getVoiceMessageTypeMeta = (msg = {}) => {
   const hasAudio = Boolean(msg?.audioUrl);
   const hasText = Boolean(String(msg?.textMessage || "").trim());
   if (hasAudio && hasText) return { label: "Voice + Text", className: "bg-indigo-100 text-indigo-700 border border-indigo-200" };
-  if (hasAudio) return { label: "Voice", className: "bg-blue-100 text-blue-700 border border-blue-200" };
+  if (hasAudio) return { label: "Voice", className: "bg-emerald-500/20 text-emerald-200 border border-emerald-400/30" };
   if (hasText) return { label: "Text", className: "bg-emerald-100 text-emerald-700 border border-emerald-200" };
   return { label: "Empty", className: "bg-slate-100 text-slate-600 border border-slate-200" };
 };
@@ -84,6 +113,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
   const [_marks, _setMarks] = useState({});
   const [percentages, setPercentages] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [_schoolId, setSchoolId] = useState("");
   const [schoolName, setSchoolName] = useState("");
   const navigate = useNavigate();
@@ -102,7 +132,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
   const [lockMessage, setLockMessage] = useState("");
   const [message, _setMessage] = useState("");
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("profile");
   const [showNotifications, setShowNotifications] = useState(false);
 
   const teacher = useMemo(() => {
@@ -112,6 +142,9 @@ export default function TeacherDashboard({ routeTab = "" }) {
       return {};
     }
   }, []);
+  const teacherEmployeeId = teacher?.employeeId || teacher?.employeeID || teacher?.employeeCode || "Not set";
+  const teacherJoinDate = teacher?.joinDate || teacher?.joiningDate || teacher?.createdAt || "";
+  const teacherAddress = teacher?.address || teacher?.homeAddress || teacher?.location || "Not set";
   const className = teacher?.class;
   const section = teacher?.section;
   const schoolFeatures = teacher?.school?.features || teacher?.features || {};
@@ -195,9 +228,9 @@ export default function TeacherDashboard({ routeTab = "" }) {
   // ===== VOICE MESSAGES STATE =====
   const [voiceMessages, setVoiceMessages] = useState([]);
   const [voiceMessagesLoading, setVoiceMessagesLoading] = useState(false);
-  const [voiceMessagesLoadingMore, setVoiceMessagesLoadingMore] = useState(false);
   const [voicePage, setVoicePage] = useState(1);
   const [voiceTotalPages, setVoiceTotalPages] = useState(1);
+  const voiceMessagesPerPage = 10;
   const [voiceMessageDeletingId, setVoiceMessageDeletingId] = useState(null);
   const [_audioFile, setAudioFile] = useState(null);
   const [_voiceLoading, setVoiceLoading] = useState(false);
@@ -348,7 +381,7 @@ export default function TeacherDashboard({ routeTab = "" }) {
       const mapped = sectionMap[sectionParam] || sectionParam;
       setActiveTab((prev) => {
         if (mapped === prev) return prev;
-        console.log("📍 Teacher Dashboard: Navigating to section from query param:", mapped);
+        console.log("?? Teacher Dashboard: Navigating to section from query param:", mapped);
         return mapped;
       });
     }
@@ -781,7 +814,7 @@ useEffect(() => {
   /* ===== FETCH ATTENDANCE STATUS & LOCK STATE ===== */
   useEffect(() => {
     if (!date || !className || !section || !token) {
-      console.log("⏭️ [LOCK CHECK] Skipping - missing:", date, className, section);
+      console.log("?? [LOCK CHECK] Skipping - missing:", date, className, section);
       return;
     }
     const controller = new AbortController();
@@ -792,8 +825,8 @@ useEffect(() => {
     // Set UI state for future dates
     setIsFutureDate(isFuture);
     if (isFuture) {
-      console.warn("⚠️ [LOCK CHECK] Future date selected:", date);
-      setLockMessage("🚫 You cannot mark future attendance");
+      console.warn("?? [LOCK CHECK] Future date selected:", date);
+      setLockMessage("You cannot mark future attendance");
       setLocked(true);
       setIsFinalized(false);
       setApiPresentCount(0);
@@ -805,20 +838,20 @@ useEffect(() => {
       return;
     }
 
-    // 🔥 Fetch actual lock status from API
+    // ?? Fetch actual lock status from API
     const fetchLockStatus = async () => {
-      console.log("📖 [LOCK CHECK] Fetching lock status for", date);
-      console.log("📖 [LOCK CHECK] Parameters - className:", className, "section:", section, "token exists:", !!token);
+      console.log("?? [LOCK CHECK] Fetching lock status for", date);
+      console.log("?? [LOCK CHECK] Parameters - className:", className, "section:", section, "token exists:", !!token);
       try {
         const url = `${API_URL}/api/teacher/attendance?date=${date}&className=${encodeURIComponent(className)}&section=${encodeURIComponent(section || "")}`;
-        console.log("📖 [LOCK CHECK] URL:", url);
+        console.log("?? [LOCK CHECK] URL:", url);
         const res = await fetch(
           url,
           { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
         );
 
         if (!res.ok) {
-          console.warn("⚠️ [LOCK CHECK] API returned error:", res.status);
+          console.warn("?? [LOCK CHECK] API returned error:", res.status);
           setIsFinalized(false);
           setApiPresentCount(0);
           setApiAbsentCount(0);
@@ -834,18 +867,18 @@ useEffect(() => {
         const data = await res.json();
         const finalized = data.isFinalized || false;
 
-        console.log("🔍 [LOCK CHECK] Date:", date, "| Present:", data.presentCount, "| Absent:", data.absentCount, "| Total Students:", data.totalStudents, "| Locked:", finalized);
+        console.log("?? [LOCK CHECK] Date:", date, "| Present:", data.presentCount, "| Absent:", data.absentCount, "| Total Students:", data.totalStudents, "| Locked:", finalized);
 
         setIsFinalized(finalized);
-        // ✅ Store date-specific counts from API
+        // ? Store date-specific counts from API
         setApiPresentCount(data.presentCount ?? 0);
         setApiAbsentCount(data.absentCount ?? 0);
         
-        console.log("📊 [COUNTS] Date:", date, "| Present:", data.presentCount ?? 0, "| Absent:", data.absentCount ?? 0, "| Total Students:", data.totalStudents ?? 0);
+        console.log("?? [COUNTS] Date:", date, "| Present:", data.presentCount ?? 0, "| Absent:", data.absentCount ?? 0, "| Total Students:", data.totalStudents ?? 0);
 
-        // ✅ Load existing attendance records for this specific date
+        // ? Load existing attendance records for this specific date
         if (data.records && Array.isArray(data.records) && data.records.length > 0) {
-          console.log("📝 [LOCK CHECK] Loading", data.records.length, "attendance records with per-student overall percentages");
+          console.log("?? [LOCK CHECK] Loading", data.records.length, "attendance records with per-student overall percentages");
           const attendanceMap = {};
           const overallPercentagesMap = {};
           data.records.forEach((record) => {
@@ -857,33 +890,33 @@ useEffect(() => {
               }
               // Always set the overall percentage (even if no status for this date)
               overallPercentagesMap[String(studentId)] = record.overallPercentage ?? 0;
-              console.log("📊 [STUDENT]", String(studentId).slice(0, 8) + "... is", record.status || "not marked", "on", date, "| Lifetime:", record.overallPercentage + "%");
+              console.log("?? [STUDENT]", String(studentId).slice(0, 8) + "... is", record.status || "not marked", "on", date, "| Lifetime:", record.overallPercentage + "%");
             }
           });
           setAttendance(attendanceMap);
           setStudentOverallPercentages(overallPercentagesMap);
-          console.log("💾 [LOCK CHECK] Attendance map loaded, entries:", Object.keys(attendanceMap).length, "with percentages for:", Object.keys(overallPercentagesMap).length);
+          console.log("?? [LOCK CHECK] Attendance map loaded, entries:", Object.keys(attendanceMap).length, "with percentages for:", Object.keys(overallPercentagesMap).length);
         } else {
           // No records for this date - initialize all as PRESENT for fresh marking
-          console.log("📝 [LOCK CHECK] No attendance for this date - initializing blank for marking");
+          console.log("?? [LOCK CHECK] No attendance for this date - initializing blank for marking");
           const init = {};
           students.forEach((s) => (init[s._id] = "PRESENT"));
           setAttendance(init);
         }
 
-        // ✅ Update lock message
+        // ? Update lock message
         if (finalized) {
-          console.log("🔒 [LOCK CHECK] Date is FINALIZED - locked");
-          setLockMessage("🔒 Attendance locked for this date");
+          console.log("?? [LOCK CHECK] Date is FINALIZED - locked");
+          setLockMessage("Attendance locked for this date");
           setLocked(true);
         } else {
-          console.log("✏️ [LOCK CHECK] Date is EDITABLE");
-          setLockMessage("✏️ Editable - Mark attendance");
+          console.log("?? [LOCK CHECK] Date is EDITABLE");
+          setLockMessage("Editable - Mark attendance");
           setLocked(false);
         }
       } catch (err) {
         if (err?.name === "AbortError") return;
-        console.error("❌ [LOCK CHECK] FETCH ERROR:", err);
+        console.error("? [LOCK CHECK] FETCH ERROR:", err);
         setIsFinalized(false);
         setLocked(false);
         setLockMessage("");
@@ -929,20 +962,24 @@ useEffect(() => {
 /* ===== FETCH VOICE MESSAGES ===== */
 useEffect(() => {
   if (activeTab !== "voice" || !token) return;
+  setVoicePage(1);
+}, [activeTab, token, voiceDateFilter]);
+
+useEffect(() => {
+  if (activeTab !== "voice" || !token) return;
   const controller = new AbortController();
 
   const fetchVoiceMessages = async () => {
     try {
       setVoiceMessagesLoading(true);
       const query = buildDateFilterQuery(voiceDateFilter);
-      const res = await fetch(`${API_URL}/api/teacher/voice-messages/mine?page=1&limit=20${query ? `&${query}` : ""}`, {
+      const res = await fetch(`${API_URL}/api/teacher/voice-messages/mine?page=${voicePage}&limit=${voiceMessagesPerPage}${query ? `&${query}` : ""}`, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
       const data = await res.json();
       const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
       setVoiceMessages(list);
-      setVoicePage(Number(data?.page || 1));
       setVoiceTotalPages(Number(data?.totalPages || 1));
     } catch (err) {
       if (err?.name === "AbortError") return;
@@ -955,29 +992,7 @@ useEffect(() => {
 
   fetchVoiceMessages();
   return () => controller.abort();
-}, [activeTab, token, voiceDateFilter]);
-
-const loadMoreVoiceMessages = async () => {
-  if (voiceMessagesLoadingMore || voicePage >= voiceTotalPages) return;
-  try {
-    setVoiceMessagesLoadingMore(true);
-    const nextPage = voicePage + 1;
-    const query = buildDateFilterQuery(voiceDateFilter);
-    const res = await fetch(`${API_URL}/api/teacher/voice-messages/mine?page=${nextPage}&limit=20${query ? `&${query}` : ""}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
-    setVoiceMessages((prev) => [...prev, ...list]);
-    setVoicePage(Number(data?.page || nextPage));
-    setVoiceTotalPages(Number(data?.totalPages || voiceTotalPages));
-  } catch (err) {
-    console.error("VOICE LOAD MORE ERROR:", err);
-  } finally {
-    setVoiceMessagesLoadingMore(false);
-  }
-};
+}, [activeTab, token, voiceDateFilter, voicePage, voiceMessagesPerPage]);
 
 const handleDeleteVoiceMessage = async (voiceMessage) => {
   if (!voiceMessage?._id) return;
@@ -1113,14 +1128,14 @@ useEffect(() => {
       return;
     }
 
-    console.log("💾 [SAVE] Saving attendance for", date, "- locked:", locked, "isFinalized:", isFinalized);
+    console.log("?? [SAVE] Saving attendance for", date, "- locked:", locked, "isFinalized:", isFinalized);
 
     const records = students.map((s) => ({
       studentUserId: s._id,
       status: attendance[s._id],
     }));
 
-    console.log("💾 [SAVE] Request payload:", {
+    console.log("?? [SAVE] Request payload:", {
       date,
       className,
       section,
@@ -1150,14 +1165,14 @@ useEffect(() => {
       const data = await res.json();
 
       if (!res.ok) {
-        console.error("❌ [SAVE] Error:", res.status, data.error);
+        console.error("? [SAVE] Error:", res.status, data.error);
         if (res.status === 403) {
           toast.error("Cannot save: This attendance is already finalized and locked");
-          // ✅ Force re-fetch to ensure lock status is correct
+          // ? Force re-fetch to ensure lock status is correct
           setTimeout(() => {
             setLocked(true);
             setIsFinalized(true);
-            setLockMessage("🔒 Attendance locked for this date");
+            setLockMessage("Attendance locked for this date");
           }, 100);
         } else {
           toast.error(data.error || "Failed to save attendance");
@@ -1165,20 +1180,20 @@ useEffect(() => {
         return;
       }
 
-      console.log("✅ [SAVE] Saved", data.recordsSaved, "records - Present:", data.presentCount, "Absent:", data.absentCount);
+      console.log("? [SAVE] Saved", data.recordsSaved, "records - Present:", data.presentCount, "Absent:", data.absentCount);
       
-      // ✅ Update date-specific counts from API response
+      // ? Update date-specific counts from API response
       if (data.presentCount !== undefined && data.presentCount !== null) {
         setApiPresentCount(data.presentCount);
-        console.log("✅ [SAVE] Updated presentCount to:", data.presentCount);
+        console.log("? [SAVE] Updated presentCount to:", data.presentCount);
       }
       if (data.absentCount !== undefined && data.absentCount !== null) {
         setApiAbsentCount(data.absentCount);
-        console.log("✅ [SAVE] Updated absentCount to:", data.absentCount);
+        console.log("? [SAVE] Updated absentCount to:", data.absentCount);
       }
       toast.success("Attendance draft saved");
     } catch (err) {
-      console.error("❌ [SAVE] Exception:", err);
+      console.error("? [SAVE] Exception:", err);
       toast.error("Failed to save attendance");
     }
   };
@@ -1191,7 +1206,7 @@ useEffect(() => {
     }
 
     try {
-      console.log("🔒 [SUBMIT] Finalizing attendance for", date);
+      console.log("?? [SUBMIT] Finalizing attendance for", date);
       const res = await fetch(`${API_URL}/api/teacher/attendance/submit`, {
         method: "POST",
         headers: {
@@ -1204,29 +1219,35 @@ useEffect(() => {
       const data = await res.json();
 
       if (!res.ok) {
-        console.error("❌ [SUBMIT] Error:", data.error);
+        console.error("? [SUBMIT] Error:", data.error);
         toast.error(data.error || "Failed to submit attendance");
         return;
       }
 
-      console.log("✅ [SUBMIT] Successfully finalized. Records finalized:", data.recordsFinalized, "present:", data.presentCount, "absent:", data.absentCount);
+      console.log("? [SUBMIT] Successfully finalized. Records finalized:", data.recordsFinalized, "present:", data.presentCount, "absent:", data.absentCount);
       setLocked(true);
       setIsFinalized(true);
-      setLockMessage("🔒 Attendance locked for this date");
+      setLockMessage("Attendance locked for this date");
       
-      // ✅ Update date-specific counts from API response
+      // ? Update date-specific counts from API response
       if (data.presentCount !== undefined && data.presentCount !== null) {
         setApiPresentCount(data.presentCount);
-        console.log("✅ [SUBMIT] Updated presentCount to:", data.presentCount);
+        console.log("? [SUBMIT] Updated presentCount to:", data.presentCount);
       }
       if (data.absentCount !== undefined && data.absentCount !== null) {
         setApiAbsentCount(data.absentCount);
-        console.log("✅ [SUBMIT] Updated absentCount to:", data.absentCount);
+        console.log("? [SUBMIT] Updated absentCount to:", data.absentCount);
       }
       toast.success("Attendance finalized");
-      console.log("📊 [COUNTS] Finalized - Present:", data.presentCount, "Absent:", data.absentCount);
+      console.log("?? [COUNTS] Finalized - Present:", data.presentCount, "Absent:", data.absentCount);
+
+      try {
+        await notifyAttendanceMarked(date, className, section || "", token);
+      } catch (notifErr) {
+        console.warn("?? Failed to create attendance notification (non-critical):", notifErr);
+      }
       
-      // ✅ Re-fetch lock status to ensure UI is in sync
+      // ? Re-fetch lock status to ensure UI is in sync
       setTimeout(() => {
         const fetchToVerify = async () => {
           try {
@@ -1236,23 +1257,23 @@ useEffect(() => {
             );
             if (verifyRes.ok) {
               const verifyData = await verifyRes.json();
-              console.log("🔍 [SUBMIT] Verification - isFinalized:", verifyData.isFinalized, "present:", verifyData.presentCount, "absent:", verifyData.absentCount, "percentage:", verifyData.percentageForDate + "%");
+              console.log("?? [SUBMIT] Verification - isFinalized:", verifyData.isFinalized, "present:", verifyData.presentCount, "absent:", verifyData.absentCount, "percentage:", verifyData.percentageForDate + "%");
               setIsFinalized(verifyData.isFinalized);
               setLocked(verifyData.isFinalized);
-              // ✅ Verify counts and percentage from API with null guards
+              // ? Verify counts and percentage from API with null guards
               setApiPresentCount(verifyData.presentCount ?? 0);
               setApiAbsentCount(verifyData.absentCount ?? 0);
               setDatePercentage(verifyData.percentageForDate ?? 0);
-              console.log("✅ [SUBMIT] Verified and synced - Present:", verifyData.presentCount ?? 0, "Absent:", verifyData.absentCount ?? 0, "Percentage:", verifyData.percentageForDate ?? 0, "%");
+              console.log("? [SUBMIT] Verified and synced - Present:", verifyData.presentCount ?? 0, "Absent:", verifyData.absentCount ?? 0, "Percentage:", verifyData.percentageForDate ?? 0, "%");
             }
           } catch (err) {
-            console.error("❌ [SUBMIT] Verification error:", err);
+            console.error("? [SUBMIT] Verification error:", err);
           }
         };
         fetchToVerify();
       }, 500);
     } catch (e) {
-      console.error("❌ [SUBMIT] Exception:", e);
+      console.error("? [SUBMIT] Exception:", e);
       toast.error("Server not reachable");
     }
   };
@@ -1287,7 +1308,7 @@ useEffect(() => {
       // Create notification for homework
       try {
         await createNotification(
-          "📝 New Homework: " + hwTitle,
+          "?? New Homework: " + hwTitle,
           `${hwTitle} (${hwSubject}) - Due: ${hwDueDate}`,
           "student",
           "homework",
@@ -1295,9 +1316,9 @@ useEffect(() => {
           null,
           { type: "homework", subject: hwSubject, dueDate: hwDueDate }
         );
-        console.log("✅ Notification created for homework");
+        console.log("? Notification created for homework");
       } catch (notifErr) {
-        console.warn("⚠️ Failed to create notification (non-critical):", notifErr);
+        console.warn("?? Failed to create notification (non-critical):", notifErr);
       }
 
       setHwTitle("");
@@ -1804,32 +1825,33 @@ useEffect(() => {
   };
 
   const totalStudents = students.length;
-  // ✅ Use API-returned counts (from backend) instead of local state
+  // ? Use API-returned counts (from backend) instead of local state
   // This ensures counts persist across page reloads and date changes
   // presentCount and absentCount are set from API response in lock check effect
-  const uiPresentCount = presentCount; // ✅ From API
-  const uiAbsentCount = absentCount;   // ✅ From API
+  const uiPresentCount = presentCount; // ? From API
+  const uiAbsentCount = absentCount;   // ? From API
   
-  console.log("📊 [COUNTS] Display - Total:", totalStudents, "Present (API):", presentCount, "Absent (API):", absentCount);
+  console.log("?? [COUNTS] Display - Total:", totalStudents, "Present (API):", presentCount, "Absent (API):", absentCount);
 
   const navItems = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "attendance", label: "Attendance" },
-    { id: "summary", label: "Students" },
-    { id: "analytics", label: "Class Analytics" },
-    { id: "marks-entry", label: "Add Marks" },
-    { id: "view-marks", label: "Results" },
-    { id: "homework", label: "Homework" },
-    { id: "announcements", label: "Admin Announcements" },
-    { id: "voice", label: "Teacher Voice Messages" },
-    { id: "events", label: "Events" },
-    { id: "timetable", label: "Timetable" },
-    { id: "subjects", label: "Subjects" },
-    { id: "exams", label: "Exams" },
-    { id: "exam-syllabus", label: "Exam Syllabus" },
-    { id: "exam-timetable", label: "Exam Timetable" },
-    { id: "password-resets", label: "Password Resets", feature: null },
-    { id: "settings", label: "Settings", feature: null },
+    { id: "profile", label: "Profile", icon: UserCircle2 },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "attendance", label: "Attendance", icon: CalendarCheck },
+    { id: "summary", label: "Students", icon: Users },
+    { id: "analytics", label: "Class Analytics", icon: BarChart3 },
+    { id: "marks-entry", label: "Add Marks", icon: ClipboardPlus },
+    { id: "view-marks", label: "Results", icon: ClipboardCheck },
+    { id: "homework", label: "Homework", icon: BookOpenCheck },
+    { id: "announcements", label: "Admin Announcements", icon: Megaphone },
+    { id: "voice", label: "Teacher Voice Messages", icon: Mic2 },
+    { id: "events", label: "Events", icon: CalendarDays },
+    { id: "timetable", label: "Timetable", icon: CalendarClock },
+    { id: "subjects", label: "Subjects", icon: BookOpen },
+    { id: "exams", label: "Exams", icon: FileSpreadsheet },
+    { id: "exam-syllabus", label: "Exam Syllabus", icon: ClipboardCheck },
+    { id: "exam-timetable", label: "Exam Timetable", icon: CalendarClock },
+    { id: "password-resets", label: "Password Resets", icon: ShieldCheck, feature: null },
+    { id: "settings", label: "Settings", icon: Settings, feature: null },
   ]
   .filter((item) => {
     // If no feature requirement or no schoolFeatures loaded yet, show it
@@ -1840,6 +1862,7 @@ useEffect(() => {
 
   // Check if current tab is disabled
   const _activeTabConfig = [
+    { id: "profile", feature: null },
     { id: "dashboard", feature: null },
     { id: "attendance", feature: "attendance" },
     { id: "summary", feature: null },
@@ -1862,13 +1885,13 @@ useEffect(() => {
 
   if (isAnalyticsView) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] p-4 md:p-8 font-sans">
+      <div className="teacher-portal-shell flex min-h-screen w-full bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900 p-4 md:p-8 font-sans">
         <div className="w-full">
           <button
             onClick={handleBackToDashboard}
-            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition"
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-emerald-100 hover:text-white hover:underline transition"
           >
-            <span aria-hidden="true">←</span>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to Dashboard
           </button>
           <div className="w-full min-h-[280px]">
@@ -1884,11 +1907,7 @@ useEffect(() => {
 
   return (
     <div
-      className={`h-screen ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"} flex flex-col lg:flex-row font-sans ${
-        activeTab === "analytics"
-          ? "bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b]"
-          : "bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100"
-      }`}
+      className={`teacher-portal-shell flex min-h-screen ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"} flex-col lg:flex-row font-sans bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900`}
     >
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
@@ -1900,24 +1919,34 @@ useEffect(() => {
 
       {/* ===== SIDEBAR ===== */}
       <div
-        className={`fixed inset-y-0 left-0 w-64 h-screen overflow-y-auto bg-gradient-to-b from-slate-900 to-slate-950 text-white p-5 flex flex-col z-30 transition-transform duration-300 transform lg:relative lg:inset-y-auto lg:shrink-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
+        className={`fixed inset-y-0 left-0 h-screen overflow-y-auto bg-slate-900/60 text-slate-200 p-4 flex flex-col z-30 transition-[width,transform] duration-200 backdrop-blur-xl ${
+          sidebarCollapsed ? "w-20" : "w-72"
+        } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} lg:relative lg:inset-y-auto lg:shrink-0`}
       >
-        {/* Header */}
-        <div className="mb-6">
-          <h2 className="text-xl font-black text-cyan-400 tracking-tight">
-            {(teacher && (teacher.name || teacher.fullName || teacher.displayName)) || "Teacher"}
-          </h2>
-          {teacher && (teacher.class || teacher.section) && (
-            <div className="text-xs text-slate-400 mt-2">
-              {teacher.class ? `Class ${teacher.class}` : ""}{teacher.class && teacher.section ? " • " : ""}{teacher.section ? `Section ${teacher.section}` : ""}
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+              <h2 className="text-lg font-black tracking-tight text-white">
+                {(teacher && (teacher.name || teacher.fullName || teacher.displayName)) || "Teacher"}
+              </h2>
+              {teacher && (teacher.class || teacher.section) && (
+                <div className="text-xs text-slate-400 mt-1">
+                  {teacher.class ? `Class ${teacher.class}` : ""}{teacher.class && teacher.section ? " - " : ""}{teacher.section ? `Section ${teacher.section}` : ""}
+                </div>
+              )}
+              {schoolName && <p className="text-xs text-slate-400 mt-1 break-words font-semibold">{schoolName}</p>}
             </div>
-          )}
-          {schoolName && <p className="text-xs md:text-sm text-slate-500 mt-1 break-words font-semibold">{schoolName}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((prev) => !prev)}
+            className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-slate-200 hover:bg-white/20 transition"
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
         </div>
 
-        {/* Nav Items */}
         <nav className="flex-1 space-y-1">
           {navItems.map((item) => (
             <button
@@ -1954,50 +1983,73 @@ useEffect(() => {
                 }
                 navigate(`/teacher/dashboard?section=${item.id}`);
               }}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition ${
+              title={item.label}
+              className={`group w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-3 ${
                 activeTab === item.id
-                  ? "bg-slate-700 text-cyan-400"
-                  : "text-slate-300 hover:bg-slate-700/50"
+                  ? "bg-emerald-500/20 text-emerald-100"
+                  : "text-slate-300 hover:bg-white/5"
               }`}
             >
-              {item.label}
+              {item.icon ? (
+                <item.icon
+                  className={`h-4 w-4 transition-transform duration-200 group-hover:scale-105 ${
+                    activeTab === item.id ? "text-emerald-200" : "text-slate-300"
+                  }`}
+                />
+              ) : null}
+              <span className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+                {item.label}
+              </span>
             </button>
           ))}
         </nav>
 
-        {/* Logout */}
-        <button
-          onClick={() => navigate("/teacher/change-password")}
-          className="w-full py-3 mb-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg transition text-sm"
-        >
-          Change Password
-        </button>
-        <button
-          onClick={handleLogout}
-          className="w-full py-3 bg-red-900 hover:bg-red-800 text-white font-bold rounded-lg transition text-sm"
-        >
-          Logout
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={() => navigate("/teacher/change-password")}
+            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-white/10 text-slate-100 hover:bg-white/20 transition"
+            title="Change Password"
+          >
+            <span className="flex items-center gap-3">
+              <ShieldCheck className="h-4 w-4" />
+              <span className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+                Change Password
+              </span>
+            </span>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition"
+            title="Logout"
+          >
+            <span className="flex items-center gap-3">
+              <LogOut className="h-4 w-4" />
+              <span className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+                Logout
+              </span>
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className={`flex-1 w-full lg:w-auto min-w-0 flex flex-col ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"}`}>
+      <div className={`flex-1 w-full lg:w-auto min-w-0 flex flex-col bg-slate-900/60 backdrop-blur-xl ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"}`}>
         {/* Header */}
         <div
           className={`backdrop-blur-md px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3 ${
             activeTab === "analytics"
-              ? "bg-slate-950/65 border-b border-slate-700/70"
-              : "bg-white/80 border-b border-slate-200"
+              ? "bg-slate-950/70 border-b border-white/10"
+              : "bg-slate-950/70 border-b border-white/10"
           }`}
         >
           <div className="flex items-center min-w-0">
             {activeTab !== "analytics" && (
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className={`lg:hidden mr-3 p-2 rounded-lg transition ${activeTab === "analytics" ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
+                className="lg:hidden mr-3 p-2 rounded-lg transition hover:bg-white/10"
                 title="Toggle sidebar"
               >
-                <svg className={`w-6 h-6 ${activeTab === "analytics" ? "text-slate-100" : "text-slate-900"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-slate-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
@@ -2006,28 +2058,40 @@ useEffect(() => {
               {activeTab === "analytics" && (
                 <button
                   onClick={handleBackToDashboard}
-                  className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white hover:underline transition"
+                  className="mb-2 flex items-center gap-2 text-sm font-medium text-emerald-100 hover:text-white hover:underline transition"
                 >
-                  <span aria-hidden="true">←</span>
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                   Back to Dashboard
                 </button>
               )}
-              <h1 className={`text-xl md:text-3xl font-black break-words ${activeTab === "analytics" ? "text-slate-100" : "text-slate-900"}`}>
+              <h1 className="text-xl md:text-3xl font-black break-words text-white">
                 {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
               </h1>
-              <p className={`text-xs md:text-sm mt-1 break-words ${activeTab === "analytics" ? "text-slate-300" : "text-slate-500"}`}>
-                Class {className} • Section {section}
+              <p className="text-xs md:text-sm mt-1 break-words text-slate-300">
+                Class {className} - Section {section}
               </p>
             </div>
           </div>
           
-          {/* Notification Bell */}
           <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-2 rounded-xl px-3 py-2 border border-white/10 bg-white/10">
+              <Search className="h-4 w-4 text-slate-200" />
+              <input
+                placeholder="Search class, homework, exams..."
+                className="bg-transparent text-sm outline-none w-56 text-slate-100 placeholder:text-slate-400"
+              />
+            </div>
             <NotificationBell
               onClick={() => setShowNotifications(!showNotifications)}
               unreadCount={unreadCount}
               isOpen={showNotifications}
             />
+            <div className="flex items-center gap-2 rounded-full px-2 py-1.5 border border-white/10 bg-white/10">
+              <UserCircle2 className="text-slate-100 h-5 w-5" />
+              <span className="hidden md:inline text-xs font-semibold text-slate-200">
+                {teacher?.name || "Teacher"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -2045,29 +2109,82 @@ useEffect(() => {
         {/* Content */}
         <div
           className={`flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-6 ${
-            activeTab === "analytics"
-              ? "p-0 bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b]"
-              : "p-3 md:p-6 lg:p-8 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100"
+            activeTab === "analytics" ? "p-0" : "p-3 md:p-6 lg:p-8"
           }`}
         >
           <div className={activeTab === "analytics" ? "w-full" : activeTab === "timetable" ? "w-full" : "mx-auto w-full max-w-7xl"}>
+          {/* ===== PROFILE ===== */}
+          {activeTab === "profile" && (
+            <PageContainer className="space-y-4">
+              <PageIntro
+                title="My Profile"
+                description="Review your personal and employment details."
+                icon={<UserCircle2 className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
+                <div className="saas-card p-6 space-y-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <span className="text-slate-600 font-medium">Name</span>
+                    <span className="text-slate-900 font-bold sm:text-right break-words">
+                      {teacher?.name || "Not set"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <span className="text-slate-600 font-medium">Email</span>
+                    <span className="text-slate-900 font-bold sm:text-right break-words">
+                      {teacher?.email || "Not set"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <span className="text-slate-600 font-medium">Phone</span>
+                    <span className="text-slate-900 font-bold sm:text-right break-words">
+                      {teacher?.phone || teacher?.mobile || "Not set"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <span className="text-slate-600 font-medium">Class & Section</span>
+                    <span className="text-slate-900 font-bold sm:text-right break-words">
+                      {className || "-"} {section ? `• ${section}` : ""}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <span className="text-slate-600 font-medium">School</span>
+                    <span className="text-slate-900 font-bold sm:text-right break-words">
+                      {schoolName || teacher?.schoolName || "Not set"}
+                    </span>
+                  </div>
+                </div>
+            </PageContainer>
+          )}
+
           {/* ===== DASHBOARD ===== */}
           {activeTab === "dashboard" && (
-            <PageContainer className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Class Summary</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Class" value={classInfo?.className || "-"} icon="CLS" tone="blue" />
-                <StatCard label="Section" value={classInfo?.section || "-"} icon="SEC" tone="purple" />
-                <StatCard label="Total Students" value={classInfo?.totalStudents || 0} icon="STU" tone="green" />
+            <PageContainer className="space-y-6">
+              <DashboardHero
+                title="Teacher Dashboard"
+                subtitle="Monitor attendance, homework, and class performance in one place."
+                icon={<LayoutDashboard className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <AnalyticsCard
+                  icon={<Users className="h-5 w-5" />}
+                  label="Total Students"
+                  value={classInfo?.totalStudents || students.length || 0}
+                  description="Class roster size"
+                  gradient="from-emerald-500 to-teal-600"
+                />
               </div>
 
               {/* ===== ATTENDANCE INSIGHTS ===== */}
-              <div className="space-y-4 mt-6">
+              <div className="space-y-4 mt-2">
                 <h2 className="text-lg font-bold text-slate-900">Student Attendance Insights</h2>
                 {students.length === 0 ? (
-                  <Card className="text-center text-slate-500 p-6">
-                    No students to display
-                  </Card>
+                  <EmptyState
+                    title="No students to display"
+                    description="Add students to the class to view attendance insights."
+                  />
                 ) : (
                   <div className="space-y-3">
                     {/* Attendance Overview Stats */}
@@ -2153,14 +2270,17 @@ useEffect(() => {
           {/* ===== STUDENTS SUMMARY (TABLE) ===== */}
           {activeTab === "summary" && (
             <PageContainer className="space-y-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Students Summary</h2>
-                <p className="text-sm text-slate-600 mt-1">Click any student to view detailed analytics & performance insights</p>
-              </div>
+              <PageIntro
+                title="Students Summary"
+                description="Click any student to view detailed analytics and performance insights."
+                icon={<Users className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               {students.length === 0 ? (
-                <Card className="text-center text-slate-500 p-6">
-                  No students in this class
-                </Card>
+                <EmptyState
+                  title="No students in this class"
+                  description="Enroll students to unlock attendance and performance insights."
+                />
               ) : (
                 <div className="space-y-3">
                   <div className="md:hidden space-y-2">
@@ -2179,7 +2299,7 @@ useEffect(() => {
                           {s.parentPhone || s.phone ? (
                             <a
                               href={`tel:${String(s.parentPhone || s.phone).replace(/\s+/g, "")}`}
-                              className="text-blue-600 underline"
+                              className="text-emerald-300 underline"
                               onClick={(e) => e.stopPropagation()}
                             >
                               {s.parentPhone || s.phone}
@@ -2194,7 +2314,7 @@ useEffect(() => {
                               e.stopPropagation();
                               openEditStudentModal(s);
                             }}
-                            className="px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-xs font-bold hover:bg-blue-200 transition"
+                            className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-200 text-xs font-bold hover:bg-emerald-500/30 transition"
                           >
                             Edit
                           </button>
@@ -2219,7 +2339,7 @@ useEffect(() => {
                         {students.map((s) => (
                           <tr
                             key={s._id}
-                            className="border-b border-slate-100 hover:bg-blue-50 cursor-pointer transition"
+                            className="border-b border-slate-100 hover:bg-emerald-500/10 cursor-pointer transition"
                             onClick={() => navigate(`/teacher/student-analytics/${s._id}`)}
                           >
                             <td className="px-4 py-3 text-slate-700">{s.rollNo}</td>
@@ -2229,7 +2349,7 @@ useEffect(() => {
                               {s.parentPhone || s.phone ? (
                                 <a
                                   href={`tel:${String(s.parentPhone || s.phone).replace(/\s+/g, "")}`}
-                                  className="text-blue-600 underline"
+                                  className="text-emerald-300 underline"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   {s.parentPhone || s.phone}
@@ -2245,7 +2365,7 @@ useEffect(() => {
                                   e.stopPropagation();
                                   openEditStudentModal(s);
                                 }}
-                                className="px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-xs font-bold hover:bg-blue-200 transition"
+                                className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-200 text-xs font-bold hover:bg-emerald-500/30 transition"
                               >
                                 Edit
                               </button>
@@ -2271,7 +2391,12 @@ useEffect(() => {
           {/* ===== SUBJECTS ===== */}
           {activeTab === "subjects" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Subjects</h2>
+              <PageIntro
+                title="Subjects"
+                description="Define and manage the subjects for your class."
+                icon={<BookOpen className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <TeacherSubjectsManager
                 token={token}
                 className={className}
@@ -2287,7 +2412,12 @@ useEffect(() => {
           {/* ===== EXAMS ===== */}
           {activeTab === "exams" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Exams</h2>
+              <PageIntro
+                title="Exams"
+                description="Create and manage exam schedules and marks."
+                icon={<CalendarDays className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <TeacherExamsMarksV2
                 token={token}
                 className={className}
@@ -2301,7 +2431,12 @@ useEffect(() => {
           {/* ===== MARKS ENTRY ===== */}
           {activeTab === "marks-entry" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Enter / Import Marks</h2>
+              <PageIntro
+                title="Enter / Import Marks"
+                description="Upload marks spreadsheets or enter scores manually."
+                icon={<BarChart3 className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <TeacherExamsMarksV2
                 token={token}
                 className={className}
@@ -2315,7 +2450,12 @@ useEffect(() => {
           {/* ===== VIEW MARKS ===== */}
           {activeTab === "view-marks" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">View Marks (Read Only)</h2>
+              <PageIntro
+                title="View Marks"
+                description="Review marks in read-only mode."
+                icon={<BarChart3 className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <TeacherExamsMarksV2
                 token={token}
                 className={className}
@@ -2329,7 +2469,12 @@ useEffect(() => {
           {/* ===== HOMEWORK ===== */}
           {activeTab === "homework" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Homework / Assignments</h2>
+              <PageIntro
+                title="Homework & Assignments"
+                description="Create, publish, and track homework tasks."
+                icon={<BookOpenCheck className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <DateFilterBar value={homeworkDateFilter} onChange={setHomeworkDateFilter} />
 
               <div className="saas-card p-3 md:p-6 space-y-4">
@@ -2339,31 +2484,31 @@ useEffect(() => {
                     placeholder="Title"
                     value={hwTitle}
                     onChange={(e) => setHwTitle(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <input
                     placeholder="Subject"
                     value={hwSubject}
                     onChange={(e) => setHwSubject(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <input
                     type="date"
                     value={hwDueDate}
                     onChange={(e) => setHwDueDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <textarea
                     placeholder="Description (optional)"
                     value={hwDesc}
                     onChange={(e) => setHwDesc(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-24"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-24"
                   />
                 </div>
                 <button
                   onClick={saveHomework}
                   disabled={hwLoading}
-                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition text-sm disabled:opacity-50"
+                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-lg hover:from-emerald-400 hover:to-teal-500 transition text-sm disabled:opacity-50"
                 >
                   {hwLoading ? "Adding..." : "Add Homework"}
                 </button>
@@ -2382,9 +2527,10 @@ useEffect(() => {
                 )}
               </div>
               {homework.length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  {hasDateFilter(homeworkDateFilter) ? "No items for selected date range" : "No homework yet"}
-                </div>
+                <EmptyState
+                  title={hasDateFilter(homeworkDateFilter) ? "No homework in this range" : "No homework today."}
+                  description="Assignments from your class will appear here."
+                />
               ) : (
                 <div className="space-y-3">
                   {homework.map((hw) => (
@@ -2411,8 +2557,14 @@ useEffect(() => {
           {/* ===== EVENTS ===== */}
           {activeTab === "events" && (
             <div className="space-y-4">
+              <PageIntro
+                title="Events & Calendar"
+                description="Plan and share important class events."
+                icon={<CalendarDays className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-slate-900">Events & Calendar</h2>
+                <h3 className="text-base font-bold text-slate-900">Manage Events</h3>
                 {contentUndoStack.length > 0 && (
                   <button
                     onClick={handleUndoContent}
@@ -2432,19 +2584,19 @@ useEffect(() => {
                     placeholder="Event name"
                     value={eventName}
                     onChange={(e) => setEventName(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <input
                     type="date"
                     value={eventDateVal}
                     onChange={(e) => setEventDateVal(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <input
                     placeholder="Description (optional)"
                     value={eventDesc}
                     onChange={(e) => setEventDesc(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <label className="flex items-center gap-2 text-slate-700 text-sm">
                     <input
@@ -2490,6 +2642,19 @@ useEffect(() => {
                       setEventDateVal("");
                       setIsHoliday(false);
                       toast.success("Event created successfully");
+                      try {
+                        await createNotification(
+                          "📅 New Event: " + eventName,
+                          `${eventName} on ${eventDateVal}`,
+                          "student",
+                          "event",
+                          token,
+                          null,
+                          { type: "event", eventName, eventDate: eventDateVal }
+                        );
+                      } catch (notifErr) {
+                        console.warn("?? Failed to create event notification (non-critical):", notifErr);
+                      }
                     } catch (err) {
                       console.error("CREATE EVENT ERROR:", err);
                       toast.error("Failed to create event");
@@ -2498,16 +2663,17 @@ useEffect(() => {
                     }
                   }}
                   disabled={eventLoading}
-                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition text-sm disabled:opacity-50"
+                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-lg hover:from-emerald-400 hover:to-teal-500 transition text-sm disabled:opacity-50"
                 >
                   {eventLoading ? "Creating..." : "Create Event"}
                 </button>
               </div>
 
               {events.length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  {hasDateFilter(eventsDateFilter) ? "No items for selected date range" : "No events scheduled"}
-                </div>
+                <EmptyState
+                  title={hasDateFilter(eventsDateFilter) ? "No items for selected date range" : "No events scheduled"}
+                  description="Events and holiday notes will show up here."
+                />
               ) : (
                 <div className="space-y-3">
                   {events.map((event) => (
@@ -2525,7 +2691,9 @@ useEffect(() => {
                           {contentDeletingId === event._id ? "Deleting..." : "Delete"}
                         </button>
                       </div>
-                      <div className="text-xs md:text-sm text-slate-500 mt-1 break-words">📅 {new Date(event.eventDate).toLocaleDateString()}</div>
+                      <div className="text-xs md:text-sm text-slate-500 mt-1 break-words">
+                        {new Date(event.eventDate).toLocaleDateString()}
+                      </div>
                       {event.description && <div className="text-sm text-slate-600 mt-2">{event.description}</div>}
                     </ListItemCard>
                   ))}
@@ -2537,11 +2705,16 @@ useEffect(() => {
           {/* ===== ATTENDANCE ===== */}
           {activeTab === "attendance" && (
             <div className="space-y-4">
+              <PageIntro
+                title="Attendance"
+                description="Mark and monitor daily attendance."
+                icon={<CalendarCheck className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <div className="saas-list-card p-3 md:p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">Attendance</h2>
-                    <p className="text-xs text-slate-500">Mark students — Present / Absent</p>
+                    <p className="text-xs text-slate-500">Mark students as Present or Absent</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
@@ -2549,7 +2722,7 @@ useEffect(() => {
                       value={date}
                       max={new Date().toISOString().split('T')[0]}
                       onChange={(e) => setDate(e.target.value)}
-                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                     {lockMessage && (
                       <span className={`text-xs px-2 py-1 rounded font-medium whitespace-nowrap ${
@@ -2561,20 +2734,6 @@ useEffect(() => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-4 text-center">
-                  <div className="bg-blue-50 p-3 rounded-lg">
-                    <div className="text-xs text-slate-500">Total Students</div>
-                    <div className="text-2xl font-black text-blue-600">{students.length ?? 0}</div>
-                  </div>
-                  <div className="bg-green-50 p-3 rounded-lg">
-                    <div className="text-xs text-slate-500">Present</div>
-                    <div className="text-2xl font-black text-green-600">{uiPresentCount ?? 0}</div>
-                  </div>
-                  <div className="bg-red-50 p-3 rounded-lg">
-                    <div className="text-xs text-slate-500">Absent</div>
-                    <div className="text-2xl font-black text-red-600">{uiAbsentCount ?? 0}</div>
-                  </div>
-                </div>
               </div>
 
               {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
@@ -2585,11 +2744,11 @@ useEffect(() => {
                   <div key={s._id} className="saas-list-card p-3 md:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
                     <div className="min-w-0 max-w-full">
                       <div className="font-semibold text-sm md:text-base break-words whitespace-normal max-w-full text-slate-900">{s.name}</div>
-                      <div className="text-xs md:text-sm text-slate-500 mt-1 break-words">Roll {s.rollNo || "—"}</div>
+                      <div className="text-xs md:text-sm text-slate-500 mt-1 break-words">Roll {s.rollNo || "-"}</div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="px-3 py-1 bg-slate-50 rounded-md text-sm font-bold text-slate-600">
-                        {studentOverallPercentages[s._id] !== undefined && studentOverallPercentages[s._id] !== null ? `${studentOverallPercentages[s._id]}%` : "—"}
+                        {studentOverallPercentages[s._id] !== undefined && studentOverallPercentages[s._id] !== null ? `${studentOverallPercentages[s._id]}%` : "-"}
                       </span>
                       <button
                         onClick={() => setStatus(s._id, "PRESENT")}
@@ -2633,7 +2792,7 @@ useEffect(() => {
                 <button
                   onClick={submitAttendance}
                   disabled={locked || !date}
-                  className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-lg hover:from-emerald-400 hover:to-teal-500 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Submit
                 </button>
@@ -2644,29 +2803,48 @@ useEffect(() => {
           {/* ===== TIMETABLE ===== */}
           {activeTab === "timetable" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Class Timetable</h2>
-              <TimetableGrid token={token} isTeacher={true} readOnly={false} />
+              <PageIntro
+                title="Class Timetable"
+                description="Build and share the weekly timetable."
+                icon={<CalendarDays className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
+              <TimetableGrid token={token} isTeacher={true} readOnly={false} theme="dark" />
             </div>
           )}
 
           {/* ===== ANNOUNCEMENTS ===== */}
           {activeTab === "announcements" && (
-            <VoiceAnnouncements 
-              endpoint="/api/teacher/announcements"
-              title="📢 School Announcements"
-              emptyMessage="No announcements yet"
-            />
+            <div className="space-y-4">
+              <PageIntro
+                title="Announcements"
+                description="Publish and review school announcements."
+                icon={<Megaphone className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
+              <VoiceAnnouncements
+                endpoint="/api/teacher/announcements"
+                title="School Announcements"
+                icon={<Megaphone className="h-4 w-4" />}
+                emptyMessage="No announcements today."
+              />
+            </div>
           )}
 
           {/* ===== VOICE MESSAGES ===== */}
           {activeTab === "voice" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Voice Messages</h2>
+              <PageIntro
+                title="Voice Messages"
+                description="Send voice updates and manage messages."
+                icon={<Mic2 className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <DateFilterBar value={voiceDateFilter} onChange={setVoiceDateFilter} />
 
               {/* Send Voice Message Form */}
               <div className="saas-card p-3 md:p-6 space-y-4">
-                <h3 className="font-bold text-slate-900">📢 Send Voice/Text Message to Students</h3>
+                <h3 className="font-bold text-slate-900">Send Voice/Text Message to Students</h3>
                 
                 <div className="flex items-center gap-2 text-slate-600 text-sm">
                   <input
@@ -2729,7 +2907,7 @@ useEffect(() => {
                     rows={3}
                     maxLength={1000}
                     placeholder="Type a message for your students"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <div className="flex items-center justify-between text-xs text-slate-500">
                     <span>You can send voice only, text only, or both.</span>
@@ -2738,7 +2916,7 @@ useEffect(() => {
                   <button
                     onClick={() => sendTeacherVoiceMessage(null)}
                     disabled={voiceSendLoading}
-                    className="w-full rounded-lg bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full rounded-lg bg-emerald-600 py-2 text-sm font-bold text-white hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {voiceSendLoading ? "Sending..." : "Send"}
                   </button>
@@ -2747,19 +2925,20 @@ useEffect(() => {
 
               {/* Received Messages */}
               <div>
-                <h3 className="font-bold text-slate-900 mb-4">📨 Your Voice Messages History</h3>
+                <h3 className="font-bold text-slate-900 mb-4">Voice Messages History</h3>
                 {voiceMessagesLoading ? (
                   <ListSkeleton rows={3} />
                 ) : voiceMessages.length === 0 ? (
-                  <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                    {hasDateFilter(voiceDateFilter) ? "No items for selected date range" : "No voice messages yet"}
-                  </div>
+                  <EmptyState
+                    title="No voice messages available"
+                    description={hasDateFilter(voiceDateFilter) ? "No items for selected date range." : "Your class updates will appear here."}
+                  />
                 ) : (
                   <div className="space-y-3">
-                    {voiceMessages.map((msg) => {
+                    {voiceMessages.slice(0, voiceMessagesPerPage).map((msg) => {
                       const typeMeta = getVoiceMessageTypeMeta(msg);
                       return (
-                      <ListItemCard key={msg._id}>
+                      <ListItemCard key={msg._id} className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-xl shadow-lg p-5">
                         <div className="mb-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${typeMeta.className}`}>
                             {typeMeta.label}
@@ -2767,18 +2946,18 @@ useEffect(() => {
                         </div>
                         <div className="flex items-center justify-between mb-3">
                           <div>
-                            <div className="font-semibold text-slate-900 text-sm">From: {msg.senderName}</div>
-                            <div className="text-xs text-slate-500">
+                            <div className="font-semibold text-slate-100 text-sm">From: {msg.senderName}</div>
+                            <div className="text-xs text-slate-400">
                               {new Date(msg.createdAt).toLocaleString()}
                             </div>
                           </div>
                           <button
                             onClick={() => handleDeleteVoiceMessage(msg)}
                             disabled={voiceMessageDeletingId === msg._id}
-                            className="px-3 py-1 text-xs font-semibold rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                            className="px-3 py-1 text-xs font-semibold rounded-lg bg-rose-500/20 text-rose-200 border border-rose-400/30 hover:bg-rose-500/30 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                             title="Delete voice message"
                           >
-                            {voiceMessageDeletingId === msg._id ? "Deleting..." : "🗑️ Delete"}
+                            {voiceMessageDeletingId === msg._id ? "Deleting..." : "Delete"}
                           </button>
                         </div>
                         {msg.audioUrl && !msg.audioMissing ? (
@@ -2789,26 +2968,49 @@ useEffect(() => {
                             </audio>
                           </div>
                         ) : (
-                          <div className="text-sm text-slate-500 break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">
+                          <div className="text-sm text-slate-400 break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">
                             {msg.audioMissing && !msg.textMessage ? "Audio file is not available for this message." : "No audio attachment"}
                           </div>
                         )}
                         {msg.textMessage ? (
-                          <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-sm text-slate-700 whitespace-pre-wrap break-words overflow-hidden [overflow-wrap:anywhere] max-w-full">
+                          <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 whitespace-pre-wrap break-words overflow-hidden [overflow-wrap:anywhere] max-w-full">
                             {msg.textMessage}
                           </div>
                         ) : null}
                       </ListItemCard>
                       );
                     })}
-                    {voicePage < voiceTotalPages && (
-                      <button
-                        onClick={loadMoreVoiceMessages}
-                        disabled={voiceMessagesLoadingMore}
-                        className="w-full py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition disabled:opacity-50"
-                      >
-                        {voiceMessagesLoadingMore ? "Loading..." : "Load More"}
-                      </button>
+                    {voiceTotalPages > 1 && (
+                      <div className="flex flex-wrap justify-center items-center gap-2 mt-6">
+                        <button
+                          onClick={() => setVoicePage((p) => Math.max(1, p - 1))}
+                          disabled={voicePage <= 1}
+                          className="px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-sm disabled:opacity-50"
+                        >
+                          Previous
+                        </button>
+                        {Array.from({ length: voiceTotalPages }).map((_, idx) => {
+                          const pageNum = idx + 1;
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setVoicePage(pageNum)}
+                              className={`px-3 py-1 rounded-md text-sm ${
+                                pageNum === voicePage ? "bg-blue-500 text-white" : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                        <button
+                          onClick={() => setVoicePage((p) => Math.min(voiceTotalPages, p + 1))}
+                          disabled={voicePage >= voiceTotalPages}
+                          className="px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-sm disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -2819,6 +3021,12 @@ useEffect(() => {
           {/* ===== PASSWORD RESETS ===== */}
           {activeTab === "password-resets" && (
             <div className="space-y-5">
+              <PageIntro
+                title="Password Resets"
+                description="Manage password changes and reset requests."
+                icon={<ShieldCheck className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <div className="saas-card p-3 md:p-6 space-y-3">
                 <h2 className="text-lg font-bold text-slate-900">Change Your Password</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -2827,27 +3035,27 @@ useEffect(() => {
                     value={changePasswordForm.currentPassword}
                     onChange={(e) => setChangePasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
                     placeholder="Current Password"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <input
                     type="password"
                     value={changePasswordForm.newPassword}
                     onChange={(e) => setChangePasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
                     placeholder="New Password"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <input
                     type="password"
                     value={changePasswordForm.confirmPassword}
                     onChange={(e) => setChangePasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
                     placeholder="Confirm Password"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
                 <button
                   onClick={submitTeacherChangePassword}
                   disabled={changingPassword}
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition disabled:opacity-50"
                 >
                   {changingPassword ? "Updating..." : "Update Password"}
                 </button>
@@ -2887,7 +3095,7 @@ useEffect(() => {
                               }))
                             }
                             placeholder="Set new password"
-                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
                           <button
                             onClick={() => resolveResetRequest(reqItem)}
@@ -2907,7 +3115,12 @@ useEffect(() => {
           {/* ===== EXAM SYLLABUS ===== */}
           {activeTab === "exam-syllabus" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Exam Syllabus Management</h2>
+              <PageIntro
+                title="Exam Syllabus Management"
+                description="Build and update syllabus coverage for upcoming exams."
+                icon={<ClipboardList className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <ExamSyllabusManager token={token} teacher={teacher} />
             </div>
           )}
@@ -2915,7 +3128,12 @@ useEffect(() => {
           {/* ===== EXAM TIMETABLE ===== */}
           {activeTab === "exam-timetable" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Exam Timetable</h2>
+              <PageIntro
+                title="Exam Timetable"
+                description="Publish exam schedules for students."
+                icon={<CalendarDays className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <ExamTimetableManager token={token} teacher={teacher} />
             </div>
           )}
@@ -2941,21 +3159,21 @@ useEffect(() => {
                   value={editStudentForm.parentName}
                   onChange={(e) => setEditStudentForm((prev) => ({ ...prev, parentName: e.target.value }))}
                   placeholder="Parent Name"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
                 <input
                   type="text"
                   value={editStudentForm.parentPhone}
                   onChange={(e) => setEditStudentForm((prev) => ({ ...prev, parentPhone: e.target.value }))}
                   placeholder="Parent Phone"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
                 <input
                   type="email"
                   value={editStudentForm.email}
                   onChange={(e) => setEditStudentForm((prev) => ({ ...prev, email: e.target.value }))}
                   placeholder="Email"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
@@ -2969,7 +3187,7 @@ useEffect(() => {
                 <button
                   onClick={saveEditedStudent}
                   disabled={editStudentLoading}
-                  className="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition disabled:opacity-50"
+                  className="flex-1 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition disabled:opacity-50"
                 >
                   {editStudentLoading ? "Saving..." : "Save"}
                 </button>
@@ -2981,15 +3199,5 @@ useEffect(() => {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
 
 

@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import DevToastHost from "./components/DevToastHost";
+import DevPageIntro from "./components/DevPageIntro";
 
 const DEV_PORTAL_BASE = "/internal/dev-portal";
 const portalPath = (segment) => `${DEV_PORTAL_BASE}${segment}`;
@@ -46,7 +47,7 @@ const platformItems = [
 const systemItems = [
   { label: "System Controls", path: portalPath("/system-controls"), icon: Settings2 },
   { label: "Audit Logs", path: portalPath("/audit-logs"), icon: BarChart3 },
-  { label: "Settings", path: "/settings", icon: Settings2 },
+  { label: "Developer Settings", path: portalPath("/settings"), icon: Settings2 },
 ];
 
 const navSections = [
@@ -226,8 +227,14 @@ export default function DevLayout() {
           </header>
 
           <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-6">
+            <div className="mb-5">
+              <DevPageIntro
+                title="Developer Console"
+                description="Unified visibility into system health, audits, and platform controls."
+              />
+            </div>
             <div className="mb-4 rounded-2xl border border-amber-500/50 bg-amber-600/10 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-amber-100">
-              ⚠ Internal Developer Platform Unauthorized access is prohibited. All actions are logged.
+              Notice: Internal developer platform. Unauthorized access is prohibited. All actions are logged.
             </div>
             <Outlet />
           </main>

@@ -24,7 +24,10 @@ const log = {
   fail: (msg) => console.log(chalk.red(`❌ ${msg}`)),
   warn: (msg) => console.log(chalk.yellow(`⚠️  ${msg}`)),
   info: (msg) => console.log(chalk.blue(`ℹ ${msg}`)),
-  section: (msg) => console.log(chalk.cyan.bold(`\n${'='.repeat(60)}\n${msg}\n${'='.repeat(60)}`)),
+  section: (msg) => console.log(chalk.cyan.bold(`
+${'='.repeat(60)}
+${msg}
+${'='.repeat(60)}`)),
 };
 
 const recordPass = (test) => {
@@ -428,11 +431,13 @@ function generateReport() {
   const total = testResults.passed.length + testResults.failed.length;
   const passRate = ((testResults.passed.length / total) * 100).toFixed(1);
   
-  console.log(chalk.cyan(`\nTotal Tests: ${total}`));
+  console.log(chalk.cyan(`
+Total Tests: ${total}`));
   console.log(chalk.green(`Passed: ${testResults.passed.length}`));
   console.log(chalk.red(`Failed: ${testResults.failed.length}`));
   console.log(chalk.yellow(`Warnings: ${testResults.warnings.length}`));
-  console.log(chalk.cyan(`Pass Rate: ${passRate}%\n`));
+  console.log(chalk.cyan(`Pass Rate: ${passRate}%
+`));
 
   if (testResults.failed.length > 0) {
     log.section('FAILURES');
@@ -461,7 +466,8 @@ function generateReport() {
     },
   };
 
-  console.log(chalk.cyan('\n📊 Full report saved to: DEV_CONSOLE_SMOKE_TEST_REPORT.json'));
+  console.log(chalk.cyan("\nFull report saved to: DEV_CONSOLE_SMOKE_TEST_REPORT.json"));
+
   
   return report;
 }
@@ -472,7 +478,8 @@ async function runAllTests() {
   log.section('DEVELOPER CONSOLE SMOKE TEST');
   log.info(`Starting tests at ${new Date().toISOString()}`);
   log.info(`API Base: ${API_BASE}`);
-  log.info(`Frontend Base: ${FRONTEND_BASE}\n`);
+  log.info(`Frontend Base: ${FRONTEND_BASE}
+`);
 
   await testAuthentication();
   await testSchoolsManagement();

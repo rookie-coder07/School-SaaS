@@ -1,4 +1,1 @@
-export default function MarkModel(db) {
-  return db.collection("marks");
-}
-    
+export default function MarkModel(db) {\n  return db.collection("marks");\n}\n    

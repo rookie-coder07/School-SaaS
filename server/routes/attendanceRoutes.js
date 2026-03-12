@@ -7,7 +7,7 @@ export default function attendanceRoutes(db) {
   const attendance = db.collection("attendance");
 
   /* =====================================================
-     🎓 STUDENT VIEW ATTENDANCE
+     ðŸŽ“ STUDENT VIEW ATTENDANCE
      ===================================================== */
   router.get("/me", requireAuth, requireRole("STUDENT"), requireTenantId, async (req, res) => {
     try {

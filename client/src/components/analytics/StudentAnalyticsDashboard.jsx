@@ -15,7 +15,7 @@ import {
   YAxis,
 } from "recharts";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const CHART_COLORS = ["#38bdf8", "#6366f1", "#f59e0b", "#10b981", "#f43f5e", "#a855f7"];
 
 const toNum = (value) => {

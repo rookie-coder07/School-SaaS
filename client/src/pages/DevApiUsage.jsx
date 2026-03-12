@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import DevPortalLayout from "../components/DevPortalLayout";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const CACHE_KEY = "legacy_dev_api_usage_cache_v1";
 const CACHE_TTL_MS = 60 * 1000;
 

@@ -1,14 +1,16 @@
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import NotificationBell from "../components/NotificationBell";
 import { useToast } from "../components/ToastProvider";
 import PageContainer from "../components/ui/PageContainer";
-import { Card, StatCard } from "../components/ui/Card";
+import PageIntro from "../components/ui/PageIntro";
 import ListItemCard from "../components/ui/ListItemCard";
 import { ListSkeleton, StatCardSkeleton } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
 import { sessionTracker } from "../utils/sessionTracker";
+import { notifySpecificUser } from "../utils/notificationHelper";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
 import AttendanceCalendar from "../components/AttendanceCalendar";
 import StudentExamSyllabus from "../components/StudentExamSyllabus";
@@ -19,9 +21,45 @@ import DateFilterBar from "../components/DateFilterBar";
 import NotificationDropdown from "../components/NotificationDropdown";
 import TimetableGrid from "../components/TimetableGrid";
 import StudentAnalyticsDashboard from "../components/student/StudentAnalyticsDashboard";
+import {
+  BarChart3,
+  BookOpenCheck,
+  ArrowLeft,
+  CalendarCheck,
+  CalendarDays,
+  CalendarClock,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  GraduationCap,
+  LayoutDashboard,
+  LogOut,
+  Megaphone,
+  Mic2,
+  Search,
+  Settings,
+  UserCircle2,
+} from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const lazyFallback = <ListSkeleton rows={2} />;
+const REMINDER_DAYS_BEFORE = 1;
+
+const normalizeDate = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
+const isReminderWindow = (value) => {
+  const target = normalizeDate(value);
+  if (!target) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target - today) / 86400000);
+  return diffDays === REMINDER_DAYS_BEFORE;
+};
 
 const getVoiceMessageTypeMeta = (msg = {}) => {
   const hasAudio = Boolean(msg?.audioUrl);
@@ -54,6 +92,7 @@ export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedExamId, setSelectedExamId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -73,9 +112,10 @@ export default function StudentDashboard() {
   const [voiceMessages, setVoiceMessages] = useState([]);
   const [failedVoiceAudioIds, setFailedVoiceAudioIds] = useState(() => new Set());
   const [voiceMessagesLoading, setVoiceMessagesLoading] = useState(false);
-  const [voiceMessagesLoadingMore, setVoiceMessagesLoadingMore] = useState(false);
   const [voicePage, setVoicePage] = useState(1);
   const [voiceTotalPages, setVoiceTotalPages] = useState(1);
+  const voiceMessagesPerPage = 10;
+  const [voiceMessageTab, setVoiceMessageTab] = useState("voice");
   const [homeworkDateFilter, setHomeworkDateFilter] = useState({ from: "", to: "" });
   const [eventsDateFilter, setEventsDateFilter] = useState({ from: "", to: "" });
   const [voiceDateFilter, setVoiceDateFilter] = useState({ from: "", to: "" });
@@ -90,11 +130,24 @@ export default function StudentDashboard() {
     confirmPassword: "",
   });
   const [passwordUpdating, setPasswordUpdating] = useState(false);
+  const reminderAttemptedRef = useRef(new Set());
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = localStorage.getItem("studentToken");
   const toast = useToast();
+
+  const queueStudentReminder = useCallback(async (key, title, message, type, metadata = {}) => {
+    if (!student?._id || !token) return;
+    if (reminderAttemptedRef.current.has(key) || localStorage.getItem(key)) return;
+    reminderAttemptedRef.current.add(key);
+    try {
+      await notifySpecificUser(student._id, title, message, type, token, metadata);
+      localStorage.setItem(key, "1");
+    } catch (err) {
+      console.warn("REMINDER notification failed (non-critical):", err);
+    }
+  }, [student?._id, token]);
 
   // Handle navigation from notification clicks via query params
   useEffect(() => {
@@ -105,16 +158,16 @@ export default function StudentDashboard() {
       // Redirect old "syllabus" section to new "exam-syllabus"
       const targetSection = sectionParam === "syllabus" ? "exam-syllabus" : sectionParam;
       if (sectionParam === "syllabus") {
-        console.log("📍 Student Dashboard: Redirecting old 'syllabus' section to 'exam-syllabus'");
+        console.log("ðŸ“ Student Dashboard: Redirecting old 'syllabus' section to 'exam-syllabus'");
       } else {
-        console.log("📍 Student Dashboard: Navigating to section from query param:", sectionParam);
+        console.log("ðŸ“ Student Dashboard: Navigating to section from query param:", sectionParam);
       }
       setActiveTab(targetSection);
     }
     
     // Handle examId for specific exam syllabus viewing
     if (examIdParam) {
-      console.log("📍 Student Dashboard: Exam ID from notification:", examIdParam);
+      console.log("ðŸ“ Student Dashboard: Exam ID from notification:", examIdParam);
       setSelectedExamId(examIdParam);
     } else {
       setSelectedExamId(null);
@@ -132,11 +185,11 @@ export default function StudentDashboard() {
         });
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
-            console.warn("🔴 Authentication failed, redirecting to login");
+            console.warn("ðŸ”´ Authentication failed, redirecting to login");
             navigate("/student/login", { replace: true });
             return;
           }
-          console.warn("⚠️ Dashboard fetch returned status:", res.status);
+          console.warn("âš ï¸ Dashboard fetch returned status:", res.status);
           return;
         }
         const data = await res.json();
@@ -150,7 +203,7 @@ export default function StudentDashboard() {
         else localStorage.removeItem("studentMustChangePassword");
       } catch (err) {
         if (err?.name === "AbortError") return;
-        console.error("❌ STUDENT DASHBOARD FETCH ERROR:", err);
+        console.error("âŒ STUDENT DASHBOARD FETCH ERROR:", err);
         if (!token) {
           navigate("/student/login", { replace: true });
         }
@@ -181,7 +234,7 @@ export default function StudentDashboard() {
         });
       } catch (err) {
         if (err?.name === "AbortError") return;
-        console.error("❌ STUDENT MARKS V2 FETCH ERROR:", err);
+        console.error("âŒ STUDENT MARKS V2 FETCH ERROR:", err);
         setMarksPayload({ exams: [], legacyMarks: [] });
       } finally {
         setMarksLoading(false);
@@ -281,6 +334,21 @@ export default function StudentDashboard() {
     return () => controller.abort();
   }, [activeTab, token, homeworkDateFilter]);
 
+  useEffect(() => {
+    if (!student?._id || !Array.isArray(homework)) return;
+    homework.forEach((hw) => {
+      if (!hw?.dueDate || !isReminderWindow(hw.dueDate)) return;
+      const key = `studentReminder:homework:${student._id}:${hw._id}:${hw.dueDate}`;
+      queueStudentReminder(
+        key,
+        "📘 Homework due tomorrow",
+        `${hw.title || hw.subject || "Homework"} is due tomorrow.`,
+        "homework",
+        { type: "homework", dueDate: hw.dueDate }
+      );
+    });
+  }, [homework, queueStudentReminder, student?._id]);
+
   // Fetch events
   useEffect(() => {
     if (activeTab !== "events") return;
@@ -315,6 +383,27 @@ export default function StudentDashboard() {
     return () => controller.abort();
   }, [activeTab, token, eventsDateFilter]);
 
+  useEffect(() => {
+    if (!student?._id || !Array.isArray(events)) return;
+    events.forEach((evt) => {
+      if (!evt?.eventDate || !isReminderWindow(evt.eventDate)) return;
+      const key = `studentReminder:event:${student._id}:${evt._id}:${evt.eventDate}`;
+      queueStudentReminder(
+        key,
+        "📅 Event tomorrow",
+        `${evt.eventName || evt.title || "Event"} is tomorrow.`,
+        "event",
+        { type: "event", eventDate: evt.eventDate }
+      );
+    });
+  }, [events, queueStudentReminder, student?._id]);
+
+  useEffect(() => {
+    if (activeTab !== "voice") return;
+    setVoicePage(1);
+    setVoiceMessageTab("voice");
+  }, [activeTab, voiceDateFilter]);
+
   // Fetch voice messages
   useEffect(() => {
     if (activeTab !== "voice") return;
@@ -326,14 +415,13 @@ export default function StudentDashboard() {
         const dateQuery = buildDateFilterQuery(voiceDateFilter);
         const selectedVoiceId = searchParams.get("id");
         const voiceIdQuery = selectedVoiceId ? `&id=${encodeURIComponent(selectedVoiceId)}` : "";
-        const res = await fetch(`${API_URL}/api/student/voice-messages?page=1&limit=20${dateQuery ? `&${dateQuery}` : ""}${voiceIdQuery}`, {
+        const res = await fetch(`${API_URL}/api/student/voice-messages?page=${voicePage}&limit=${voiceMessagesPerPage}${dateQuery ? `&${dateQuery}` : ""}${voiceIdQuery}`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
         if (!res.ok) {
           console.warn("STUDENT VOICE: Fetch failed with status", res.status);
           setVoiceMessages([]);
-          setVoicePage(1);
           setVoiceTotalPages(1);
           return;
         }
@@ -342,7 +430,6 @@ export default function StudentDashboard() {
         console.log(`STUDENT VOICE: Fetched ${list.length} voice messages`);
         setVoiceMessages(list);
         setFailedVoiceAudioIds(new Set());
-        setVoicePage(Number(data?.page || 1));
         setVoiceTotalPages(Number(data?.totalPages || 1));
       } catch (err) {
         if (err?.name === "AbortError") return;
@@ -354,30 +441,7 @@ export default function StudentDashboard() {
     };
     if (token) fetchVoiceMessages();
     return () => controller.abort();
-  }, [activeTab, token, voiceDateFilter, searchParams]);
-
-
-  const loadMoreVoiceMessages = async () => {
-    if (voiceMessagesLoadingMore || voicePage >= voiceTotalPages) return;
-    try {
-      setVoiceMessagesLoadingMore(true);
-      const nextPage = voicePage + 1;
-      const dateQuery = buildDateFilterQuery(voiceDateFilter);
-      const res = await fetch(`${API_URL}/api/student/voice-messages?page=${nextPage}&limit=20${dateQuery ? `&${dateQuery}` : ""}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const nextItems = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
-      setVoiceMessages((prev) => [...prev, ...nextItems]);
-      setVoicePage(Number(data?.page || nextPage));
-      setVoiceTotalPages(Number(data?.totalPages || voiceTotalPages));
-    } catch (err) {
-      console.error("LOAD MORE VOICE ERROR:", err);
-    } finally {
-      setVoiceMessagesLoadingMore(false);
-    }
-  };
+  }, [activeTab, token, voiceDateFilter, searchParams, voicePage, voiceMessagesPerPage]);
 
   // Fetch timetable
   useEffect(() => {
@@ -484,21 +548,26 @@ export default function StudentDashboard() {
   }, []);
 
   const navItems = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "attendance", label: "Attendance" },
-    { id: "analytics", label: "Analytics" },
-    { id: "marks", label: "Marks" },
-    { id: "homework", label: "Homework" },
-    { id: "timetable", label: "Timetable" },
-    { id: "exams", label: "Exams" },
-    { id: "exam-syllabus", label: "Exam Syllabus" },
-    { id: "announcements", label: "Announcements" },
-    { id: "voice", label: "Voice Messages" },
-    { id: "events", label: "Events" },
-    { id: "profile", label: "Profile" },
-    { id: "settings", label: "Settings" },
-    { id: "logout", label: "Logout" },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "attendance", label: "Attendance", icon: CalendarCheck },
+    { id: "analytics", label: "Analytics", icon: BarChart3 },
+    { id: "marks", label: "Marks", icon: ClipboardList },
+    { id: "homework", label: "Homework", icon: BookOpenCheck },
+    { id: "timetable", label: "Timetable", icon: CalendarClock },
+    { id: "exams", label: "Exams", icon: GraduationCap },
+    { id: "exam-syllabus", label: "Exam Syllabus", icon: ClipboardList },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
+    { id: "voice", label: "Voice Messages", icon: Mic2 },
+    { id: "events", label: "Events", icon: CalendarCheck },
+    { id: "profile", label: "Profile", icon: UserCircle2 },
+    { id: "settings", label: "Settings", icon: Settings },
   ];
+
+  const attendancePercent = Array.isArray(attendance) && attendance.length
+    ? Math.round(
+      (attendance.filter((entry) => entry?.status === "PRESENT" || entry?.present === true).length / attendance.length) * 100
+    )
+    : 0;
 
   const classTeacherName = teacher?.name ? String(teacher.name) : "Not Assigned";
   const classTeacherPhone = String(
@@ -512,7 +581,7 @@ export default function StudentDashboard() {
 
   if (isAnalyticsView) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-4 md:p-8 font-sans">
+      <div className="student-portal-shell min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-4 md:p-8 font-sans">
         <div className="w-full">
           <button
             onClick={() => {
@@ -521,7 +590,7 @@ export default function StudentDashboard() {
             }}
             className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition"
           >
-            <span aria-hidden="true">←</span>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to Dashboard
           </button>
           <StudentAnalyticsDashboard
@@ -536,7 +605,11 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className={`h-screen ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"} flex flex-col lg:flex-row bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 font-sans`}>
+    <div
+      className={`student-portal-shell flex min-h-screen ${
+        activeTab === "timetable" ? "overflow-x-hidden" : "overflow-x-hidden"
+      } flex-col lg:flex-row bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 font-sans`}
+    >
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
         <div
@@ -547,14 +620,28 @@ export default function StudentDashboard() {
 
       {/* ===== SIDEBAR ===== */}
       <div
-        className={`fixed inset-y-0 left-0 w-64 h-screen overflow-y-auto bg-gradient-to-b from-slate-900 to-slate-950 text-white p-5 flex flex-col z-30 transition-transform duration-300 transform lg:relative lg:inset-y-auto lg:shrink-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
+        className={`fixed inset-y-0 left-0 h-screen overflow-y-auto bg-slate-900/60 text-slate-200 p-4 flex flex-col z-30 transition-[width,transform] duration-200 backdrop-blur-xl ${
+          sidebarCollapsed ? "w-20" : "w-72"
+        } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} lg:relative lg:inset-y-auto lg:shrink-0`}
       >
-        <div className="mb-6">
-          <h2 className="text-xl font-black text-green-400 tracking-tight">Student</h2>
-          {student?.name && <p className="text-xs text-slate-400 mt-2">{student.name}</p>}
-          {schoolName && <p className="text-xs text-slate-500 mt-1 font-semibold">{schoolName}</p>}
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white font-black">
+              S
+            </div>
+            <div className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+              <h2 className="text-lg font-black tracking-tight">Student Portal</h2>
+              {schoolName ? <p className="text-xs text-slate-400">{schoolName}</p> : null}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((prev) => !prev)}
+            className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-slate-200 hover:bg-white/20 transition"
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
         </div>
 
         <nav className="flex-1 space-y-1">
@@ -562,11 +649,6 @@ export default function StudentDashboard() {
             <button
               key={item.id}
               onClick={() => {
-                if (item.id === "logout") {
-                  setSidebarOpen(false);
-                  handleLogout();
-                  return;
-                }
                 if (item.id === "settings") {
                   setSidebarOpen(false);
                   navigate("/settings");
@@ -575,38 +657,70 @@ export default function StudentDashboard() {
                 setActiveTab(item.id);
                 setSidebarOpen(false);
               }}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition ${
-                item.id === "logout"
-                  ? "bg-red-600 text-white hover:bg-red-700"
-                  : activeTab === item.id
-                  ? "bg-slate-700 text-green-400"
-                  : "text-slate-300 hover:bg-slate-700/50"
+              title={item.label}
+              className={`group w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-3 ${
+                activeTab === item.id
+                  ? "bg-blue-500/20 text-white"
+                  : "text-slate-300 hover:bg-white/5"
               }`}
             >
-              {item.label}
+              {item.icon ? (
+                <item.icon
+                  className={`h-4 w-4 transition-transform duration-200 group-hover:scale-105 ${
+                    activeTab === item.id ? "text-white" : "text-slate-300"
+                  }`}
+                />
+              ) : null}
+              <span className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+                {item.label}
+              </span>
             </button>
           ))}
         </nav>
-        <button
-          onClick={() => setShowChangePasswordModal(true)}
-          className="mt-2 w-full text-left px-4 py-3 rounded-lg text-sm font-semibold bg-slate-700 text-white hover:bg-slate-600 transition"
-        >
-          Change Password
-        </button>
+
+        <div className="space-y-2">
+          <button
+            onClick={() => setShowChangePasswordModal(true)}
+            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-white/10 text-slate-200 hover:bg-white/20 transition"
+            title="Change Password"
+          >
+            <span className="flex items-center gap-3">
+              <Settings className="h-4 w-4" />
+              <span className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+                Change Password
+              </span>
+            </span>
+          </button>
+          <button
+            onClick={() => {
+              localStorage.removeItem("studentToken");
+              navigate("/student/login");
+            }}
+            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition"
+            title="Logout"
+          >
+            <span className="flex items-center gap-3">
+              <LogOut className="h-4 w-4" />
+              <span className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+                Logout
+              </span>
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className={`flex-1 w-full lg:w-auto min-w-0 flex flex-col ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-hidden"}`}>
+      <div className={`flex-1 w-full lg:w-auto min-w-0 flex flex-col bg-slate-900/60 backdrop-blur-xl ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-y-auto overflow-x-hidden"}`}>
         {/* Header */}
-        <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3">
+        <div className="bg-slate-950/90 border-b border-white/10 backdrop-blur-xl shadow-[0_12px_32px_rgba(2,6,23,0.45)] px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3 text-slate-100">
           <div className="flex items-center min-w-0">
             {activeTab !== "analytics" && (
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden mr-3 p-2 hover:bg-slate-100 rounded-lg transition"
+                className="lg:hidden mr-3 p-2 hover:bg-white/10 rounded-lg transition"
                 title="Toggle sidebar"
               >
-                <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
@@ -618,26 +732,38 @@ export default function StudentDashboard() {
                     setActiveTab("dashboard");
                     navigate("/student/dashboard");
                   }}
-                  className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline transition"
+                  className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition"
                 >
-                  <span aria-hidden="true">←</span>
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                   Back to Dashboard
                 </button>
               )}
-              <h1 className="text-xl md:text-3xl font-black text-slate-900 break-words">
+              <h1 className="text-xl md:text-3xl font-black text-white break-words">
                 {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
               </h1>
-              <p className="text-xs md:text-sm text-slate-500 mt-1 break-words">{student?.name ?? "Student"}</p>
+              <p className="text-xs md:text-sm text-slate-300 mt-1 break-words">{student?.name ?? "Student"}</p>
             </div>
           </div>
           
-          {/* Notification Bell */}
           <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-2 rounded-xl px-3 py-2 border border-white/10 bg-white/10">
+              <Search className="h-4 w-4 text-slate-200" />
+              <input
+                placeholder="Search homework, exams, announcements..."
+                className="bg-transparent text-sm outline-none w-56 text-slate-100 placeholder:text-slate-400"
+              />
+            </div>
             <NotificationBell
               onClick={() => setShowNotifications(!showNotifications)}
               unreadCount={unreadCount}
               isOpen={showNotifications}
             />
+            <div className="flex items-center gap-2 rounded-full px-2 py-1.5 border border-white/10 bg-white/10">
+              <UserCircle2 className="text-slate-200 h-5 w-5" />
+              <span className="hidden md:inline text-xs font-semibold text-slate-100">
+                {student?.name || "Student"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -664,82 +790,208 @@ export default function StudentDashboard() {
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 lg:p-8 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100">
-          <div className={activeTab === "timetable" ? "w-full" : "mx-auto w-full max-w-7xl"}>
-          <Suspense fallback={lazyFallback}>
-            {loading && (
-              <PageContainer className="space-y-4">
-                <StatCardSkeleton count={2} />
-                <ListSkeleton rows={2} />
-              </PageContainer>
-            )}
+        <div className="flex-1 min-h-screen overflow-y-auto overflow-x-hidden px-8 py-6 pb-16">
+          <div className="w-full max-w-none">
+            <Suspense fallback={lazyFallback}>
+              {loading && (
+                <PageContainer className="space-y-4">
+                  <StatCardSkeleton count={2} />
+                  <ListSkeleton rows={2} />
+                </PageContainer>
+              )}
 
-          {/* ===== DASHBOARD ===== */}
-          {activeTab === "dashboard" && (
-            <PageContainer className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Welcome</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Class" value={student?.class || "-"} icon="🏫" tone="blue" />
-                <StatCard label="Section" value={student?.section || "-"} icon="🧾" tone="purple" />
-              </div>
+              {/* ===== DASHBOARD ===== */}
+              {activeTab === "dashboard" && (
+                <PageContainer className="relative space-y-6 text-white bg-transparent border-0 shadow-none p-0">
+                  <div className="pointer-events-none absolute -top-10 -left-10 h-48 w-48 rounded-full bg-fuchsia-500/20 blur-3xl" />
+                  <div className="pointer-events-none absolute top-10 -right-10 h-48 w-48 rounded-full bg-cyan-500/20 blur-3xl" />
+                  <div className="pointer-events-none absolute bottom-0 left-1/3 h-48 w-48 rounded-full bg-indigo-500/20 blur-3xl" />
 
-              <Card className="bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-200">
-                <div className="flex items-center gap-2 mb-3">
-                  <svg className="w-5 h-5 text-cyan-700" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M12 3a4 4 0 0 1 4 4v1.2a5.5 5.5 0 1 1-8 0V7a4 4 0 0 1 4-4Zm-6 15a6 6 0 0 1 6-6h0a6 6 0 0 1 6 6v1.25a.75.75 0 0 1-.75.75h-10.5A.75.75 0 0 1 6 19.25V18Z" />
-                  </svg>
-                  <h3 className="text-sm font-bold text-cyan-900 uppercase tracking-wide">Class Teacher</h3>
-                </div>
-                <div className="space-y-2 text-sm min-w-0">
-                  <div className="text-slate-700 break-words">
-                    <span className="font-semibold text-slate-900">Class Teacher:</span> {classTeacherName}
+                  <div className="relative flex flex-col gap-4 rounded-2xl border border-white/15 bg-slate-900/45 p-6 shadow-[0_14px_34px_rgba(2,6,23,0.38)] backdrop-blur-xl md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h1 className="text-2xl font-semibold text-white">
+                        Welcome back, {student?.name || "Student"}
+                      </h1>
+                      <p className="mt-1 text-sm text-slate-300">
+                        Review your attendance, homework, and announcements in one place.
+                      </p>
+                    </div>
+                    <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-slate-100">
+                      <LayoutDashboard className="h-7 w-7" aria-hidden="true" />
+                    </div>
                   </div>
-                  <div className="text-slate-700 flex items-center gap-2 min-w-0">
-                    <svg className="w-4 h-4 text-cyan-700" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <path d="M2.25 4.5A2.25 2.25 0 0 1 4.5 2.25h3a.75.75 0 0 1 .73.57l.86 3.44a.75.75 0 0 1-.27.77l-1.48 1.18a13.5 13.5 0 0 0 6.45 6.45l1.18-1.48a.75.75 0 0 1 .77-.27l3.44.86a.75.75 0 0 1 .57.73v3A2.25 2.25 0 0 1 17.5 21.75h-.5C8.7 21.75 2.25 15.3 2.25 7v-.5Z" />
-                    </svg>
-                    <span className="font-semibold text-slate-900">Contact:</span>
-                    {classTeacherName === "Not Assigned" ? (
-                      <span className="text-slate-500">Not Available</span>
-                    ) : classTeacherPhone ? (
-                      isMobileCallPreferred ? (
-                        <a
-                          href={`tel:${classTeacherPhone.replace(/\s+/g, "")}`}
-                          className="text-blue-700 underline font-semibold"
+
+                  <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-2xl border border-emerald-300/20 bg-gradient-to-br from-emerald-500/25 via-teal-500/20 to-slate-900/60 p-6 text-white shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-100">Attendance Percentage</p>
+                          <p className="mt-2 text-3xl font-black text-white">{attendancePercent}%</p>
+                          <p className="mt-2 text-xs text-emerald-100/80">Based on recorded days</p>
+                        </div>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/20 text-emerald-100">
+                          <CalendarCheck className="h-5 w-5" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-500/25 via-sky-500/20 to-slate-900/60 p-6 text-white shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-100">Homework Pending</p>
+                          <p className="mt-2 text-3xl font-black text-white">{homework.length || 0}</p>
+                          <p className="mt-2 text-xs text-cyan-100/80">Assignments awaiting</p>
+                        </div>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400/20 text-cyan-100">
+                          <BookOpenCheck className="h-5 w-5" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-violet-300/20 bg-gradient-to-br from-violet-500/25 via-purple-500/20 to-slate-900/60 p-6 text-white shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-violet-100">Announcements</p>
+                          <p className="mt-2 text-3xl font-black text-white">{unreadCount || 0}</p>
+                          <p className="mt-2 text-xs text-violet-100/80">Unread notices</p>
+                        </div>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-400/20 text-violet-100">
+                          <Megaphone className="h-5 w-5" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-500/25 via-orange-500/20 to-slate-900/60 p-6 text-white shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-amber-100">Exam Performance</p>
+                          <p className="mt-2 text-3xl font-black text-white">
+                            {marksPayload.exams.length || marks.length ? "Tracked" : "Pending"}
+                          </p>
+                          <p className="mt-2 text-xs text-amber-100/80">Exam results</p>
+                        </div>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400/20 text-amber-100">
+                          <BarChart3 className="h-5 w-5" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-white/15 bg-slate-900/45 p-6 shadow-[0_14px_34px_rgba(2,6,23,0.38)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-slate-100">Homework Preview</h3>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("homework")}
+                          className="text-xs font-semibold text-cyan-200 hover:text-cyan-100"
                         >
-                          {classTeacherPhone}
-                        </a>
-                      ) : (
-                        <span className="font-semibold text-slate-900 break-words">{classTeacherPhone}</span>
-                      )
-                    ) : (
-                      <span className="text-slate-500">Not Available</span>
-                    )}
-                  </div>
-                  <div className="text-slate-700 break-words">
-                    <span className="font-semibold text-slate-900">Class:</span> {classSectionText}
-                  </div>
-                </div>
-              </Card>
+                          View all
+                        </button>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {homework.length === 0 ? (
+                          <p className="text-sm text-slate-300">No homework loaded yet.</p>
+                        ) : (
+                          <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                            <div className="text-sm font-semibold text-white">
+                              {homework[0]?.title || homework[0]?.subject || "Homework"}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-300 line-clamp-2">
+                              {homework[0]?.description || "No description"}
+                            </div>
+                            <div className="mt-2 text-xs text-slate-300">
+                              Total pending: <span className="font-semibold text-white">{homework.length}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-              <Card>
-                <div className="text-xs font-semibold text-slate-500 uppercase">Status</div>
-                <div className="text-lg font-bold text-green-600 mt-2">Active</div>
-              </Card>
-            </PageContainer>
-          )}
+                    <div className="space-y-6">
+                      <div className="rounded-2xl border border-white/15 bg-slate-900/45 p-6 shadow-[0_14px_34px_rgba(2,6,23,0.38)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                        <h3 className="text-sm font-semibold text-slate-100">Class Teacher</h3>
+                        <div className="mt-4 space-y-2 text-sm text-slate-200">
+                          <div className="break-words">
+                            <span className="font-semibold text-white">Class Teacher:</span> {classTeacherName}
+                          </div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-semibold text-white">Contact:</span>
+                            {classTeacherName === "Not Assigned" ? (
+                              <span className="text-slate-400">Not Available</span>
+                            ) : classTeacherPhone ? (
+                              isMobileCallPreferred ? (
+                                <a
+                                  href={`tel:${classTeacherPhone.replace(/\s+/g, "")}`}
+                                  className="text-cyan-200 underline font-semibold"
+                                >
+                                  {classTeacherPhone}
+                                </a>
+                              ) : (
+                                <span className="font-semibold text-white break-words">{classTeacherPhone}</span>
+                              )
+                            ) : (
+                              <span className="text-slate-400">Not Available</span>
+                            )}
+                          </div>
+                          <div className="break-words">
+                            <span className="font-semibold text-white">Class:</span> {classSectionText}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/15 bg-slate-900/45 p-6 shadow-[0_14px_34px_rgba(2,6,23,0.38)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-slate-100">Upcoming Events</h3>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("events")}
+                            className="text-xs font-semibold text-cyan-200 hover:text-cyan-100"
+                          >
+                            View all
+                          </button>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {events.length === 0 ? (
+                            <p className="text-sm text-slate-300">No upcoming events loaded yet.</p>
+                          ) : (
+                            events.slice(0, 3).map((evt) => (
+                              <div key={evt._id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                                <div className="text-sm font-semibold text-white">
+                                  {evt.eventName || evt.title || "Event"}
+                                </div>
+                                {evt.eventDate ? (
+                                  <div className="mt-1 text-xs text-slate-300">
+                                    {new Date(evt.eventDate).toLocaleDateString()}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </PageContainer>
+              )}
 
 
           {/* ===== MARKS ===== */}
             {activeTab === "marks" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Your Marks</h2>
+              <PageIntro
+                title="Results & Marks"
+                description="Track exam outcomes, grades, and performance updates."
+                icon={<BarChart3 className="h-16 w-16" aria-hidden="true" />}
+                showTitle={true}
+              />
               {marksLoading ? (
                 <ListSkeleton rows={3} />
               ) : marksPayload.exams.length === 0 && marks.length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  No marks available
-                </div>
+                <EmptyState
+                  title="No marks yet"
+                  description="Marks will appear here once your exams are graded."
+                />
               ) : (
                 <StudentMarksCards
                   exams={marksPayload.exams}
@@ -752,13 +1004,19 @@ export default function StudentDashboard() {
           {/* ===== ATTENDANCE ===== */}
             {activeTab === "attendance" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Attendance</h2>
+              <PageIntro
+                title="Attendance Overview"
+                description="Review your daily attendance records and status."
+                icon={<CalendarCheck className="h-16 w-16" aria-hidden="true" />}
+                showTitle={true}
+              />
               {!attendance || attendance.length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  No attendance data available
-                </div>
+                <EmptyState
+                  title="No attendance data"
+                  description="Daily attendance will show up here once recorded."
+                />
               ) : (
-                <AttendanceCalendar attendanceData={attendance} />
+                <AttendanceCalendar attendanceData={attendance} theme="dark" />
               )}
             </div>
           )}
@@ -777,7 +1035,12 @@ export default function StudentDashboard() {
           {/* ===== EXAM SYLLABUS ===== */}
             {activeTab === "exam-syllabus" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Exam Syllabus</h2>
+              <PageIntro
+                title="Exam Syllabus"
+                description="See subject-wise syllabus coverage for upcoming exams."
+                icon={<ClipboardList className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
               <StudentExamSyllabus token={token} selectedExamId={selectedExamId} />
             </div>
           )}
@@ -785,20 +1048,31 @@ export default function StudentDashboard() {
           {/* ===== EXAMS ===== */}
             {activeTab === "exams" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Exam Timetable</h2>
-              <StudentExams token={token} />
+              <PageIntro
+                title="Exam Timetable"
+                description="Stay on top of your upcoming exam schedule."
+                icon={<CalendarDays className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+              />
+              <StudentExams token={token} studentId={student?._id} />
             </div>
           )}
 
           {/* ===== HOMEWORK ===== */}
             {activeTab === "homework" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Homework</h2>
+              <PageIntro
+                title="Homework"
+                description="Stay updated with assignments and due dates."
+                icon={<BookOpenCheck className="h-16 w-16" aria-hidden="true" />}
+                showTitle={true}
+              />
               <DateFilterBar value={homeworkDateFilter} onChange={setHomeworkDateFilter} />
               {homework.length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  {hasDateFilter(homeworkDateFilter) ? "No items for selected date range" : "No homework assigned"}
-                </div>
+                <EmptyState
+                  title={hasDateFilter(homeworkDateFilter) ? "No homework in this range" : "No homework today"}
+                  description="Your teachers will post assignments here when available."
+                />
               ) : (
                 <div className="space-y-3">
                   {homework.map((hw) => (
@@ -822,12 +1096,18 @@ export default function StudentDashboard() {
           {/* ===== EVENTS ===== */}
             {activeTab === "events" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Events</h2>
+              <PageIntro
+                title="School Events"
+                description="View upcoming events, holidays, and activities."
+                icon={<CalendarCheck className="h-16 w-16" aria-hidden="true" />}
+                showTitle={true}
+              />
               <DateFilterBar value={eventsDateFilter} onChange={setEventsDateFilter} />
               {events.length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  {hasDateFilter(eventsDateFilter) ? "No items for selected date range" : "No events scheduled"}
-                </div>
+                <EmptyState
+                  title={hasDateFilter(eventsDateFilter) ? "No items in this range" : "No events scheduled"}
+                  description="School events will show up here when announced."
+                />
               ) : (
                 <div className="space-y-3">
                   {events.map((evt) => (
@@ -849,7 +1129,12 @@ export default function StudentDashboard() {
           {/* ===== PROFILE ===== */}
             {activeTab === "profile" && student && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">My Profile</h2>
+              <PageIntro
+                title="My Profile"
+                description="Review your student profile and contact details."
+                icon={<UserCircle2 className="h-16 w-16" aria-hidden="true" />}
+                showTitle={true}
+              />
               <div className="saas-card p-3 md:p-6 space-y-3">
                 <div className="flex justify-between">
                   <span className="text-slate-600 font-medium">Name</span>
@@ -897,37 +1182,88 @@ export default function StudentDashboard() {
           {/* ===== TIMETABLE ===== */}
             {activeTab === "timetable" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Class Timetable</h2>
-              <TimetableGrid token={token} isTeacher={false} readOnly={true} />
+              <PageIntro
+                title="Class Timetable"
+                description="Your weekly timetable in one place."
+                icon={<CalendarDays className="h-16 w-16" aria-hidden="true" />}
+                showTitle={true}
+              />
+              <TimetableGrid token={token} isTeacher={false} readOnly={true} theme="dark" />
             </div>
           )}
 
           {/* ===== ANNOUNCEMENTS ===== */}
-            {activeTab === "announcements" && (
-            <VoiceAnnouncements 
-              endpoint="/api/student/announcements"
-              title="📢 School Announcements"
-              emptyMessage="No announcements yet"
-            />
+          {activeTab === "announcements" && (
+            <div className="space-y-4">
+              <PageIntro
+                title="Announcements"
+                description="Official updates from your school."
+                icon={<Megaphone className="h-16 w-16" aria-hidden="true" />}
+                showTitle={true}
+              />
+              <VoiceAnnouncements
+                endpoint="/api/student/announcements"
+                title="School Announcements"
+                icon={<Megaphone className="h-4 w-4" />}
+                emptyMessage="No announcements today."
+              />
+            </div>
           )}
 
           {/* ===== VOICE MESSAGES ===== */}
             {activeTab === "voice" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Voice Messages</h2>
+              <PageIntro
+                title="Voice Messages"
+                description="Listen to voice updates from your school."
+                icon={<Mic2 className="h-16 w-16" aria-hidden="true" />}
+                showTitle={true}
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVoiceMessageTab("voice")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                    voiceMessageTab === "voice"
+                      ? "bg-blue-500/20 text-blue-100 border border-blue-400/30"
+                      : "bg-white/10 text-slate-300 border border-white/10 hover:bg-white/20"
+                  }`}
+                >
+                  Voice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVoiceMessageTab("text")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                    voiceMessageTab === "text"
+                      ? "bg-blue-500/20 text-blue-100 border border-blue-400/30"
+                      : "bg-white/10 text-slate-300 border border-white/10 hover:bg-white/20"
+                  }`}
+                >
+                  Text
+                </button>
+              </div>
               <DateFilterBar value={voiceDateFilter} onChange={setVoiceDateFilter} />
               {voiceMessagesLoading ? (
                 <ListSkeleton rows={3} />
               ) : voiceMessages.length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  {hasDateFilter(voiceDateFilter) ? "No items for selected date range" : "No voice messages yet"}
-                </div>
+                <EmptyState
+                  tone="dark"
+                  title="No voice messages available"
+                  description={hasDateFilter(voiceDateFilter) ? "No items for selected date range." : "Your school will send updates here."}
+                />
               ) : (
                 <div className="space-y-3">
-                  {voiceMessages.map((msg) => {
+                  {voiceMessages
+                    .filter((msg) => (voiceMessageTab === "voice" ? Boolean(msg.audioUrl) : Boolean(msg.textMessage)))
+                    .slice(0, voiceMessagesPerPage)
+                    .map((msg) => {
                     const typeMeta = getVoiceMessageTypeMeta(msg);
                     return (
-                    <ListItemCard key={msg._id}>
+                    <ListItemCard
+                      key={msg._id}
+                      className="border border-white/10 bg-slate-900/60 text-slate-100 shadow-[0_14px_34px_rgba(2,6,23,0.38)] p-5"
+                    >
                       <div className="mb-2">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${typeMeta.className}`}>
                           {typeMeta.label}
@@ -935,11 +1271,11 @@ export default function StudentDashboard() {
                       </div>
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          <div className="font-semibold text-slate-900 text-sm">
+                          <div className="font-semibold text-slate-100 text-sm">
                             From: {msg.senderName || "Teacher"}
                           </div>
-                          <div className="text-xs text-slate-500">Teacher</div>
-                          <div className="text-xs text-slate-400 mt-1">
+                          <div className="text-xs text-slate-400">Teacher</div>
+                          <div className="text-xs text-slate-500 mt-1">
                             {new Date(msg.createdAt).toLocaleString()}
                           </div>
                         </div>
@@ -968,27 +1304,50 @@ export default function StudentDashboard() {
                         </div>
                       ) : null}
                       {(msg.audioMissing || (msg.audioUrl && failedVoiceAudioIds.has(String(msg._id)))) && !msg.textMessage ? (
-                        <div className="text-sm text-slate-500 break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">Audio file is not available for this message.</div>
+                        <div className="text-sm text-slate-300 break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">Audio file is not available for this message.</div>
                       ) : null}
                       {msg.textMessage ? (
-                        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-sm text-slate-700 whitespace-pre-wrap break-words overflow-hidden [overflow-wrap:anywhere] max-w-full">
+                        <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 whitespace-pre-wrap break-words overflow-hidden [overflow-wrap:anywhere] max-w-full">
                           {msg.textMessage}
                         </div>
                       ) : null}
                       {!msg.audioUrl && !msg.textMessage ? (
-                        <div className="text-sm text-red-500">Message content is not available</div>
+                        <div className="text-sm text-rose-300">Message content is not available</div>
                       ) : null}
                     </ListItemCard>
                     );
                   })}
-                  {voicePage < voiceTotalPages && (
-                    <button
-                      onClick={loadMoreVoiceMessages}
-                      disabled={voiceMessagesLoadingMore}
-                      className="w-full py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition disabled:opacity-50"
-                    >
-                      {voiceMessagesLoadingMore ? "Loading..." : "Load More"}
-                    </button>
+                  {voiceTotalPages > 1 && (
+                    <div className="flex flex-wrap justify-center items-center gap-2 mt-6">
+                      <button
+                        onClick={() => setVoicePage((p) => Math.max(1, p - 1))}
+                        disabled={voicePage <= 1}
+                        className="px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-sm disabled:opacity-50"
+                      >
+                        Previous
+                      </button>
+                      {Array.from({ length: voiceTotalPages }).map((_, idx) => {
+                        const pageNum = idx + 1;
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setVoicePage(pageNum)}
+                            className={`px-3 py-1 rounded-md text-sm ${
+                              pageNum === voicePage ? "bg-blue-500 text-white" : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                      <button
+                        onClick={() => setVoicePage((p) => Math.min(voiceTotalPages, p + 1))}
+                        disabled={voicePage >= voiceTotalPages}
+                        className="px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-sm disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -1052,6 +1411,7 @@ export default function StudentDashboard() {
     </div>
   );
 }
+
 
 
 

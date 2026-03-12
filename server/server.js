@@ -446,7 +446,8 @@ const safeStderrLog = (...parts) => {
         }
       })
       .join(" ");
-    process.stderr.write(`${line}\n`);
+    process.stderr.write(`${line}
+`);
   } catch {
     // Ignore broken stderr pipes under load/test harnesses.
   }
@@ -459,11 +460,15 @@ const appendCrashLog = (type, value) => {
     }
     const now = new Date().toISOString();
     const details = value instanceof Error
-      ? `${value.message}\n${value.stack || ""}`
+      ? `${value.message}
+${value.stack || ""}`
       : typeof value === "string"
         ? value
         : JSON.stringify(value, null, 2);
-    fs.appendFileSync(crashLogPath, `[${now}] ${type}\n${details}\n\n`, "utf8");
+    fs.appendFileSync(crashLogPath, `[${now}] ${type}
+${details}
+
+`, "utf8");
   } catch {
     // Keep crash path non-fatal even if file I/O fails.
   }
@@ -1562,16 +1567,88 @@ async function ensureTenantValidators() {
   }
 }
 
+const WEB_AUTHN_RP_NAME = "EduNest";
+const getWebAuthnRPID = () => String(process.env.RP_ID || "").trim();
+const getWebAuthnOrigin = () => {
+  const raw = String(process.env.WEBAUTHN_ORIGIN || "").trim();
+  if (!raw) return [];
+  return raw.split(",").map((item) => item.trim()).filter(Boolean);
+};
+const getWebAuthnRPName = () => WEB_AUTHN_RP_NAME;
+const getRequestRpID = (req) => {
+  const envRpID = getWebAuthnRPID();
+  const requestHost = String(req?.hostname || "").trim().replace(/:\d+$/, "");
+  if (process.env.NODE_ENV !== "production" && requestHost) {
+    return requestHost;
+  }
+  return envRpID || requestHost;
+};
+
 async function startServer() {
   try {
     const isProduction = process.env.NODE_ENV === "production";
     console.log("Environment:", process.env.NODE_ENV || "development");
     console.log("Mongo URI loaded:", Boolean(process.env.MONGO_URI));
-    console.log("Developer access code loaded:", Boolean(process.env.DEVELOPER_ACCESS_CODE));
+    console.log("RP_ID:", process.env.RP_ID);
+    console.log("WebAuthn origin:", process.env.WEBAUTHN_ORIGIN);
+    console.log("Developer access code loaded:", !!process.env.DEVELOPER_ACCESS_CODE);
+    const developerAccessCodeConfigured = Boolean(process.env.DEVELOPER_ACCESS_CODE || process.env.DEV_ACCESS_CODE);
+    const webAuthnRPID = getWebAuthnRPID();
+    const webAuthnOrigins = getWebAuthnOrigin();
+    const missingWebAuthnVars = [];
+    if (!webAuthnRPID) missingWebAuthnVars.push("RP_ID");
+    if (webAuthnOrigins.length === 0) missingWebAuthnVars.push("WEBAUTHN_ORIGIN");
+
+    if (missingWebAuthnVars.length > 0) {
+      if (isProduction) {
+        throw new Error(`Missing required WebAuthn environment variables: ${missingWebAuthnVars.join(", ")}`);
+      } else {
+        console.warn(`WebAuthn disabled in development. Missing: ${missingWebAuthnVars.join(", ")}`);
+      }
+    }
+
+    const nonHttpsOrigins = webAuthnOrigins.filter((value) => !String(value).toLowerCase().startsWith("https://"));
+    if (nonHttpsOrigins.length > 0) {
+      const message = `WebAuthn origin must use HTTPS in production. Invalid: ${nonHttpsOrigins.join(", ")}`;
+      if (isProduction) {
+        throw new Error(message);
+      } else {
+        const nonLocalOrigins = nonHttpsOrigins.filter(
+          (value) => !String(value).toLowerCase().startsWith("http://localhost")
+        );
+        if (nonLocalOrigins.length > 0) {
+          console.warn(message);
+        }
+      }
+    }
+
+    if (webAuthnRPID && webAuthnOrigins.length > 0) {
+      const invalidRpOrigins = webAuthnOrigins.filter((originValue) => {
+        try {
+          const originHost = new URL(originValue).hostname;
+          return originHost !== webAuthnRPID;
+        } catch {
+          return true;
+        }
+      });
+      if (invalidRpOrigins.length > 0) {
+        const message = `RP_ID must match WebAuthn origin domain. RP_ID=${webAuthnRPID} Origins=${webAuthnOrigins.join(
+          ", "
+        )}`;
+        if (isProduction) {
+          throw new Error(message);
+        } else {
+          console.warn(message);
+        }
+      }
+    }
     console.log("JWT secret loaded:", Boolean(process.env.JWT_SECRET));
-    if (isProduction && !process.env.DEVELOPER_ACCESS_CODE) {
-      developerLoginEnabled = false;
-      console.warn("Developer access code missing. Developer login disabled.");
+    if (isProduction && !developerAccessCodeConfigured) {
+      throw new Error("DEVELOPER_ACCESS_CODE is required in production");
+    }
+    developerLoginEnabled = developerAccessCodeConfigured;
+    if (!developerAccessCodeConfigured) {
+      console.warn("Developer access code missing. Developer login requests will be rejected until configured.");
     }
     if (isProduction && !process.env.JWT_SECRET) {
       throw new Error("JWT_SECRET is required in production");
@@ -1583,23 +1660,45 @@ async function startServer() {
         const delayMs = 5000;
         const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         let lastError = null;
+        const atlasAccessHint =
+          "MongoDB Atlas blocked the connection. Check Atlas Network Access allowlist and ensure outbound TCP 27017 is permitted.";
+        const isAtlasAccessError = (error) => {
+          const code = String(error?.code || "").toUpperCase();
+          const message = String(error?.message || "");
+          return (
+            code === "EACCES" ||
+            message.includes("EACCES") ||
+            message.includes("ECONNREFUSED") ||
+            message.includes("ENOTFOUND") ||
+            message.includes("ETIMEDOUT")
+          );
+        };
+
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
           try {
             await client.connect();
             db = client.db(mongoDbName);
             isMongoConnected = true;
-            console.log(`? MongoDB connected successfully (attempt ${attempt})`);
+            console.log(`MongoDB connected successfully (attempt ${attempt})`);
+            console.log("MongoDB Connected Successfully");
             break;
           } catch (error) {
             lastError = error;
             console.error(`MongoDB connection attempt ${attempt} failed:`, error.message);
+            if (isAtlasAccessError(error)) {
+              console.error(atlasAccessHint);
+            }
             if (attempt < maxAttempts) {
               await wait(delayMs);
             }
           }
         }
         if (!isMongoConnected) {
-          throw new Error(`MongoDB connection failed after ${maxAttempts} attempts: ${lastError?.message || "unknown error"}`);
+          const baseMessage = `MongoDB connection failed after ${maxAttempts} attempts: ${lastError?.message || "unknown error"}`;
+          if (isAtlasAccessError(lastError)) {
+            throw new Error(`${baseMessage}. ${atlasAccessHint}`);
+          }
+          throw new Error(baseMessage);
         }
         
         // Auto-seed developer user if MongoDB is connected
@@ -1607,28 +1706,10 @@ async function startServer() {
         await ensureMongoIndexes();
         await ensureTenantValidators();
       } catch (mongoError) {
-        if (isProduction) {
-          throw new Error(`MongoDB connection failed in production: ${mongoError.message}`);
-        }
-        console.warn(" MongoDB connection failed, running in fallback mode:", mongoError.message);
-        console.log("Tip: Install MongoDB locally or set MONGO_URI to a MongoDB Atlas connection string");
-        db = new MockDatabase();
-        isMongoConnected = false;
-        
-        // Auto-seed developer user in fallback mode too
-        await seedDeveloperUser();
+        throw new Error(`MongoDB connection failed: ${mongoError.message}`);
       }
     } else {
-      if (isProduction) {
-        throw new Error("MONGO_URI is required in production");
-      }
-      console.warn(" MONGO_URI not set - running in fallback mode with in-memory database");
-      console.log("To enable MongoDB: Set MONGO_URI in .env file");
-      db = new MockDatabase();
-      isMongoConnected = false;
-      
-      // Auto-seed developer user in fallback mode
-      await seedDeveloperUser();
+      throw new Error("MONGO_URI is required to start the server");
     }
 
     initAuditLogger(db);
@@ -1834,10 +1915,24 @@ const voiceUpload = multer({
 });
 
 // Keep original multer for other uploads
-const upload = multer({ 
+const upload = multer({
   dest: "uploads/",
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit for spreadsheet uploads
 });
+
+const spreadsheetUpload = (req, res, next) =>
+  upload.single("file")(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "File too large. Maximum allowed size is 5MB." });
+    }
+    return res.status(400).json({ error: err.message || "File upload failed" });
+  });
+
+const sanitizeCell = (value) =>
+  String(value ?? "")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .trim();
 
 /* ================================
    HEALTH CHECK
@@ -1996,13 +2091,6 @@ app.get("/api/debug/uploads", publicRateLimit, (req, res) => {
 const normalizeWebAuthnRole = (value = "") => String(value || "").trim().toUpperCase();
 const encodeBase64Url = (value) => Buffer.from(value).toString("base64url");
 const decodeBase64Url = (value = "") => Buffer.from(String(value || ""), "base64url");
-const getWebAuthnRPID = () => String(process.env.WEBAUTHN_RP_ID || "localhost").trim();
-const getWebAuthnOrigin = () => {
-  const raw = String(process.env.WEBAUTHN_ORIGIN || "http://localhost:5174").trim();
-  if (!raw) return ["http://localhost:5174"];
-  return raw.split(",").map((item) => item.trim()).filter(Boolean);
-};
-const getWebAuthnRPName = () => String(process.env.WEBAUTHN_RP_NAME || "School SaaS").trim();
 
 const setWebAuthnChallenge = (key, challenge, type) => {
   webauthnChallengeStore.set(key, {
@@ -2115,14 +2203,31 @@ app.post("/api/auth/webauthn/register/options", authLoginRateLimit, async (req, 
     const passwordOk = await bcrypt.compare(password, user.passwordHash);
     if (!passwordOk) return res.status(401).json({ error: "Invalid credentials" });
 
-    const excludeCredentials = user?.webauthnCredentialID
-      ? [{ id: decodeBase64Url(user.webauthnCredentialID), type: "public-key", transports: user.webauthnTransports || ["internal"] }]
-      : [];
+    let excludeCredentials = [];
+    if (user?.webauthnCredentialID) {
+      try {
+        excludeCredentials = [{
+          id: decodeBase64Url(user.webauthnCredentialID),
+          type: "public-key",
+          transports: user.webauthnTransports || ["internal"],
+        }];
+      } catch (decodeErr) {
+        console.warn("WEBAUTHN REGISTER OPTIONS WARN: Failed to decode credential ID, ignoring excludeCredentials.", decodeErr?.message || decodeErr);
+        excludeCredentials = [];
+      }
+    }
+
+    const rpName = getWebAuthnRPName();
+    const rpID = getRequestRpID(req);
+    if (!rpID) {
+      console.error("WEBAUTHN REGISTER OPTIONS ERROR: Missing RP_ID");
+      return res.status(500).json({ error: "Failed to generate WebAuthn registration options", details: "Missing RP_ID" });
+    }
 
     const options = await generateRegistrationOptions({
-      rpName: getWebAuthnRPName(),
-      rpID: getWebAuthnRPID(),
-      userID: encodeBase64Url(Buffer.from(user._id.toString())),
+      rpName,
+      rpID,
+      userID: Buffer.from(user._id.toString()),
       userName: user.email,
       userDisplayName: user.name || user.email,
       timeout: 60000,
@@ -2138,7 +2243,10 @@ app.post("/api/auth/webauthn/register/options", authLoginRateLimit, async (req, 
     return res.json(options);
   } catch (err) {
     console.error("WEBAUTHN REGISTER OPTIONS ERROR:", err);
-    return res.status(500).json({ error: "Failed to generate WebAuthn registration options" });
+    return res.status(500).json({
+      error: "Failed to generate WebAuthn registration options",
+      details: err?.message || "Unknown error",
+    });
   }
 });
 
@@ -2158,7 +2266,7 @@ app.post("/api/auth/webauthn/register/verify", authLoginRateLimit, async (req, r
       response: registrationResponse,
       expectedChallenge,
       expectedOrigin: getWebAuthnOrigin(),
-      expectedRPID: getWebAuthnRPID(),
+      expectedRPID: getRequestRpID(req),
       requireUserVerification: true,
     });
 
@@ -2199,7 +2307,7 @@ app.post("/api/auth/webauthn/login/options", authLoginRateLimit, async (req, res
     }
 
     const options = await generateAuthenticationOptions({
-      rpID: getWebAuthnRPID(),
+      rpID: getRequestRpID(req),
       timeout: 60000,
       userVerification: "preferred",
       allowCredentials: [
@@ -2240,7 +2348,7 @@ app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res)
       response: authenticationResponse,
       expectedChallenge,
       expectedOrigin: getWebAuthnOrigin(),
-      expectedRPID: getWebAuthnRPID(),
+      expectedRPID: getRequestRpID(req),
       requireUserVerification: true,
       credential: {
         id: user.webauthnCredentialID,
@@ -4044,13 +4152,17 @@ app.get("/api/teacher/marks", requireAuth, requireRole("TEACHER"), requireTenant
 /* ================================
    UPLOAD STUDENTS (ADMIN)
    ================================= */
-app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requireTenantId, upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-    const schoolId = req.user.schoolIdObj;
-    if (!schoolId) return res.status(400).json({ error: "Missing or invalid schoolId in token" });
+app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requireTenantId, spreadsheetUpload, async (req, res) => {
+    try {
+      if (!req.file || (!req.file.buffer && !req.file.path)) {
+        return res.status(400).json({ error: "Spreadsheet file missing" });
+      }
+      const ext = String(path.extname(req.file.originalname || "")).toLowerCase();
+      if (ext !== ".xlsx") {
+        return res.status(400).json({ error: "Invalid file type. Only .xlsx files are allowed." });
+      }
+      const schoolId = req.user.schoolIdObj;
+      if (!schoolId) return res.status(400).json({ error: "Missing or invalid schoolId in token" });
 
     console.log("FILE:", req.file.path, "SIZE:", req.file.size);
     const workbook = XLSX.readFile(req.file.path);
@@ -4071,24 +4183,27 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
       await Promise.all(
         batch.map(async (row) => {
           try {
-            const classValue = row.class ?? row.className;
-            const { parentName, parentPhone } = extractParentContact(row);
-            const identity = normalizeStudentIdentity({
-              classValue,
-              sectionValue: row.section,
-              rollNo: row.rollNo,
-            });
-            if (!row.name || !identity.class || !identity.section || !identity.rollNo || !parentName || !parentPhone) {
-              throw new Error("Missing required fields: name, class/className, section, rollNo, parentName, parentPhone");
-            }
-            if (!isValidParentPhone(parentPhone)) {
-              throw new Error("Invalid parentPhone format");
-            }
+              const classValue = sanitizeCell(row.class ?? row.className);
+              const { parentName, parentPhone } = extractParentContact(row);
+              const safeParentName = sanitizeCell(parentName);
+              const safeParentPhone = sanitizeCell(parentPhone);
+              const identity = normalizeStudentIdentity({
+                classValue,
+                sectionValue: sanitizeCell(row.section),
+                rollNo: sanitizeCell(row.rollNo),
+              });
+              const safeName = sanitizeCell(row.name);
+              if (!safeName || !identity.class || !identity.section || !identity.rollNo || !safeParentName || !safeParentPhone) {
+                throw new Error("Missing required fields: name, class/className, section, rollNo, parentName, parentPhone");
+              }
+              if (!isValidParentPhone(safeParentPhone)) {
+                throw new Error("Invalid parentPhone format");
+              }
 
-            const email =
-              row.email ||
-              `${row.name.replace(/\s+/g, "").toLowerCase()}@school.com`;
-            const normalizedEmail = String(email || "").trim().toLowerCase();
+              const email =
+                row.email ||
+                `${safeName.replace(/\s+/g, "").toLowerCase()}@school.com`;
+              const normalizedEmail = sanitizeCell(email).toLowerCase();
 
             let user = await db.collection("users").findOne({ email: normalizedEmail });
             if (user?.schoolId && String(user.schoolId) !== String(schoolId)) {
@@ -4101,27 +4216,27 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
                 email: normalizedEmail,
                 passwordHash: hash,
                 role: "STUDENT",
-                name: String(row.name || "").trim(),
-                phone: parentPhone,
-                schoolId: schoolId,
-                class: identity.class,
-                section: identity.section,
-                createdAt: new Date(),
-              });
-              user = { _id: r.insertedId };
-              console.log("CREATED USER:", user._id);
-            } else {
-              await db.collection("users").updateOne(
-                { _id: user._id },
-                {
-                  $set: {
-                    schoolId,
-                    role: "STUDENT",
-                    name: String(row.name || "").trim(),
-                    phone: parentPhone,
-                    class: identity.class,
-                    section: identity.section,
-                    updatedAt: new Date(),
+                  name: safeName,
+                  phone: safeParentPhone,
+                  schoolId: schoolId,
+                  class: identity.class,
+                  section: identity.section,
+                  createdAt: new Date(),
+                });
+                user = { _id: r.insertedId };
+                console.log("CREATED USER:", user._id);
+              } else {
+                await db.collection("users").updateOne(
+                  { _id: user._id },
+                  {
+                    $set: {
+                      schoolId,
+                      role: "STUDENT",
+                      name: safeName,
+                      phone: safeParentPhone,
+                      class: identity.class,
+                      section: identity.section,
+                      updatedAt: new Date(),
                   },
                 }
               );
@@ -4204,14 +4319,18 @@ app.post("/api/admin/upload-students", requireAuth, requireRole("ADMIN"), requir
 /* ================================
    UPLOAD TEACHERS (ADMIN)
    ================================= */
-app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requireTenantId, upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
+app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requireTenantId, spreadsheetUpload, async (req, res) => {
+    try {
+      if (!req.file || (!req.file.buffer && !req.file.path)) {
+        return res.status(400).json({ error: "Spreadsheet file missing" });
+      }
+      const ext = String(path.extname(req.file.originalname || "")).toLowerCase();
+      if (ext !== ".xlsx") {
+        return res.status(400).json({ error: "Invalid file type. Only .xlsx files are allowed." });
+      }
 
-    const schoolId = req.user.schoolIdObj;
-    if (!schoolId) return res.status(400).json({ error: "Invalid schoolId in token" });
+      const schoolId = req.user.schoolIdObj;
+      if (!schoolId) return res.status(400).json({ error: "Invalid schoolId in token" });
 
     console.log("FILE:", req.file.path, "SIZE:", req.file.size);
     const workbook = XLSX.readFile(req.file.path);
@@ -4232,21 +4351,22 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
       await Promise.all(
         batch.map(async (row) => {
           try {
-            const classValue = String(row.class ?? row.className ?? "").trim();
-            const sectionValue = String(row.section ?? "").trim();
-            const teacherPhone = extractTeacherPhone(row);
+              const classValue = sanitizeCell(row.class ?? row.className ?? "");
+              const sectionValue = sanitizeCell(row.section ?? "");
+              const teacherPhone = sanitizeCell(extractTeacherPhone(row));
+              const safeName = sanitizeCell(row.name);
 
-            if (!row.name || !classValue || !sectionValue) {
-              throw new Error(`Missing required fields: name, class, or section`);
-            }
-            if (!isValidTeacherPhone(teacherPhone)) {
-              throw new Error("Invalid phone format (must be 7-15 digits)");
-            }
+              if (!safeName || !classValue || !sectionValue) {
+                throw new Error(`Missing required fields: name, class, or section`);
+              }
+              if (!isValidTeacherPhone(teacherPhone)) {
+                throw new Error("Invalid phone format (must be 7-15 digits)");
+              }
 
-            const email =
-              row.email ||
-              `${row.name.replace(/\s+/g, "").toLowerCase()}@school.com`;
-            const normalizedEmail = String(email || "").trim().toLowerCase();
+              const email =
+                row.email ||
+                `${safeName.replace(/\s+/g, "").toLowerCase()}@school.com`;
+              const normalizedEmail = sanitizeCell(email).toLowerCase();
 
             let user = await db.collection("users").findOne({ email: normalizedEmail });
             if (user?.schoolId && String(user.schoolId) !== String(schoolId)) {
@@ -4260,11 +4380,11 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
                 email: normalizedEmail,
                 passwordHash: hash,
                 role: "TEACHER",
-                name: String(row.name || "").trim(),
-                phone: teacherPhone,
-                schoolId: schoolId,
-                class: classValue,
-                section: sectionValue,
+                  name: safeName,
+                  phone: teacherPhone,
+                  schoolId: schoolId,
+                  class: classValue,
+                  section: sectionValue,
                 createdAt: new Date(),
               });
 
@@ -4277,10 +4397,10 @@ app.post("/api/admin/upload-teachers", requireAuth, requireRole("ADMIN"), requir
                   $set: {
                     schoolId,
                     role: "TEACHER",
-                    name: String(row.name || "").trim(),
-                    phone: teacherPhone,
-                    class: classValue,
-                    section: sectionValue,
+                      name: safeName,
+                      phone: teacherPhone,
+                      class: classValue,
+                      section: sectionValue,
                     updatedAt: new Date(),
                   },
                 }
@@ -5245,11 +5365,11 @@ app.post("/api/teacher/marks/manual", requireAuth, requireRole("TEACHER"), requi
 /* ================================
    TEACHER: IMPORT MARKS (V2)
    ================================= */
-app.post("/api/teacher/marks/import", requireAuth, requireRole("TEACHER"), requireTenantId, upload.single("file"), async (req, res) => {
-  try {
-    const schoolId = req.user.schoolIdObj;
-    const teacherId = safeObjectId(req.user.userId);
-    const examId = safeObjectId(req.body?.examId);
+app.post("/api/teacher/marks/import", requireAuth, requireRole("TEACHER"), requireTenantId, spreadsheetUpload, async (req, res) => {
+    try {
+      const schoolId = req.user.schoolIdObj;
+      const teacherId = safeObjectId(req.user.userId);
+      const examId = safeObjectId(req.body?.examId);
     const teacherClass = String(req.user.class || "").trim();
     const teacherSection = String(req.user.section || "").trim();
 
@@ -5269,20 +5389,16 @@ app.post("/api/teacher/marks/import", requireAuth, requireRole("TEACHER"), requi
     if (subjects.length === 0) return res.status(400).json({ error: "Exam has no valid subjects/max marks configured" });
     const subjectMap = new Map(subjects.map((s) => [s.name.toLowerCase(), s]));
 
-    let rows = [];
-    if (req.file) {
-      const ext = String(path.extname(req.file.originalname || "")).toLowerCase();
-      if (ext === ".csv") {
-        const text = fs.readFileSync(req.file.path, "utf8");
-        rows = parseCsvTextRows(text);
-      } else if (ext === ".xlsx" || ext === ".xls") {
-        const workbook = XLSX.readFile(req.file.path);
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet);
-      } else {
-        return res.status(400).json({ error: "Invalid file type. Only Excel (.xlsx, .xls) and CSV are supported." });
+      if (!req.file || (!req.file.buffer && !req.file.path)) {
+        return res.status(400).json({ error: "Spreadsheet file missing" });
       }
-    }
+      const ext = String(path.extname(req.file.originalname || "")).toLowerCase();
+      if (ext !== ".xlsx") {
+        return res.status(400).json({ error: "Invalid file type. Only .xlsx files are allowed." });
+      }
+      const workbook = XLSX.readFile(req.file.path);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet);
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: "No import rows found. Upload an Excel or CSV file." });
@@ -5300,7 +5416,9 @@ app.post("/api/teacher/marks/import", requireAuth, requireRole("TEACHER"), requi
 
     for (let idx = 0; idx < normalizedRows.length; idx += 1) {
       const row = normalizedRows[idx] || {};
-      const studentId = safeObjectId(row.studentId ?? row.studentUserId ?? row.StudentId ?? row.StudentID);
+        const studentId = safeObjectId(
+          sanitizeCell(row.studentId ?? row.studentUserId ?? row.StudentId ?? row.StudentID)
+        );
       if (!studentId || !validStudentIds.has(String(studentId))) {
         errors.push({ rowNumber: idx + 2, reason: "Valid studentId is required for this class/section", row });
         continue;
@@ -8256,6 +8374,8 @@ const handleDevRealisticSeed = async (req, res) => {
 
     console.log("\nStarting realistic data seed...\n");
 
+
+
     const schoolsCol = db.collection("schools");
     const usersCol = db.collection("users");
     const teachersCol = db.collection("teachers");
@@ -8536,20 +8656,23 @@ const handleDevRealisticSeed = async (req, res) => {
     // ============================================
 
     console.log("\n" + "=".repeat(60));
-    console.log("? SEEDING COMPLETED SUCCESSFULLY");
+    console.log("SEEDING COMPLETED SUCCESSFULLY");
     console.log("=".repeat(60));
+
     console.log(`Summary:`);
     console.log(`   Schools created: ${schoolsCreated}`);
     console.log(`   Admins created: ${adminsCreated}`);
     console.log(`   Teachers created: ${teachersCreated}`);
     console.log(`   Students created: ~${studentsCreated}`);
     console.log("=".repeat(60));
-    console.log(`\nTest Credentials:`);
-    console.log(`   Admin 1: admin1@delhipublicacademy.edu.in / Password@123`);
-    console.log(`   Admin 2: admin2@mumbaiinternationalschool.edu.in / Password@123`);
-    console.log(`   Teachers: firstname.lastname### @schoolname.edu.in / Password@123`);
-    console.log(`   Students: firstname.lastname### @gmail.com / Password@123`);
-    console.log("\n");
+    console.log("\nTest Credentials:");
+    console.log("Admin Email: admin@demo.com");
+    console.log("Admin Password: admin123");
+    console.log("Teacher Email: teacher@demo.com");
+    console.log("Teacher Password: teacher123");
+    console.log("Student Email: student@demo.com");
+    console.log("Student Password: student123");
+    console.log("=".repeat(60) + "\n");
 
     return res.json({
       success: true,

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import AdminSidebar from "../components/AdminSidebar";
+import PageIntro from "../components/ui/PageIntro";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function AdminAdmissions() {
   const [admissions, setAdmissions] = useState([]);
@@ -56,19 +57,22 @@ export default function AdminAdmissions() {
     <div className="flex">
       <AdminSidebar />
 
-      <div className="ml-64 p-8 w-full">
-        <h1 className="text-3xl font-bold mb-6">Admin Admissions</h1>
+      <div className="ml-20 lg:ml-72 p-8 w-full">
+        <PageIntro
+          title="Admissions"
+          description="Review and manage incoming admission requests."
+        />
 
         <input
           type="text"
           placeholder="Search..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border p-2 mb-4 w-80"
+          className="saas-input mt-4 w-full max-w-md"
         />
 
-        <table className="w-full bg-white shadow">
-          <thead className="bg-gray-200">
+        <table className="w-full bg-white shadow rounded-xl overflow-hidden">
+          <thead className="bg-slate-100">
             <tr>
               <th className="p-2">Student</th>
               <th className="p-2">Class</th>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import EmptyState from "../../components/ui/EmptyState";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const CACHE_KEY = "dev_api_usage_cache_v1";
 const CACHE_TTL_MS = 60 * 1000;
 
@@ -179,8 +180,8 @@ export default function DevApiPage() {
             </article>
           </section>
 
-          {hasCharts ? (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      {hasCharts ? (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {usage.topEndpoints.length > 0 ? (
                 <article className="rounded-2xl border border-slate-700 bg-slate-800 p-4">
                   <h3 className="text-base font-black text-white mb-3">Top Endpoints by Requests</h3>
@@ -236,7 +237,13 @@ export default function DevApiPage() {
             <div className="rounded-xl border border-slate-700 bg-slate-800 p-6 text-center text-slate-400">No API data available</div>
           )}
         </>
-      ) : null}
+      ) : (
+        <EmptyState
+          tone="dark"
+          title="No API activity yet"
+          description="API usage analytics will appear after traffic flows through the system."
+        />
+      )}
     </div>
   );
 }

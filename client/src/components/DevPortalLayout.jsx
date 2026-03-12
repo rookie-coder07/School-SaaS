@@ -80,7 +80,9 @@ export default function DevPortalLayout({ title, subtitle, actions = null, child
               <h1 className="text-2xl font-black text-white md:text-3xl">{title}</h1>
               {subtitle ? <p className="mt-1 text-sm text-slate-200">{subtitle}</p> : null}
             </div>
-            {actions}
+            <div className="flex items-center gap-4">
+              {actions}
+            </div>
           </header>
           {children}
         </main>

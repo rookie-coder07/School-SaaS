@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import EmptyState from "./ui/EmptyState";
+import { ListSkeleton } from "./ui/Skeleton";
+import { motion } from "framer-motion";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 /**
  * NotificationDropdown Component
@@ -200,8 +203,10 @@ export default function NotificationDropdown({
         "event": "/student/dashboard?section=events",
         "announcement": "/student/dashboard?section=announcements",
         "timetable": "/student/dashboard?section=timetable",
+        "exam": "/student/dashboard?section=exams",
         "syllabus": "/student/dashboard?section=syllabus",
         "voice": "/student/dashboard?section=voice",
+        "attendance": "/student/dashboard?section=attendance",
       };
       targetPath = navigationMap[notification.type];
     }
@@ -219,180 +224,215 @@ export default function NotificationDropdown({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-40 overflow-hidden">
+    <div className="fixed inset-0 z-40 pointer-events-none">
       {/* Backdrop */}
-      <div className={`absolute inset-0 ${showBackdrop ? "bg-black bg-opacity-50" : "bg-transparent"}`} onClick={onClose} />
+      <div
+        className={`absolute inset-0 ${showBackdrop ? "bg-black/40" : "bg-transparent"} pointer-events-auto`}
+        onClick={onClose}
+      />
 
       {/* Dropdown Panel */}
-      <div className="absolute top-12 right-4 w-96 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-white">Notifications</h3>
-          <div className="flex items-center gap-3">
-            {undoStack.length > 0 && (
-              <button
-                onClick={handleUndo}
-                disabled={undoing}
-                className="text-sm text-amber-300 hover:text-amber-200 transition-colors disabled:opacity-50"
-              >
-                {undoing ? "Undoing..." : `Undo (${undoStack.length})`}
-              </button>
-            )}
-            {notifications.some((n) => !n.isRead) && (
-              <button
-                onClick={handleMarkAllAsRead}
-                className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-              >
-                Mark all as read
-              </button>
-            )}
+      <motion.div
+        className="pointer-events-auto absolute left-4 right-4 top-16 w-auto max-w-full glass-panel rounded-2xl border border-white/10 bg-slate-900/80 shadow-2xl backdrop-blur-xl"
+        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+      >
+        <div className="flex max-h-[72vh] flex-col overflow-hidden">
+          {/* Header */}
+          <div className="sticky top-0 z-10 border-b border-white/10 bg-slate-900/70 p-4 backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-lg font-bold text-white">Notifications</h3>
+              <div className="flex items-center gap-3">
+                {undoStack.length > 0 && (
+                  <button
+                    onClick={handleUndo}
+                    disabled={undoing}
+                    className="text-sm text-amber-300 hover:text-amber-200 transition-colors disabled:opacity-50"
+                  >
+                    {undoing ? "Undoing..." : `Undo (${undoStack.length})`}
+                  </button>
+                )}
+                {notifications.some((n) => !n.isRead) && (
+                  <button
+                    onClick={handleMarkAllAsRead}
+                    className="text-sm text-cyan-300 hover:text-cyan-200 transition-colors"
+                  >
+                    Mark all as read
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Content */}
-        {loading ? (
-          <div className="p-4 text-center text-gray-400">Loading...</div>
-        ) : error ? (
-          <div className="p-4 text-center text-red-400">{error}</div>
-        ) : notifications.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">
-            <p className="text-sm">No notifications yet</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-700">
-            {notifications.map((notification) => (
-              <div
-                key={notification._id}
-                onClick={() => handleNotificationClick(notification)}
-                className={`p-4 transition-colors cursor-pointer hover:opacity-80 ${
-                  notification.isRead
-                    ? "bg-slate-800"
-                    : "bg-blue-900 bg-opacity-30"
-                }`}
-              >
-                {/* Notification Header */}
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1 min-w-0 max-w-full">
-                    <p className="font-semibold text-white break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">
-                      {notification.title}
-                    </p>
-                    <p className="text-sm break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full text-gray-300 mt-1">
-                      {notification.message}
-                    </p>
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="p-4">
+                <ListSkeleton rows={2} />
+              </div>
+            ) : error ? (
+              <div className="p-4 text-center text-red-400">{error}</div>
+            ) : notifications.length === 0 ? (
+              <div className="p-6">
+                <EmptyState
+                  tone="dark"
+                  title="No notifications yet"
+                  description="Your school updates will appear here."
+                />
+              </div>
+            ) : (
+              <div className="divide-y divide-white/10">
+                {notifications.map((notification) => (
+                  <div
+                    key={notification._id}
+                    onClick={() => handleNotificationClick(notification)}
+                    className={`px-4 py-3 text-sm transition-colors cursor-pointer hover:bg-white/10 ${
+                      notification.isRead
+                        ? "bg-white/5"
+                        : "bg-cyan-500/15"
+                    }`}
+                  >
+                    {/* Notification Header */}
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1 min-w-0 max-w-full">
+                        <p className="font-semibold text-white break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">
+                          {notification.title}
+                        </p>
+                        <p className="text-sm break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full text-gray-300 mt-1">
+                          {notification.message}
+                        </p>
+                      </div>
+                      {!notification.isRead && (
+                        <div className="ml-2 w-2 h-2 bg-blue-500 rounded-full mt-1 flex-shrink-0" />
+                      )}
+                    </div>
+
+                    {/* Notification Meta */}
+                    <div className="flex justify-between items-center mt-3 text-xs text-gray-400">
+                      <span>
+                        {new Date(notification.createdAt).toLocaleDateString(
+                          "en-US",
+                          {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }
+                        )}
+                      </span>
+
+                      {/* Actions */}
+                      <div className="flex gap-2 items-center">
+                        {notification.type === "voice" && notification.audioUrl && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const audioUrl = notification.audioUrl.startsWith("http")
+                                ? notification.audioUrl
+                                : `${import.meta.env.VITE_API_URL}${notification.audioUrl}`;
+                              const audio = new Audio(audioUrl);
+                              audio.play().catch((err) => console.error("Error playing audio:", err));
+                            }}
+                            className="text-purple-300 hover:text-purple-200 transition-colors"
+                            title="Play voice message"
+                          >
+                            Play
+                          </button>
+                        )}
+                        {!notification.isRead && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkAsRead(notification._id);
+                            }}
+                            className="text-cyan-300 hover:text-cyan-200 transition-colors"
+                            title="Mark as read"
+                          >
+                            Mark
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(notification._id);
+                          }}
+                          className="text-rose-300 hover:text-rose-200 transition-colors"
+                          title="Delete"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Type Badge */}
+                    {notification.type && (
+                      <div className="mt-2">
+                        <span
+                          className={`inline-block text-xs px-2 py-1 rounded-full ${
+                            notification.type === "voice"
+                              ? "bg-purple-900 text-purple-300"
+                              : notification.type === "homework"
+                              ? "bg-orange-900 text-orange-300"
+                              : notification.type === "event"
+                              ? "bg-pink-900 text-pink-300"
+                              : notification.type === "announcement"
+                              ? "bg-cyan-900 text-cyan-300"
+                              : notification.type === "timetable"
+                              ? "bg-green-900 text-green-300"
+                              : notification.type === "exam"
+                              ? "bg-indigo-900 text-indigo-300"
+                              : notification.type === "syllabus"
+                              ? "bg-indigo-900 text-indigo-300"
+                              : notification.type === "attendance"
+                              ? "bg-emerald-900 text-emerald-300"
+                              : notification.type === "success"
+                              ? "bg-green-900 text-green-300"
+                              : notification.type === "warning"
+                              ? "bg-yellow-900 text-yellow-300"
+                              : "bg-blue-900 text-blue-300"
+                          }`}
+                        >
+                          {notification.type === "voice"
+                            ? "Voice"
+                            : notification.type === "homework"
+                            ? "Homework"
+                            : notification.type === "event"
+                            ? "Event"
+                            : notification.type === "announcement"
+                            ? "Announcement"
+                            : notification.type === "timetable"
+                            ? "Timetable"
+                            : notification.type === "exam"
+                            ? "Exam"
+                            : notification.type === "syllabus"
+                            ? "Syllabus"
+                            : notification.type === "attendance"
+                            ? "Attendance"
+                            : notification.type}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  {!notification.isRead && (
-                    <div className="ml-2 w-2 h-2 bg-blue-500 rounded-full mt-1 flex-shrink-0" />
-                  )}
-                </div>
-
-                {/* Notification Meta */}
-                <div className="flex justify-between items-center mt-3 text-xs text-gray-400">
-                  <span>
-                    {new Date(notification.createdAt).toLocaleDateString(
-                      "en-US",
-                      {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }
-                    )}
-                  </span>
-
-                  {/* Actions */}
-                  <div className="flex gap-2 items-center">
-                    {/* Play button for voice notifications */}
-                    {notification.type === "voice" && notification.audioUrl && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const audioUrl = notification.audioUrl.startsWith("http") 
-                            ? notification.audioUrl 
-                            : `${import.meta.env.VITE_API_URL || "http://localhost:5000"}${notification.audioUrl}`;
-                          const audio = new Audio(audioUrl);
-                          audio.play().catch(err => console.error("Error playing audio:", err));
-                        }}
-                        className="text-purple-400 hover:text-purple-300 transition-colors"
-                        title="Play voice message"
-                      >
-                        ♫ Play
-                      </button>
-                    )}
-                    {!notification.isRead && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMarkAsRead(notification._id);
-                        }}
-                        className="text-blue-400 hover:text-blue-300 transition-colors"
-                        title="Mark as read"
-                      >
-                        ✓
-                      </button>
-                    )}
+                ))}
+                {page < totalPages && (
+                  <div className="p-3">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(notification._id);
-                      }}
-                      className="text-red-400 hover:text-red-300 transition-colors"
-                      title="Delete"
+                      onClick={() => fetchNotifications(page + 1, false)}
+                      disabled={loadingMore}
+                      className="w-full py-2 rounded-lg bg-slate-700 text-slate-100 text-sm font-semibold hover:bg-slate-600 transition disabled:opacity-50"
                     >
-                      ✕
+                      {loadingMore ? "Loading..." : "Load more"}
                     </button>
-                  </div>
-                </div>
-
-                {/* Type Badge */}
-                {notification.type && (
-                  <div className="mt-2">
-                    <span
-                      className={`inline-block text-xs px-2 py-1 rounded-full ${
-                        notification.type === "voice"
-                          ? "bg-purple-900 text-purple-300"
-                          : notification.type === "homework"
-                          ? "bg-orange-900 text-orange-300"
-                          : notification.type === "event"
-                          ? "bg-pink-900 text-pink-300"
-                          : notification.type === "announcement"
-                          ? "bg-cyan-900 text-cyan-300"
-                          : notification.type === "timetable"
-                          ? "bg-green-900 text-green-300"
-                          : notification.type === "syllabus"
-                          ? "bg-indigo-900 text-indigo-300"
-                          : notification.type === "success"
-                          ? "bg-green-900 text-green-300"
-                          : notification.type === "warning"
-                          ? "bg-yellow-900 text-yellow-300"
-                          : "bg-blue-900 text-blue-300"
-                      }`}
-                    >
-                      {notification.type === "voice" ? "🔊 Voice" : 
-                       notification.type === "homework" ? "📝 Homework" : 
-                       notification.type === "event" ? "📅 Event" : 
-                       notification.type === "announcement" ? "📢 Announcement" : 
-                       notification.type === "timetable" ? "⏰ Timetable" :
-                       notification.type === "syllabus" ? "📖 Syllabus" :
-                       notification.type}
-                    </span>
                   </div>
                 )}
               </div>
-            ))}
-            {page < totalPages && (
-              <div className="p-3">
-                <button
-                  onClick={() => fetchNotifications(page + 1, false)}
-                  disabled={loadingMore}
-                  className="w-full py-2 rounded-lg bg-slate-700 text-slate-100 text-sm font-semibold hover:bg-slate-600 transition disabled:opacity-50"
-                >
-                  {loadingMore ? "Loading..." : "Load more"}
-                </button>
-              </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      </motion.div>
     </div>
   );
 }
+
+

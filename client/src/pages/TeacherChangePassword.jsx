@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../components/ToastProvider";
+import PageIntro from "../components/ui/PageIntro";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function TeacherChangePassword() {
   const [form, setForm] = useState({
@@ -62,8 +63,11 @@ export default function TeacherChangePassword() {
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 p-3 sm:p-4 md:p-6 lg:p-8">
       <div className="mx-auto w-full max-w-md">
         <div className="bg-white/85 backdrop-blur-md rounded-3xl border border-slate-200 shadow-md p-5 md:p-6">
-          <h1 className="text-xl md:text-2xl font-black text-slate-900">Change Password</h1>
-          <p className="text-sm text-slate-600 mt-2">For security, update your password before continuing.</p>
+          <PageIntro
+            title="Change Password"
+            description="For security, update your password before continuing."
+            className="mb-4"
+          />
 
           <form onSubmit={handleSubmit} className="mt-5 space-y-3">
             <input

@@ -1,7 +1,14 @@
+import { motion } from "framer-motion";
+
 export default function PageContainer({ children, className = "" }) {
   return (
-    <div className={`bg-white/80 backdrop-blur-md rounded-3xl shadow-md border border-slate-200 p-3 md:p-6 ${className}`}>
+    <motion.div
+      className={`saas-page page-fade ${className}`}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+    >
       {children}
-    </div>
+    </motion.div>
   );
 }

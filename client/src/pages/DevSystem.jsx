@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import DevPortalLayout from "../components/DevPortalLayout";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const formatBytes = (value = 0) => {
   const bytes = Number(value) || 0;

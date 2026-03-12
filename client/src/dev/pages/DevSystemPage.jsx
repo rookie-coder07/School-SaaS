@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import DevStatusBadge from "../components/DevStatusBadge";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function DevSystemPage() {
   const token = localStorage.getItem("developerToken");
@@ -119,3 +119,4 @@ export default function DevSystemPage() {
     </div>
   );
 }
+

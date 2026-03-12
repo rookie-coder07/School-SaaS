@@ -1,0 +1,1012 @@
+[
+    {
+        "file":  "C:\\projects\\School-SaaS\\routes\\student.js",
+        "removedChars":  8,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\routes\\auth.js",
+        "removedChars":  16,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\scripts\\normalize-utf8-report.json",
+        "removedChars":  0,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\scripts\\resetDeveloper.js",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\seed.js",
+        "removedChars":  24,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\controllers\\devController.js",
+        "removedChars":  12,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\scripts\\seedDeveloper.js",
+        "removedChars":  14,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\scripts\\auditTenantQueries.js",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\middleware\\requireDeveloper.js",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\routes\\teacher.js",
+        "removedChars":  110,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\routes\\student.js",
+        "removedChars":  8,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\routes\\notificationRoutes.js",
+        "removedChars":  24,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\routes\\auth.js",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\seedDeveloper.js",
+        "removedChars":  6,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\server.js",
+        "removedChars":  17,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\testServer.js",
+        "removedChars":  6,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server\\migrate-notifications.js",
+        "removedChars":  14,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\utils\\sessionTracker.js",
+        "removedChars":  20,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\utils\\notificationHelper.js",
+        "removedChars":  22,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\services\\unreadNotificationService.js",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\TeacherLogin.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\TeacherDashboard.jsx",
+        "removedChars":  12,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\TeacherDashboard-Old.jsx",
+        "removedChars":  32,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\TeacherChangePassword.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\StudentLogin.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\StudentDashboard.jsx",
+        "removedChars":  28,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\StudentDashboard-Old.jsx",
+        "removedChars":  14,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\StudentAnalyticsDashboard.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\SettingsPage.jsx",
+        "removedChars":  36,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\SettingsInfoPage.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\Home.jsx",
+        "removedChars":  5,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevTraces.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevTools.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevSystem.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevSchoolsList.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevSchoolDetails.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevLogs.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevLogin.jsx",
+        "removedChars":  32,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevLiveActivity.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevFeatures.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevErrors.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DeveloperLogin.jsx",
+        "removedChars":  18,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DeveloperDashboard.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevDashboard.jsx",
+        "removedChars":  52,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\DevApiUsage.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\AdmissionForm.jsx",
+        "removedChars":  6,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\AdminLogin.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\AdminDashboard.jsx",
+        "removedChars":  72,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\AdminDashboard-Old.jsx",
+        "removedChars":  44,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\pages\\Admin.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\main.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\App.jsx",
+        "removedChars":  238,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\DevLayout.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\DevDashboard.jsx",
+        "removedChars":  31,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\DevLogin.jsx",
+        "removedChars":  14,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\ConfirmationModal.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\AttendanceCalendar.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\VoiceRecorder.jsx",
+        "removedChars":  24,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\VoiceAnnouncements.jsx",
+        "removedChars":  32,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\UserTrackingDashboard.jsx",
+        "removedChars":  20,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\NotificationDropdown.jsx",
+        "removedChars":  30,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\Navbar.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\MarksViewer.jsx",
+        "removedChars":  16,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\Hero3D.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\FingerprintAuthActions.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\ExamTimetableManager.jsx",
+        "removedChars":  10,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\ExamSyllabusManager.jsx",
+        "removedChars":  26,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\DateSliderCalendar.jsx",
+        "removedChars":  6,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\StudentExamSyllabus.jsx",
+        "removedChars":  26,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\StudentExams.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevVoiceMessagesPage.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevUsersPage.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevTracesPage.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevToolsPage.jsx",
+        "removedChars":  16,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevSystemPage.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevSystemControlsPage.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevSettingsPage.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevSchoolsPage.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevLogsPage.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevErrorsPage.jsx",
+        "removedChars":  6,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevDataExplorerPage.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevDashboardPage.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevAuditLogsPage.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevApiPage.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\dev\\pages\\DevActivityPage.jsx",
+        "removedChars":  22,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\AdminAnalyticsDashboard.jsx",
+        "removedChars":  20,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\AdminAuditLogsDashboard.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\SchoolPerformanceRadar.jsx",
+        "removedChars":  94,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\TeacherExamsMarksV2.jsx",
+        "removedChars":  6,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\TeacherAnalyticsOverview.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\StudentMarksCards.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\TimetableGrid.jsx",
+        "removedChars":  4,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\TeacherSubjectsManager.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\ToastProvider.jsx",
+        "removedChars":  6,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\analytics\\TeacherAnalyticsDashboard.jsx",
+        "removedChars":  2,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\analytics\\StudentAnalyticsDashboard.jsx",
+        "removedChars":  6,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\analytics\\ClassWiseAnalytics.jsx",
+        "removedChars":  36,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\client\\src\\components\\student\\StudentAnalyticsDashboard.jsx",
+        "removedChars":  100,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ADMIN_ANALYTICS_FILTER_FIX.md",
+        "removedChars":  52,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ADMIN_ANALYTICS_SCHOOLPERFORMANCERADAR_FIX.md",
+        "removedChars":  97,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ADVANCED_ANALYTICS_IMPLEMENTATION.md",
+        "removedChars":  136,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ANALYTICS_FINAL_DELIVERY.md",
+        "removedChars":  432,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ANALYTICS_FIXES_SUMMARY.md",
+        "removedChars":  79,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ANALYTICS_QUICK_REFERENCE.md",
+        "removedChars":  1443,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\API_URL_CONFIGURATION_SUMMARY.md",
+        "removedChars":  104,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ARCHITECTURE.md",
+        "removedChars":  2270,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ATOMIC_FIXES.js",
+        "removedChars":  112,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ATTENDANCE_COUNT_FIX.md",
+        "removedChars":  178,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ATTENDANCE_LOCK_BUG_COMPLETE_FIX.md",
+        "removedChars":  714,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\AUDIT_SUMMARY_FINAL.md",
+        "removedChars":  238,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\CODE_CHANGES_DETAILED.md",
+        "removedChars":  73,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\CODE_CHANGES_LOG.md",
+        "removedChars":  18,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\CODE_CHANGES_SUMMARY.md",
+        "removedChars":  24,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\CODE_REFERENCE_COMPLETE.md",
+        "removedChars":  52,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\COMPREHENSIVE_AUDIT_COMPLETE.md",
+        "removedChars":  1192,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\COMPREHENSIVE_NOTIFICATION_SYSTEM.md",
+        "removedChars":  46,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\CONCURRENT_USERS_DOCUMENTATION_INDEX.md",
+        "removedChars":  520,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\CONCURRENT_USERS_NAMES_FIX.md",
+        "removedChars":  100,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\CONCURRENT_USERS_QUICK_START.md",
+        "removedChars":  140,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEBUG_GUIDE_ANALYTICS.md",
+        "removedChars":  96,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEPLOYMENT_CHECKLIST_CONCURRENT_USERS.md",
+        "removedChars":  98,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEPLOYMENT_FIX_COMPLETE.md",
+        "removedChars":  156,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEPLOYMENT_GUIDE_ANALYTICS.md",
+        "removedChars":  106,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEPLOYMENT_READY.md",
+        "removedChars":  100,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEPLOYMENT_READY_FINAL.md",
+        "removedChars":  90,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_CONSOLE_API_IMPLEMENTATION_SUMMARY.md",
+        "removedChars":  846,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_CONSOLE_ARCHITECTURE.md",
+        "removedChars":  264,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_CONSOLE_FIX_VERIFICATION.js",
+        "removedChars":  172,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_CONSOLE_MONITORING_RESTORED.md",
+        "removedChars":  64,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_CONSOLE_REFACTORING_COMPLETE.md",
+        "removedChars":  1068,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_CONSOLE_UI_UX_REFACTOR.md",
+        "removedChars":  854,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_CONSOLE_UI_UX_REFACTOR_SUMMARY.md",
+        "removedChars":  1098,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_DASHBOARD_FIXES.md",
+        "removedChars":  166,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_PORTAL_COMPLETE.md",
+        "removedChars":  296,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEVELOPER_PORTAL_QUICK_START.md",
+        "removedChars":  72,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEV_CONSOLE_FILES_REFERENCE.md",
+        "removedChars":  340,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEV_CONSOLE_SMOKE_TEST.js",
+        "removedChars":  12,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEV_CONSOLE_SMOKE_TEST_GUIDE.md",
+        "removedChars":  1134,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\DEV_CONSOLE_SMOKE_TEST_QUICK_START.md",
+        "removedChars":  1174,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ENHANCEMENT_SUMMARY.md",
+        "removedChars":  100,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ENV_CONFIGURATION_QUICK_REF.md",
+        "removedChars":  116,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\ERROR_RESOLUTION.md",
+        "removedChars":  70,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\EXAM_SYLLABUS_COMPLETE_SUMMARY.md",
+        "removedChars":  172,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\EXAM_SYLLABUS_FEATURE_GUIDE.md",
+        "removedChars":  156,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\EXAM_SYLLABUS_FIXES_COMPLETE.md",
+        "removedChars":  154,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\EXAM_SYLLABUS_FIX_REPORT.md",
+        "removedChars":  488,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\EXAM_SYLLABUS_QUICK_FIX.md",
+        "removedChars":  194,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\FEATURE_FLAG_AUDIT_COMPLETE.md",
+        "removedChars":  206,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\FEATURE_FLAG_AUDIT_REPORT.md",
+        "removedChars":  142,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\FEATURE_FLAG_COMPLETION_SUMMARY.md",
+        "removedChars":  1906,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\FEATURE_FLAG_ENFORCEMENT.md",
+        "removedChars":  52,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\FEATURE_FLAG_ENFORCEMENT_FINAL.md",
+        "removedChars":  64,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\FEATURE_FLAG_FIX_COMPLETE.md",
+        "removedChars":  150,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\FEATURE_FLAG_FIX_SUMMARY.md",
+        "removedChars":  288,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\FEATURE_FLAG_MANAGEMENT_GUIDE.md",
+        "removedChars":  590,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\FILTER_TABS_IMPLEMENTATION.md",
+        "removedChars":  158,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\GITHUB_COPILOT_MASTER_PROMPT.md",
+        "removedChars":  178,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\IMPLEMENTATION_COMPLETE.md",
+        "removedChars":  306,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\MANUAL_TEST_GUIDE.md",
+        "removedChars":  334,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\MOBILE_RESPONSIVE_GUIDE.md",
+        "removedChars":  105,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\MULTI_TENANCY_AUDIT.md",
+        "removedChars":  14,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\NOTIFICATIONS_QUICK_START.md",
+        "removedChars":  121,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\NOTIFICATION_BUG_FIXES.md",
+        "removedChars":  78,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\NOTIFICATION_FIX_COMPLETE.md",
+        "removedChars":  98,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\NOTIFICATION_NAVIGATION_FIX.md",
+        "removedChars":  106,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\NOTIFICATION_SYSTEM.md",
+        "removedChars":  193,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\PRODUCTION_DEPLOYMENT_GUIDE.md",
+        "removedChars":  170,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\PRODUCTION_READY.md",
+        "removedChars":  426,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\PROJECT_COMPLETE.md",
+        "removedChars":  276,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\QUICK_ACTION_ITEMS.md",
+        "removedChars":  82,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\QUICK_REFERENCE.md",
+        "removedChars":  42,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\QUICK_SETUP.md",
+        "removedChars":  143,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\QUICK_START_DEV_CONSOLE.md",
+        "removedChars":  536,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\README_CHANGES.md",
+        "removedChars":  106,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\REAL_NOTIFICATION_SYSTEM_IMPLEMENTATION.md",
+        "removedChars":  96,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\RUN_SMOKE_TEST.js",
+        "removedChars":  12,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\school-app.html",
+        "removedChars":  54,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\SECURITY_HARDENING_COMPLETE.md",
+        "removedChars":  40,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\SEEDING_COMPLETE_SUMMARY.md",
+        "removedChars":  146,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\SEEDING_EXECUTE_NOW.md",
+        "removedChars":  44,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\SEEDING_GUIDE.md",
+        "removedChars":  46,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\SEEDING_QUICK_REFERENCE.md",
+        "removedChars":  42,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\server.js",
+        "removedChars":  8,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\SERVER_FIX_SUMMARY.md",
+        "removedChars":  16,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\SPA_REFRESH_FIX_COMPLETE.md",
+        "removedChars":  138,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\STUDENT_ANALYTICS_SYSTEM_COMPLETE.md",
+        "removedChars":  224,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\STUDENT_DASHBOARD_FIX.md",
+        "removedChars":  44,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\teacher-app.html",
+        "removedChars":  40,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\test-attendance-lock-master.js",
+        "removedChars":  1768,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\test-attendance-lock.js",
+        "removedChars":  950,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\test-notification-fix.js",
+        "removedChars":  22,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\test-schools-codes.js",
+        "removedChars":  8,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\TESTING_CONCURRENT_USERS_VERCEL_RENDER.md",
+        "removedChars":  48,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\TESTING_GUIDE.md",
+        "removedChars":  58,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\TEST_RESULTS.md",
+        "removedChars":  292,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\TOAST_NOTIFICATIONS_IMPLEMENTATION.md",
+        "removedChars":  121,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\VERCEL_DEPLOYMENT_FIX.md",
+        "removedChars":  22,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\VERCEL_DEPLOYMENT_SETUP.md",
+        "removedChars":  88,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\VERCEL_FIX_QUICK_START.md",
+        "removedChars":  46,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\verify-fix.js",
+        "removedChars":  46,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\VOICE_RECORDING_FIX_DEBUG.md",
+        "removedChars":  230,
+        "rewritten":  true
+    },
+    {
+        "file":  "C:\\projects\\School-SaaS\\VOICE_RECORDING_IMPLEMENTATION.md",
+        "removedChars":  98,
+        "rewritten":  true
+    }
+]

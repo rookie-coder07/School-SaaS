@@ -174,13 +174,15 @@ export default function teacherRoutes(db) {
   try {
     const { date, className, section } = req.body;
 
-    console.log(`\n${'='.repeat(80)}`);
+    console.log(`
+${'='.repeat(80)}`);
     console.log(`🔒 [ATTENDANCE SUBMIT] Finalizing attendance`);
     console.log(`🔒 Submission ID: ${submissionId}`);
     console.log(`🔒 Teacher: ${req.user.email}`);
     console.log(`🔒 Date: ${date}`);
     console.log(`🔒 Class: ${className}${section}`);
-    console.log(`${'='.repeat(80)}\n`);
+    console.log(`${'='.repeat(80)}
+`);
 
     if (!date || !className || !section) {
       console.error(`❌ [ATTENDANCE SUBMIT] Missing required fields`);
@@ -274,12 +276,14 @@ export default function teacherRoutes(db) {
     console.log(`✅ Present: ${presentCount}`);
     console.log(`✅ Absent: ${absentCount}`);
     console.log(`✅ Leave: ${leaveCount}`);
-    console.log(`${'='.repeat(80)}\n`);
+    console.log(`${'='.repeat(80)}
+`);
 
     console.log(`${'='.repeat(80)}`);
     console.log(`📊 [ATTENDANCE SUBMIT] Response sent`);
     console.log(`📊 Duration: ${Date.now() - submitStartTime}ms`);
-    console.log(`${'='.repeat(80)}\n`);
+    console.log(`${'='.repeat(80)}
+`);
 
     // Return success response
     res.json({
@@ -293,13 +297,15 @@ export default function teacherRoutes(db) {
     });
   } catch (err) {
     const duration = Date.now() - submitStartTime;
-    console.error(`\n${'='.repeat(80)}`);
+    console.error(`
+${'='.repeat(80)}`);
     console.error(`❌ [ATTENDANCE SUBMIT] EXCEPTION`);
     console.error(`❌ Submission ID: ${submissionId}`);
     console.error(`❌ Error: ${err.message}`);
     console.error(`❌ Duration: ${duration}ms`);
     console.error(`❌ Stack: ${err.stack}`);
-    console.error(`${'='.repeat(80)}\n`);
+    console.error(`${'='.repeat(80)}
+`);
     
     res.status(500).json({
       error: "Attendance submit failed",

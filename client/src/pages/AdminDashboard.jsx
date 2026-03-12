@@ -3,9 +3,12 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import NotificationBell from "../components/NotificationBell";
 import ConfirmationModal from "../components/ConfirmationModal";
 import PageContainer from "../components/ui/PageContainer";
-import { StatCard } from "../components/ui/Card";
+import AnalyticsCard from "../components/ui/AnalyticsCard";
+import DashboardHero from "../components/ui/DashboardHero";
+import PageIntro from "../components/ui/PageIntro";
 import ListItemCard from "../components/ui/ListItemCard";
-import { ListSkeleton } from "../components/ui/Skeleton";
+import { ListSkeleton, TableSkeleton } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
 import { useToast } from "../components/ToastProvider";
 import { createNotification } from "../utils/notificationHelper";
 import { sessionTracker } from "../utils/sessionTracker";
@@ -16,8 +19,34 @@ import UserTrackingDashboard from "../components/UserTrackingDashboard";
 import AdminAnalyticsDashboard from "../components/AdminAnalyticsDashboard";
 import AdminAuditLogsDashboard from "../components/AdminAuditLogsDashboard";
 import useUnreadCount from "../hooks/useUnreadCount";
+import {
+  ArrowLeft,
+  BarChart3,
+  BookOpen,
+  BookOpenCheck,
+  CalendarCheck,
+  ClipboardCheck,
+  ClipboardList,
+  ChevronLeft,
+  ChevronRight,
+  GraduationCap,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Mic2,
+  Megaphone,
+  Radar,
+  Search,
+  Settings,
+  Shuffle,
+  UploadCloud,
+  UserCircle2,
+  Users,
+  UserCheck,
+  UsersRound,
+} from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const isConstrainedDevice = () => {
   if (typeof navigator === "undefined") return false;
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -28,8 +57,9 @@ const isConstrainedDevice = () => {
 };
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("profile");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, _setError] = useState("");
   const [message, _setMessage] = useState("");
@@ -41,6 +71,7 @@ export default function AdminDashboard() {
     classCount: 0,
     sectionCount: 0,
     classSectionCount: 0,
+    attendanceRate: null,
   });
   const [showNotifications, setShowNotifications] = useState(false);
   const navigate = useNavigate();
@@ -199,6 +230,9 @@ export default function AdminDashboard() {
   const [migratingStudents, setMigratingStudents] = useState(false);
   
   const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
+  const adminEmployeeId = admin?.employeeId || admin?.employeeID || admin?.employeeCode || "Not set";
+  const adminJoinDate = admin?.joinDate || admin?.joiningDate || admin?.createdAt || "";
+  const adminAddress = admin?.address || admin?.officeAddress || admin?.location || "Not set";
   const token = localStorage.getItem("adminToken");
   const { unreadCount, refreshUnreadCount } = useUnreadCount(token, {
     pollIntervalMs: isConstrainedDevice() ? 60000 : 30000,
@@ -287,6 +321,12 @@ export default function AdminDashboard() {
           classCount: Number(data?.classCount || 0),
           sectionCount: Number(data?.sectionCount || 0),
           classSectionCount: Number(data?.classSectionCount || 0),
+          attendanceRate:
+            data?.attendanceRate ??
+            data?.attendance ??
+            data?.attendancePercentage ??
+            data?.schoolAttendance ??
+            null,
         });
       } catch (err) {
         if (err?.name === "AbortError") return;
@@ -1379,7 +1419,7 @@ export default function AdminDashboard() {
       }, 500);
     } catch (err) {
       console.error("BULK UPLOAD STUDENTS ERROR:", err);
-      toast.error(`Upload failed: ${err.message}`);
+      toast.error(`UPLOAD FAILED: ${err.message}`);
     } finally {
       setIsUploading(false);
     }
@@ -1423,7 +1463,7 @@ export default function AdminDashboard() {
       }, 500);
     } catch (err) {
       console.error("BULK UPLOAD TEACHERS ERROR:", err);
-      toast.error(`Upload failed: ${err.message}`);
+      toast.error(`UPLOAD FAILED: ${err.message}`);
     } finally {
       setIsUploading(false);
     }
@@ -1758,20 +1798,21 @@ export default function AdminDashboard() {
   ]), []);
 
   const navItems = useMemo(() => ([
-    { id: "dashboard", label: "Dashboard" },
-    { id: "analytics", label: "Analytics" },
-    { id: "audit-logs", label: "Audit Logs" },
-    { id: "students", label: "Students" },
-    { id: "teachers", label: "Teachers" },
-    { id: "migrate-student", label: "Migrate Student" },
-    { id: "migrate-teacher", label: "Migrate Teacher" },
-    { id: "subjects", label: "Subjects" },
-    { id: "bulk-upload", label: "Bulk Upload" },
-    { id: "voice-broadcast", label: "Voice Broadcast" },
-    { id: "tracking", label: "User Tracking" },
-    { id: "reset-requests", label: "Reset Requests" },
-    { id: "user-management", label: "User Management", children: userManagementItems },
-    { id: "settings", label: "Settings" },
+    { id: "profile", label: "Profile", icon: UserCircle2 },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "analytics", label: "Analytics", icon: BarChart3 },
+    { id: "audit-logs", label: "Audit Logs", icon: ClipboardList },
+    { id: "students", label: "Students", icon: Users },
+    { id: "teachers", label: "Teachers", icon: UserCheck },
+    { id: "migrate-student", label: "Migrate Student", icon: Shuffle },
+    { id: "migrate-teacher", label: "Migrate Teacher", icon: Shuffle },
+    { id: "subjects", label: "Subjects", icon: BookOpen },
+    { id: "bulk-upload", label: "Bulk Upload", icon: UploadCloud },
+    { id: "voice-broadcast", label: "Voice Broadcast", icon: Megaphone },
+    { id: "tracking", label: "User Tracking", icon: Radar },
+    { id: "reset-requests", label: "Reset Requests", icon: KeyRound },
+    { id: "user-management", label: "User Management", icon: UsersRound, children: userManagementItems },
+    { id: "settings", label: "Settings", icon: Settings },
   ]), [userManagementItems]);
 
   const activeTitle = useMemo(() => {
@@ -1790,16 +1831,16 @@ export default function AdminDashboard() {
 
   if (isAnalyticsView) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] p-4 md:p-8 font-sans">
+      <div className="admin-portal-shell flex min-h-screen w-full bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-4 md:p-8 font-sans">
         <div className="w-full">
           <button
             onClick={() => {
               setActiveTab("dashboard");
               navigate("/admin/dashboard");
             }}
-            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition"
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-indigo-100 hover:text-white hover:underline transition"
           >
-            <span aria-hidden="true">←</span>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to Dashboard
           </button>
           <AdminAnalyticsDashboard token={token} schoolId={schoolId} teachers={teachers} students={students} />
@@ -1810,11 +1851,7 @@ export default function AdminDashboard() {
 
   return (
     <div
-      className={`h-screen overflow-hidden flex flex-col lg:flex-row font-sans ${
-        isAuditLogsView
-          ? "bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b]"
-          : "bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100"
-      }`}
+      className={`admin-portal-shell flex min-h-screen overflow-hidden flex-col lg:flex-row font-sans bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900`}
     >
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
@@ -1826,14 +1863,25 @@ export default function AdminDashboard() {
 
       {/* ===== SIDEBAR ===== */}
       <div
-        className={`fixed inset-y-0 left-0 w-64 h-screen overflow-y-auto bg-gradient-to-b from-slate-900 to-slate-950 text-white p-5 flex flex-col z-30 transition-transform duration-300 transform lg:relative lg:inset-y-auto lg:shrink-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
+        className={`fixed inset-y-0 left-0 h-screen overflow-y-auto bg-slate-900/60 text-slate-200 p-4 flex flex-col z-30 transition-[width,transform] duration-200 backdrop-blur-xl ${
+          sidebarCollapsed ? "w-20" : "w-72"
+        } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} lg:relative lg:inset-y-auto lg:shrink-0`}
       >
-        <div className="mb-6">
-          <h2 className="text-xl font-black text-cyan-400 tracking-tight">Admin</h2>
-          <p className="text-xs text-slate-400 mt-2">{admin?.email || "Administrator"}</p>
-          {schoolName && <p className="text-xs text-slate-500 mt-1 font-semibold">{schoolName}</p>}
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+              <h2 className="text-lg font-black tracking-tight text-white">Admin Console</h2>
+              <p className="text-xs text-slate-400">{admin?.email || "Administrator"}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((prev) => !prev)}
+            className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-slate-200 hover:bg-white/20 transition"
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
         </div>
 
         <nav className="flex-1 space-y-1">
@@ -1849,16 +1897,26 @@ export default function AdminDashboard() {
                   setActiveTab(item.id);
                   setSidebarOpen(false);
                 }}
-                className={`w-full text-left px-4 py-3 rounded-lg text-sm font-semibold transition ${
+                title={item.label}
+              className={`group relative w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-3 ${
                   activeTab === item.id || (Array.isArray(item.children) && item.children.some((sub) => sub.id === activeTab))
-                    ? "bg-slate-700 text-cyan-400"
-                    : "text-slate-300 hover:bg-slate-700/50"
+                    ? "bg-purple-500/20 text-purple-100"
+                    : "text-slate-300 hover:bg-white/5 hover:text-white"
                 }`}
-              >
-                {item.label}
+            >
+                {item.icon ? (
+                  <item.icon
+                    className={`h-4 w-4 transition-transform duration-200 group-hover:scale-105 ${
+                      activeTab === item.id ? "text-purple-200" : "text-slate-300"
+                    }`}
+                  />
+                ) : null}
+                <span className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+                  {item.label}
+                </span>
               </button>
               {Array.isArray(item.children) && (
-                <div className="ml-3 space-y-1 border-l border-slate-700 pl-2">
+                <div className={`space-y-1 ${sidebarCollapsed ? "hidden" : "ml-3 border-l border-white/10 pl-2"}`}>
                   {item.children.map((sub) => (
                     <button
                       key={sub.id}
@@ -1866,10 +1924,10 @@ export default function AdminDashboard() {
                         setActiveTab(sub.id);
                         setSidebarOpen(false);
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition ${
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
                         activeTab === sub.id
-                          ? "bg-slate-700 text-cyan-400"
-                          : "text-slate-400 hover:bg-slate-700/40"
+                          ? "bg-purple-500/20 text-purple-100"
+                          : "text-slate-400 hover:bg-white/5 hover:text-white"
                       }`}
                     >
                       {sub.label}
@@ -1880,44 +1938,50 @@ export default function AdminDashboard() {
             </div>
           ))}
         </nav>
-        <button
-          onClick={() => setShowChangePasswordModal(true)}
-          className="mt-2 w-full text-left px-4 py-3 rounded-lg text-sm font-semibold bg-slate-700 text-white hover:bg-slate-600 transition"
-        >
-          Change Password
-        </button>
-        <button
-          onClick={() => {
-            setSidebarOpen(false);
-            handleLogout();
-          }}
-          className="mt-4 w-full text-left px-4 py-3 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition"
-        >
-          Logout
-        </button>
+        <div className="mt-3 space-y-2">
+          <button
+            onClick={() => setShowChangePasswordModal(true)}
+            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-white/10 text-slate-100 hover:bg-white/20 transition"
+            title="Change Password"
+          >
+            <span className="flex items-center gap-3">
+              <KeyRound className="h-4 w-4" />
+              <span className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+                Change Password
+              </span>
+            </span>
+          </button>
+          <button
+            onClick={() => {
+              setSidebarOpen(false);
+              handleLogout();
+            }}
+            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition"
+            title="Logout"
+          >
+            <span className="flex items-center gap-3">
+              <LogOut className="h-4 w-4" />
+              <span className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
+                Logout
+              </span>
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className="flex-1 w-full lg:w-auto min-w-0 flex flex-col overflow-hidden">
+      <div className="flex-1 w-full lg:w-auto min-w-0 flex flex-col overflow-hidden bg-slate-900/60 backdrop-blur-xl">
         {/* Header */}
-        <div
-          className={`backdrop-blur-md px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3 ${
-            isAuditLogsView
-              ? "bg-slate-950/80 border-b border-white/10"
-              : "bg-white/80 border-b border-slate-200"
-          }`}
-        >
+        <div className="bg-slate-950/70 border-b border-white/10 px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3">
           <div className="flex items-center min-w-0">
             {activeTab !== "analytics" && (
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className={`lg:hidden mr-3 p-2 rounded-lg transition ${
-                  isAuditLogsView ? "hover:bg-slate-800" : "hover:bg-slate-100"
-                }`}
+                className="lg:hidden mr-3 p-2 rounded-lg transition hover:bg-white/10"
                 title="Toggle sidebar"
               >
                 <svg
-                  className={`w-6 h-6 ${isAuditLogsView ? "text-slate-100" : "text-slate-900"}`}
+                  className="w-6 h-6 text-slate-100"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1933,29 +1997,39 @@ export default function AdminDashboard() {
                     setActiveTab("dashboard");
                     navigate("/admin/dashboard");
                   }}
-                  className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline transition"
+                  className="mb-2 flex items-center gap-2 text-sm font-medium text-indigo-100 hover:text-white hover:underline transition"
                 >
-                  <span aria-hidden="true">←</span>
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                   Back to Dashboard
                 </button>
               )}
               <h1
-                className={`text-xl md:text-3xl font-black break-words ${
-                  isAuditLogsView ? "text-slate-100" : "text-slate-900"
-                }`}
+                className="text-xl md:text-3xl font-black break-words text-white"
               >
                 {activeTitle}
               </h1>
             </div>
           </div>
           
-          {/* Notification Bell */}
           <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-2 rounded-xl px-3 py-2 border border-white/10 bg-white/10">
+              <Search className="h-4 w-4 text-slate-200" />
+              <input
+                placeholder="Search students, teachers, records..."
+                className="bg-transparent text-sm outline-none w-56 text-slate-100 placeholder:text-slate-400"
+              />
+            </div>
             <NotificationBell
               onClick={() => setShowNotifications(!showNotifications)}
               unreadCount={unreadCount}
               isOpen={showNotifications}
             />
+            <div className="flex items-center gap-2 rounded-full px-2 py-1.5 border border-white/10 bg-white/10">
+              <UserCircle2 className="text-slate-100 h-5 w-5" />
+              <span className="hidden md:inline text-xs font-semibold text-slate-200">
+                {admin?.name || "Admin"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1977,28 +2051,106 @@ export default function AdminDashboard() {
         <div
           className={`flex-1 overflow-y-auto overflow-x-hidden ${
             activeTab === "analytics"
-              ? "bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] p-0 pb-16 md:pb-0"
-              : activeTab === "audit-logs"
-              ? "bg-gradient-to-br from-[#071228] via-[#0b1c3f] to-[#12275b] p-3 md:p-6 lg:p-8 pb-20 md:pb-6"
-              : "p-3 md:p-6 lg:p-8 pb-20 md:pb-6 bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100"
+              ? "p-0 pb-16 md:pb-0"
+              : "p-3 md:p-6 lg:p-8 pb-20 md:pb-6"
           }`}
         >
           <div className={`mx-auto w-full ${activeTab === "analytics" ? "max-w-none" : "max-w-7xl"}`}>
           <Suspense fallback={<ListSkeleton rows={2} />}>
+            {/* ===== PROFILE ===== */}
+            {activeTab === "profile" && (
+              <PageContainer className="space-y-4">
+                <PageIntro
+                  title="My Profile"
+                  description="Review your personal and administrative details."
+                  icon={<UserCircle2 className="h-16 w-16" aria-hidden="true" />}
+                  showTitle={false}
+                />
+                <div className="saas-card p-6 space-y-4">
+                  <div className="flex justify-between gap-4">
+                    <span className="text-slate-600 font-medium">Name</span>
+                    <span className="text-slate-900 font-bold text-right">{admin?.name || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between gap-4 border-t border-slate-200 pt-3">
+                    <span className="text-slate-600 font-medium">Email</span>
+                    <span className="text-slate-900 font-bold text-right">{admin?.email || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between gap-4 border-t border-slate-200 pt-3">
+                    <span className="text-slate-600 font-medium">Phone</span>
+                    <span className="text-slate-900 font-bold text-right">{admin?.phone || admin?.mobile || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between gap-4 border-t border-slate-200 pt-3">
+                    <span className="text-slate-600 font-medium">School</span>
+                    <span className="text-slate-900 font-bold text-right">{schoolName || admin?.schoolName || "Not set"}</span>
+                  </div>
+                </div>
+              </PageContainer>
+            )}
+
           {/* ===== DASHBOARD ===== */}
           {activeTab === "dashboard" && (
             <PageContainer className="space-y-6">
-              <div className="saas-card px-4 py-3">
-                <p className="text-sm font-semibold text-slate-600">Welcome, Admin</p>
-                <h2 className="text-xl font-black text-slate-900 mt-1">Dashboard Overview</h2>
+              <DashboardHero
+                title="Admin Dashboard"
+                subtitle="Track school-wide performance, staffing, and attendance at a glance."
+                icon={<LayoutDashboard className="h-16 w-16" aria-hidden="true" />}
+                showTitle={false}
+                stats={[
+                  { label: "Students", value: dashboardSummary.studentCount || studentTotalCount || 0 },
+                  { label: "Teachers", value: dashboardSummary.teacherCount || teacherTotalCount || 0 },
+                  { label: "Classes", value: dashboardSummary.classCount || 0 },
+                ]}
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <AnalyticsCard
+                  icon={<GraduationCap className="h-5 w-5" />}
+                  label="Total Students"
+                  value={dashboardSummary.studentCount || studentTotalCount || 0}
+                  description="Active student enrollments"
+                  gradient="from-indigo-500 to-purple-600"
+                />
+                <AnalyticsCard
+                  icon={<UserCheck className="h-5 w-5" />}
+                  label="Total Teachers"
+                  value={dashboardSummary.teacherCount || teacherTotalCount || 0}
+                  description="Faculty members onboarded"
+                  gradient="from-purple-500 to-violet-600"
+                />
+                <AnalyticsCard
+                  icon={<CalendarCheck className="h-5 w-5" />}
+                  label="School Attendance"
+                  value={
+                    Number.isFinite(Number(dashboardSummary.attendanceRate))
+                      ? `${Math.round(Number(dashboardSummary.attendanceRate))}%`
+                      : "—"
+                  }
+                  description="Latest attendance snapshot"
+                  gradient="from-emerald-400 to-green-500"
+                />
               </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                  <StatCard label="Total Students" value={dashboardSummary.studentCount || studentTotalCount} icon="👨‍🎓" tone="blue" />
-                  <StatCard label="Total Teachers" value={dashboardSummary.teacherCount || teacherTotalCount} icon="👨‍🏫" tone="green" />
-                  <StatCard label="Total Classes" value={dashboardSummary.classCount || 0} icon="🏫" tone="purple" />
-                  <StatCard label="Total Sections" value={dashboardSummary.sectionCount || 0} icon="📚" tone="purple" />
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold text-white">Analytics Overview</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <ListItemCard className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-xl shadow-lg p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-200">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-300">Class Performance</p>
+                    <p className="mt-2 text-2xl font-black text-white">
+                      {dashboardSummary.classCount || 0} Classes
+                    </p>
+                    <p className="mt-2 text-sm text-slate-400">Monitor section-level outcomes and top performers.</p>
+                  </ListItemCard>
+                  <ListItemCard className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-xl shadow-lg p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-200">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-300">Attendance Insights</p>
+                    <p className="mt-2 text-2xl font-black text-white">
+                      {Number.isFinite(Number(dashboardSummary.attendanceRate))
+                        ? `${Math.round(Number(dashboardSummary.attendanceRate))}%`
+                        : "—"}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-400">Daily attendance health across the school.</p>
+                  </ListItemCard>
                 </div>
+              </div>
             </PageContainer>
           )}
 
@@ -2009,19 +2161,30 @@ export default function AdminDashboard() {
 
           {/* ===== AUDIT LOGS ===== */}
           {activeTab === "audit-logs" && (
-            <AdminAuditLogsDashboard token={token} />
+            <div className="space-y-4">
+              <PageIntro
+                title="Audit Logs"
+                description="Review administrator activity and critical system changes."
+                showTitle={false}
+              />
+              <AdminAuditLogsDashboard token={token} />
+            </div>
           )}
 
           {/* ===== STUDENTS ===== */}
           {activeTab === "students" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Students List</h2>
+              <PageIntro
+                title="Students"
+                description="Manage student profiles, classes, and records."
+                showTitle={false}
+              />
               <input
                 type="text"
                 placeholder="Search students..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="saas-input"
               />
 
               {/* Filter Row */}
@@ -2032,7 +2195,7 @@ export default function AdminDashboard() {
                     setStudentFilterClass(e.target.value);
                     setStudentFilterSection("");
                   }}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="saas-input"
                 >
                   <option value="">All Classes</option>
                   {getUniqueStudentClasses().map((cls) => (
@@ -2046,7 +2209,7 @@ export default function AdminDashboard() {
                   value={studentFilterSection}
                   onChange={(e) => setStudentFilterSection(e.target.value)}
                   disabled={!studentFilterClass}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="saas-input disabled:opacity-60"
                 >
                   <option value="">All Sections</option>
                   {getUniqueStudentSections(studentFilterClass).map((sec) => (
@@ -2058,11 +2221,19 @@ export default function AdminDashboard() {
               </div>
 
               {loading ? (
-                <ListSkeleton rows={4} />
-              ) : getFilteredStudents().length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  No students found
+                <div className="space-y-3">
+                  <div className="md:hidden">
+                    <ListSkeleton rows={4} />
+                  </div>
+                  <div className="hidden md:block">
+                    <TableSkeleton rows={6} cols={8} />
+                  </div>
                 </div>
+              ) : getFilteredStudents().length === 0 ? (
+                <EmptyState
+                  title="No students yet"
+                  description="Student records will appear here once created."
+                />
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -2166,8 +2337,8 @@ export default function AdminDashboard() {
                   ))}
                   </div>
 
-                  <div className="hidden md:block overflow-x-auto saas-card">
-                    <table className="w-full text-sm md:text-base">
+                  <div className="hidden md:block overflow-x-auto max-h-[520px] saas-card">
+                    <table className="saas-table">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50">
                           <th className="px-4 py-3 text-left">
@@ -2238,7 +2409,7 @@ export default function AdminDashboard() {
                 <button
                   onClick={() => setStudentPage((prev) => Math.max(1, prev - 1))}
                   disabled={studentPage <= 1 || loading}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition disabled:opacity-50"
+                  className="saas-button-secondary disabled:opacity-50"
                 >
                   Previous
                 </button>
@@ -2248,7 +2419,7 @@ export default function AdminDashboard() {
                 <button
                   onClick={() => setStudentPage((prev) => Math.min(studentTotalPages, prev + 1))}
                   disabled={studentPage >= studentTotalPages || loading}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition disabled:opacity-50"
+                  className="saas-button-secondary disabled:opacity-50"
                 >
                   Next
                 </button>
@@ -2297,13 +2468,17 @@ export default function AdminDashboard() {
           {/* ===== TEACHERS ===== */}
           {activeTab === "teachers" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Teachers List</h2>
+              <PageIntro
+                title="Teachers"
+                description="Manage teacher profiles and assignments."
+                showTitle={false}
+              />
               <input
                 type="text"
                 placeholder="Search teachers..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="saas-input"
               />
 
               {/* Filter Row */}
@@ -2314,7 +2489,7 @@ export default function AdminDashboard() {
                     setTeacherFilterClass(e.target.value);
                     setTeacherFilterSection("");
                   }}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="saas-input"
                 >
                   <option value="">All Classes</option>
                   {getUniqueTeacherClasses().map((cls) => (
@@ -2328,7 +2503,7 @@ export default function AdminDashboard() {
                   value={teacherFilterSection}
                   onChange={(e) => setTeacherFilterSection(e.target.value)}
                   disabled={!teacherFilterClass}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="saas-input disabled:opacity-60"
                 >
                   <option value="">All Sections</option>
                   {getUniqueTeacherSections(teacherFilterClass).map((sec) => (
@@ -2340,11 +2515,19 @@ export default function AdminDashboard() {
               </div>
 
               {loading ? (
-                <ListSkeleton rows={4} />
-              ) : getFilteredTeachers().length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  No teachers found
+                <div className="space-y-3">
+                  <div className="md:hidden">
+                    <ListSkeleton rows={4} />
+                  </div>
+                  <div className="hidden md:block">
+                    <TableSkeleton rows={6} cols={7} />
+                  </div>
                 </div>
+              ) : getFilteredTeachers().length === 0 ? (
+                <EmptyState
+                  title="No teachers yet"
+                  description="Teacher profiles will appear here once created."
+                />
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -2442,8 +2625,8 @@ export default function AdminDashboard() {
                     ))}
                   </div>
 
-                  <div className="hidden md:block overflow-x-auto saas-card">
-                    <table className="w-full text-sm md:text-base">
+                  <div className="hidden md:block overflow-x-auto max-h-[520px] saas-card">
+                    <table className="saas-table">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50">
                           <th className="px-4 py-3 text-left">
@@ -2563,8 +2746,13 @@ export default function AdminDashboard() {
           {/* ===== PASSWORD RESET REQUESTS ===== */}
           {activeTab === "reset-requests" && (
             <div className="space-y-4">
+              <PageIntro
+                title="Password Reset Requests"
+                description="Review and approve teacher password reset requests."
+                showTitle={false}
+              />
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h2 className="text-lg font-bold text-slate-900">Password Reset Requests</h2>
+                <h3 className="text-base font-bold text-slate-900">Manage Requests</h3>
                 <button
                   onClick={fetchTeacherResetRequests}
                   className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition"
@@ -2624,7 +2812,11 @@ export default function AdminDashboard() {
           {/* ===== USER MANAGEMENT ===== */}
           {activeTab === "user-management" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">User Management</h2>
+              <PageIntro
+                title="User Management"
+                description="Manage administrative actions and user workflows."
+                showTitle={false}
+              />
               <div className="saas-card p-3 md:p-6 space-y-3">
                 <p className="text-sm text-slate-600">Choose an action:</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -2645,7 +2837,11 @@ export default function AdminDashboard() {
           {/* ===== MIGRATE STUDENT ===== */}
           {activeTab === "migrate-student" && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-slate-900">Migrate Students (Bulk Promotion)</h2>
+              <PageIntro
+                title="Migrate Students"
+                description="Bulk promote students to new classes and sections."
+                showTitle={false}
+              />
 
               <div className="bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/60 shadow-md p-3 md:p-6 space-y-6">
                 <div>
@@ -2795,7 +2991,11 @@ export default function AdminDashboard() {
           {/* ===== MIGRATE TEACHER ===== */}
           {activeTab === "migrate-teacher" && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-slate-900">Migrate/Reassign Teacher</h2>
+              <PageIntro
+                title="Migrate or Reassign Teacher"
+                description="Reassign teachers to new classes and sections."
+                showTitle={false}
+              />
               
               <div className="bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/60 shadow-md p-3 md:p-6">
                 <h3 className="text-lg font-bold text-slate-900 mb-4">Select Teacher to Migrate</h3>
@@ -2888,9 +3088,10 @@ export default function AdminDashboard() {
               </div>
 
               {teachers.length === 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-700">
-                  No teachers found in the system.
-                </div>
+                <EmptyState
+                  title="No teachers in the system"
+                  description="Add a teacher to unlock migration tools."
+                />
               )}
             </div>
           )}
@@ -2898,7 +3099,11 @@ export default function AdminDashboard() {
           {/* ===== ADD USER ===== */}
           {activeTab === "add-user" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Add User</h2>
+              <PageIntro
+                title="Add User"
+                description="Create new student or teacher accounts."
+                showTitle={false}
+              />
               {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
               {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
 
@@ -3036,7 +3241,11 @@ export default function AdminDashboard() {
           {/* ===== BULK UPLOAD ===== */}
           {activeTab === "bulk-upload" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">Bulk Upload</h2>
+              <PageIntro
+                title="Bulk Upload"
+                description="Upload large student and teacher lists in one go."
+                showTitle={false}
+              />
               {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
               {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
 
@@ -3243,7 +3452,7 @@ export default function AdminDashboard() {
                     value={subjectForm.section}
                     onChange={(e) => setSubjectForm((prev) => ({ ...prev, section: e.target.value }))}
                     disabled={!subjectForm.className}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    className="saas-input disabled:opacity-60"
                   >
                     <option value="">Select Section</option>
                     {getSubjectSections(subjectForm.className).map((sec) => (
@@ -3255,7 +3464,7 @@ export default function AdminDashboard() {
                     placeholder="Subject Name"
                     value={subjectForm.name}
                     onChange={(e) => setSubjectForm((prev) => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="saas-input"
                   />
                   <button
                     onClick={addSubject}
@@ -3270,13 +3479,14 @@ export default function AdminDashboard() {
               {subjectLoading ? (
                 <ListSkeleton rows={3} />
               ) : subjects.length === 0 ? (
-                <div className="saas-card p-3 md:p-5 text-center text-slate-500">
-                  No subjects found for this class & section
-                </div>
+                <EmptyState
+                  title="No subjects found"
+                  description="Add a subject to start building class content."
+                />
               ) : (
                 <div className="space-y-3">
-                  <div className="hidden md:block overflow-x-auto saas-card">
-                    <table className="w-full text-sm md:text-base">
+                  <div className="hidden md:block overflow-x-auto max-h-[520px] saas-card">
+                    <table className="saas-table">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
                           <th className="px-4 py-3 text-left font-bold text-slate-900">Subject Name</th>
@@ -3398,13 +3608,17 @@ export default function AdminDashboard() {
           {/* ===== VOICE BROADCAST ===== */}
           {activeTab === "voice-broadcast" && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-slate-900">🎙️ Voice Announcements</h2>
+              <PageIntro
+                title="Voice Announcements"
+                description="Broadcast voice updates to teachers and students in seconds."
+                showTitle={false}
+              />
               {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
               {message && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{message}</div>}
 
               {/* Recording Section */}
               <div className="saas-card p-3 md:p-6 space-y-4">
-                <h3 className="font-bold text-slate-900">📢 Send Voice Message</h3>
+                <h3 className="font-bold text-slate-900">Send Voice Message</h3>
                 
                 {/* Broadcast Target Selection */}
                 <div className="space-y-2">
@@ -3488,14 +3702,14 @@ export default function AdminDashboard() {
                       });
                       const data = await res.json();
                       if (!res.ok) {
-                        console.error("❌ UPLOAD FAILED:", data);
+                        console.error("UPLOAD FAILED:", data);
                         toast.error(data.error || "Failed to broadcast voice message");
                         return;
                       }
                       console.log(`✅ UPLOAD SUCCESS: Audio URL = ${data.audioUrl}`);
                       
                       // Build success message based on broadcast target
-                      let successMsg = "✅ Voice message sent to";
+                      let successMsg = "Voice message sent to";
                       if (data.broadcastToTeachers > 0) successMsg += ` ${data.broadcastToTeachers} teacher(s)`;
                       if (data.broadcastToTeachers > 0 && data.broadcastToStudents > 0) successMsg += " and";
                       if (data.broadcastToStudents > 0) successMsg += ` ${data.broadcastToStudents} student(s)`;
@@ -3507,7 +3721,7 @@ export default function AdminDashboard() {
                         const notificationTitle = voiceAnnouncementTitle.trim() || "Voice Message from Admin";
                         const targetRole = voiceBroadcastTarget === "students" ? "student" : voiceBroadcastTarget === "teachers" ? "teacher" : "student";
                         await createNotification(
-                          "🎤 Voice Message",
+                          "Voice Message",
                           notificationTitle,
                           targetRole,
                           "voice",
@@ -3515,16 +3729,16 @@ export default function AdminDashboard() {
                           null,
                           { type: "voice_message", audioUrl: data.audioUrl }
                         );
-                        console.log("✅ Notification created for voice message");
+                        console.log("Notification created for voice message");
                       } catch (notifErr) {
-                        console.warn("⚠️ Failed to create notification (non-critical):", notifErr);
+                        console.warn("Failed to create notification (non-critical):", notifErr);
                       }
                       
                       setVoiceAnnouncementTitle("");
                       setAudioFile(null);
                       setVoiceAnnouncementsRefresh(prev => prev + 1); // Trigger refresh in VoiceAnnouncements component
                     } catch (err) {
-                      console.error("❌ VOICE BROADCAST ERROR:", err);
+                      console.error("VOICE BROADCAST ERROR:", err);
                       toast.error("Failed to send voice message");
                     } finally {
                       setVoiceLoading(false);
@@ -3538,11 +3752,11 @@ export default function AdminDashboard() {
               </div>
 
               {/* Previously Sent Announcements */}
-              <VoiceAnnouncements 
+              <VoiceAnnouncements
                 key={voiceAnnouncementsRefresh}
                 endpoint="/api/admin/voice-announces"
-                title="📋 Previously Sent Announcements"
-                icon="🎙️"
+                title="Previously Sent Announcements"
+                icon={<Megaphone className="h-4 w-4" />}
                 emptyMessage="No announcements sent yet"
               />
             </div>
@@ -3550,7 +3764,14 @@ export default function AdminDashboard() {
 
           {/* ===== USER TRACKING ===== */}
           {activeTab === "tracking" && (
-            <UserTrackingDashboard token={token} schoolId={schoolId} />
+            <div className="space-y-4">
+              <PageIntro
+                title="User Tracking"
+                description="Track session activity and engagement signals across the school."
+                showTitle={false}
+              />
+              <UserTrackingDashboard token={token} schoolId={schoolId} />
+            </div>
           )}
           </Suspense>
 
@@ -3832,6 +4053,11 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
+
+
+
+
 
 
 

@@ -1,8 +1,10 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 import { createNotification } from "../utils/notificationHelper";
+import EmptyState from "./ui/EmptyState";
+import { ListSkeleton } from "./ui/Skeleton";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const WEEK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const DEFAULT_CONFIG = {
@@ -21,9 +23,10 @@ const DEFAULT_CONFIG = {
 
 const createRowKey = (type) => `row_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${type}`;
 
-export default function TimetableGrid({ token, isTeacher = false, readOnly = false }) {
+export default function TimetableGrid({ token, isTeacher = false, readOnly = false, theme = "light" }) {
   const toast = useToast();
   const canEdit = isTeacher && !readOnly;
+  const isDark = theme === "dark";
 
   const [timetable, setTimetable] = useState([]);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
@@ -81,6 +84,15 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
 
   const getSubjectTone = (subjectName) => {
     const key = String(subjectName || "").trim().toLowerCase();
+    if (isDark) {
+      if (key.includes("math")) return "bg-blue-500/20 text-blue-200 border-blue-400/30";
+      if (key.includes("science")) return "bg-emerald-500/20 text-emerald-200 border-emerald-400/30";
+      if (key.includes("english")) return "bg-violet-500/20 text-violet-200 border-violet-400/30";
+      if (key.includes("social")) return "bg-amber-500/20 text-amber-200 border-amber-400/30";
+      if (key.includes("computer")) return "bg-cyan-500/20 text-cyan-200 border-cyan-400/30";
+      if (key.includes("hindi")) return "bg-rose-500/20 text-rose-200 border-rose-400/30";
+      return "bg-slate-500/20 text-slate-200 border-slate-400/30";
+    }
     if (key.includes("math")) return "bg-blue-100 text-blue-800 border-blue-200";
     if (key.includes("science")) return "bg-emerald-100 text-emerald-800 border-emerald-200";
     if (key.includes("english")) return "bg-violet-100 text-violet-800 border-violet-200";
@@ -338,11 +350,33 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
   };
 
   if (loading) {
-    return <div className="text-center py-8 text-slate-500">Loading timetable...</div>;
+    return (
+      <div className="py-6">
+        <ListSkeleton rows={3} />
+      </div>
+    );
   }
 
+  if (!canEdit && timetable.length === 0) {
+    return (
+      <EmptyState
+        title="Timetable not published yet."
+        description="Check back later for the latest class schedule."
+      />
+    );
+  }
+
+  const tableBorder = isDark ? "border-white/10" : "border-slate-200";
+  const headerCell = `${tableBorder} ${isDark ? "bg-white/5 text-slate-200" : "bg-slate-100 text-slate-700"}`;
+  const rowHeader = `${tableBorder} ${isDark ? "bg-white/5 text-slate-200" : "bg-slate-50 text-slate-700"}`;
+  const breakRowBase = isDark ? "border-white/10" : "border-slate-200";
+  const cellBase = `${tableBorder} ${isDark ? "text-slate-200" : "text-slate-700"}`;
+  const cellEmpty = isDark ? "text-slate-400" : "text-slate-300";
+  const cellIdleBg = isDark ? "bg-white/5" : "bg-white";
+  const cellHover = isDark ? "hover:bg-white/10 hover:border-cyan-400/40" : "hover:bg-blue-50 hover:border-blue-200";
+
   return (
-    <div className="w-full min-h-screen bg-slate-50 overflow-x-hidden">
+    <div className={`w-full min-h-screen overflow-x-hidden ${isDark ? "timetable-dark bg-transparent" : "bg-slate-50"}`}>
       <div className="w-full px-4 md:px-6 space-y-6">
       {canEdit && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4">
@@ -447,14 +481,14 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
 
       <div className="w-full overflow-x-auto">
         <div className="min-w-[1100px]">
-          <table className="border-collapse w-full text-sm">
+          <table className={`border-collapse w-full text-sm ${isDark ? "text-slate-200" : "text-slate-700"}`}>
           <thead>
             <tr>
-              <th className="border border-slate-200 bg-slate-100 px-4 py-3 whitespace-nowrap font-bold text-slate-700 text-center rounded-tl-xl">Row / Time</th>
+              <th className={`border px-4 py-3 whitespace-nowrap font-bold text-center rounded-tl-xl ${headerCell}`}>Row / Time</th>
               {(config.days || []).map((day, idx) => (
                 <th
                   key={day}
-                  className={`border border-slate-200 bg-slate-100 px-4 py-3 whitespace-nowrap font-bold text-slate-700 text-center min-w-28 md:min-w-36 ${
+                  className={`border px-4 py-3 whitespace-nowrap font-bold text-center min-w-28 md:min-w-36 ${headerCell} ${
                     idx === (config.days || []).length - 1 ? "rounded-tr-xl" : ""
                   }`}
                 >
@@ -468,10 +502,16 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
               const timeText = `${row.startTime || "--:--"} - ${row.endTime || "--:--"}`;
               if (row.type === "break") {
                 const isLunch = String(row.label || "").toLowerCase().includes("lunch");
-                const rowBg = isLunch ? "bg-orange-100 text-orange-800" : "bg-yellow-50 text-yellow-800";
+                const rowBg = isDark
+                  ? isLunch
+                    ? "bg-orange-500/20 text-orange-200"
+                    : "bg-yellow-500/15 text-yellow-200"
+                  : isLunch
+                    ? "bg-orange-100 text-orange-800"
+                    : "bg-yellow-50 text-yellow-800";
                 return (
                   <tr key={row.rowKey || rowIndex}>
-                    <td colSpan={(config.days || []).length + 1} className={`border border-slate-200 px-4 py-3 whitespace-nowrap text-center font-semibold ${rowBg}`}>
+                    <td colSpan={(config.days || []).length + 1} className={`border px-4 py-3 whitespace-nowrap text-center font-semibold ${breakRowBase} ${rowBg}`}>
                       {row.label} ({timeText})
                     </td>
                   </tr>
@@ -481,12 +521,12 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
               return (
                 <tr key={row.rowKey || rowIndex}>
                   <td
-                    className={`border border-slate-200 bg-slate-50 px-4 py-3 whitespace-nowrap font-semibold text-slate-700 text-center ${
+                    className={`border px-4 py-3 whitespace-nowrap font-semibold text-center ${rowHeader} ${
                       rowIndex === (config.rows || []).length - 1 ? "rounded-bl-xl" : ""
                     }`}
                   >
                     <div>{row.label}</div>
-                    <div className="text-xs text-slate-500 mt-1">{timeText}</div>
+                    <div className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{timeText}</div>
                   </td>
                   {(config.days || []).map((day, dayIndex) => {
                     const cellData = getCellData(row, day);
@@ -496,9 +536,10 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
                         key={`${row.rowKey}-${day}`}
                         onClick={() => handleCellClick(row, day)}
                         className={`
-                          border border-slate-200 px-4 py-3 whitespace-nowrap text-center min-h-20 transition
-                          ${canEdit ? "cursor-pointer hover:bg-blue-50 hover:border-blue-200" : "cursor-default bg-white"}
-                          ${isSelected ? "bg-blue-100 border-blue-400" : ""}
+                          border px-4 py-3 whitespace-nowrap text-center min-h-20 transition
+                          ${cellBase}
+                          ${canEdit ? `cursor-pointer ${cellHover}` : `cursor-default ${cellIdleBg}`}
+                          ${isSelected ? (isDark ? "bg-cyan-500/20 border-cyan-300/60" : "bg-blue-100 border-blue-400") : ""}
                           ${rowIndex === (config.rows || []).length - 1 && dayIndex === (config.days || []).length - 1 ? "rounded-br-xl" : ""}
                         `}
                       >
@@ -511,8 +552,8 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
                             </div>
                           </div>
                         ) : (
-                          <span className={`text-xs ${canEdit ? "text-slate-500 bg-slate-100 px-2 py-1 rounded-md inline-block" : "text-slate-300"}`}>
-                            {canEdit ? "Click to add" : "—"}
+                          <span className={`text-xs ${canEdit ? (isDark ? "text-slate-300 bg-white/10" : "text-slate-500 bg-slate-100") : cellEmpty} px-2 py-1 rounded-md inline-block`}>
+                            {canEdit ? "Click to add" : ""}
                           </span>
                         )}
                       </td>
@@ -573,3 +614,4 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
     </div>
   );
 }
+

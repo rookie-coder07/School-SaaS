@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import PageContainer from "../components/ui/PageContainer";
+import PageIntro from "../components/ui/PageIntro";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function Admin() {
-  const [mode, setMode] = useState("student"); // 'student' or 'teacher'
+  const [mode, setMode] = useState("student");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -35,8 +37,24 @@ export default function Admin() {
       const endpoint = mode === "student" ? "/api/admin/add-student" : "/api/admin/add-teacher";
       const payload =
         mode === "student"
-          ? { name: form.name, email: form.email, rollNo: form.rollNo, className: form.className, section: form.section, password: form.password, parentName: form.parentName, phone: form.phone }
-          : { name: form.name, email: form.email, className: form.className, section: form.section, subject: form.subject, password: form.password };
+          ? {
+              name: form.name,
+              email: form.email,
+              rollNo: form.rollNo,
+              className: form.className,
+              section: form.section,
+              password: form.password,
+              parentName: form.parentName,
+              phone: form.phone,
+            }
+          : {
+              name: form.name,
+              email: form.email,
+              className: form.className,
+              section: form.section,
+              subject: form.subject,
+              password: form.password,
+            };
 
       const res = await fetch(`${API_URL}${endpoint}`, {
         method: "POST",
@@ -51,8 +69,7 @@ export default function Admin() {
       if (!res.ok) {
         setError(data.error || "Failed");
       } else {
-        setMessage(`${mode === "student" ? "Student" : "Teacher"} created — id: ${data.userId}`);
-        // clear form fields relevant to mode
+        setMessage(`${mode === "student" ? "Student" : "Teacher"} created - id: ${data.userId}`);
         setForm({
           name: "",
           email: "",
@@ -61,6 +78,8 @@ export default function Admin() {
           rollNo: "",
           subject: "",
           password: "",
+          parentName: "",
+          phone: "",
         });
       }
     } catch (err) {
@@ -72,59 +91,77 @@ export default function Admin() {
   };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h2 style={{ margin: 0 }}>{mode === "student" ? "Add Student" : "Add Teacher"}</h2>
-        <p style={styles.hint}>Create accounts manually (admin only)</p>
+    <PageContainer className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl space-y-4">
+        <PageIntro
+          title={mode === "student" ? "Add Student" : "Add Teacher"}
+          description="Create accounts manually (admin only)."
+        />
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button style={styles.tab(mode === "student")} onClick={() => setMode("student")}>Student</button>
-          <button style={styles.tab(mode === "teacher")} onClick={() => setMode("teacher")}>Teacher</button>
+        <div className="saas-card p-6">
+          <div className="flex gap-2 mb-4">
+            <button
+              className={`px-4 py-2 rounded-lg text-sm font-semibold border ${
+                mode === "student" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200"
+              }`}
+              onClick={() => setMode("student")}
+            >
+              Student
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg text-sm font-semibold border ${
+                mode === "teacher" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200"
+              }`}
+              onClick={() => setMode("teacher")}
+            >
+              Teacher
+            </button>
+          </div>
+
+          {error && <div className="mb-3 rounded-lg bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+          {message && <div className="mb-3 rounded-lg bg-emerald-50 text-emerald-700 px-3 py-2 text-sm">{message}</div>}
+
+          <form onSubmit={submit} className="grid gap-3">
+            <input required placeholder="Full name" value={form.name} onChange={handleChange("name")} className="saas-input" />
+            <input required placeholder="Email" value={form.email} onChange={handleChange("email")} className="saas-input" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input placeholder="Class" value={form.className} onChange={handleChange("className")} className="saas-input" />
+              <input placeholder="Section" value={form.section} onChange={handleChange("section")} className="saas-input" />
+            </div>
+
+            {mode === "student" && (
+              <>
+                <input placeholder="Roll No" value={form.rollNo} onChange={handleChange("rollNo")} className="saas-input" />
+                <input placeholder="Parent Name" value={form.parentName} onChange={handleChange("parentName")} className="saas-input" />
+                <input placeholder="Phone Number" value={form.phone} onChange={handleChange("phone")} className="saas-input" />
+              </>
+            )}
+
+            {mode === "teacher" && (
+              <input placeholder="Subject" value={form.subject} onChange={handleChange("subject")} className="saas-input" />
+            )}
+
+            <input placeholder="Password (optional)" value={form.password} onChange={handleChange("password")} className="saas-input" />
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <button type="submit" disabled={loading} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-semibold text-sm hover:bg-blue-700 transition disabled:opacity-50">
+                {loading ? "Creating..." : `Create ${mode === "student" ? "Student" : "Teacher"}`}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setForm({ name: "", email: "", className: "", section: "", rollNo: "", subject: "", password: "", parentName: "", phone: "" });
+                  setError("");
+                  setMessage("");
+                }}
+                className="flex-1 border border-slate-200 text-slate-700 py-2.5 rounded-lg font-semibold text-sm hover:bg-slate-50 transition"
+              >
+                Reset
+              </button>
+            </div>
+          </form>
         </div>
-
-        {error && <div style={styles.error}>{error}</div>}
-        {message && <div style={styles.success}>{message}</div>}
-
-        <form onSubmit={submit} style={{ display: "grid", gap: 8 }}>
-          <input required placeholder="Full name" value={form.name} onChange={handleChange("name")} style={styles.input} />
-          <input required placeholder="Email" value={form.email} onChange={handleChange("email")} style={styles.input} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <input placeholder="Class" value={form.className} onChange={handleChange("className")} style={{ ...styles.input, flex: 1 }} />
-            <input placeholder="Section" value={form.section} onChange={handleChange("section")} style={{ ...styles.input, width: 120 }} />
-          </div>
-
-          {mode === "student" && (
-            <>
-              <input placeholder="Roll No" value={form.rollNo} onChange={handleChange("rollNo")} style={styles.input} />
-              <input placeholder="Parent Name" value={form.parentName} onChange={handleChange("parentName")} style={styles.input} />
-              <input placeholder="Phone Number" value={form.phone} onChange={handleChange("phone")} style={styles.input} />
-            </>
-          )}
-
-          {mode === "teacher" && (
-            <input placeholder="Subject" value={form.subject} onChange={handleChange("subject")} style={styles.input} />
-          )}
-
-          <input placeholder="Password (optional)" value={form.password} onChange={handleChange("password")} style={styles.input} />
-
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button type="submit" disabled={loading} style={styles.primary}>{loading ? "Creating..." : `Create ${mode === "student" ? "Student" : "Teacher"}`}</button>
-            <button type="button" onClick={() => { setForm({ name: "", email: "", className: "", section: "", rollNo: "", subject: "", password: "", parentName: "", phone: "" }); setError(""); setMessage(""); }} style={styles.secondary}>Reset</button>
-          </div>
-        </form>
       </div>
-    </div>
+    </PageContainer>
   );
 }
-
-const styles = {
-  page: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", padding: 20 },
-  card: { width: 520, background: "#fff", padding: 24, borderRadius: 12, boxShadow: "0 8px 24px rgba(15,23,42,0.06)", border: "1px solid #e6edf3" },
-  hint: { marginTop: 6, marginBottom: 12, color: "#64748b", fontSize: 13 },
-  input: { padding: 12, borderRadius: 8, border: "1px solid #e6edf3", outline: "none", width: "100%" },
-  tab: (active) => ({ padding: "8px 12px", borderRadius: 8, border: "1px solid #e6edf3", background: active ? "#ecfdf5" : "transparent", cursor: "pointer" }),
-  primary: { background: "#0f172a", color: "#fff", padding: "10px 12px", borderRadius: 8, border: "none", cursor: "pointer" },
-  secondary: { background: "#fff", color: "#0f172a", padding: "10px 12px", borderRadius: 8, border: "1px solid #e6edf3", cursor: "pointer" },
-  error: { background: "#fee2e2", color: "#991b1b", padding: 8, borderRadius: 8, marginBottom: 8 },
-  success: { background: "#ecfdf5", color: "#064e3b", padding: 8, borderRadius: 8, marginBottom: 8 },
-};

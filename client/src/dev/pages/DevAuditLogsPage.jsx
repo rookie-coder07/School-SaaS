@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import EmptyState from "../../components/ui/EmptyState";
+import { ListSkeleton } from "../../components/ui/Skeleton";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function DevAuditLogsPage() {
   const token = localStorage.getItem("developerToken");
@@ -96,9 +98,21 @@ export default function DevAuditLogsPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-4 py-8 text-center text-slate-400" colSpan={6}>Loading audit logs...</td></tr>
+              <tr>
+                <td className="px-4 py-6" colSpan={6}>
+                  <ListSkeleton rows={3} />
+                </td>
+              </tr>
             ) : filtered.length === 0 ? (
-              <tr><td className="px-4 py-8 text-center text-slate-400" colSpan={6}>No logs found</td></tr>
+              <tr>
+                <td className="px-4 py-8" colSpan={6}>
+                  <EmptyState
+                    tone="dark"
+                    title="No audit logs"
+                    description="Developer activity will appear here once actions are taken."
+                  />
+                </td>
+              </tr>
             ) : (
               filtered.map((row, index) => {
                 const key = String(row?._id || index);

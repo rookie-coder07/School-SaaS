@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import StudentAnalyticsDashboardView from "../components/student/StudentAnalyticsDashboard";
 import { useToast } from "../components/ToastProvider";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function StudentAnalyticsDashboard() {
   const navigate = useNavigate();

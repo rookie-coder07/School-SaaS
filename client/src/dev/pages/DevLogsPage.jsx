@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import EmptyState from "../../components/ui/EmptyState";
+import { ListSkeleton } from "../../components/ui/Skeleton";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function DevLogsPage() {
   const token = localStorage.getItem("developerToken");
@@ -82,7 +84,11 @@ export default function DevLogsPage() {
         </div>
       )}
 
-      {loading && <p className="text-slate-400 text-center py-8">Loading logs...</p>}
+      {loading && (
+        <div className="rounded-2xl border border-slate-700 bg-slate-800 p-4">
+          <ListSkeleton rows={3} />
+        </div>
+      )}
 
       {!loading && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -109,7 +115,11 @@ export default function DevLogsPage() {
                 {logs.crashLogs.join("\n")}
               </pre>
             ) : (
-              <div className="text-center py-8 text-slate-400">No crash logs found</div>
+              <EmptyState
+                tone="dark"
+                title="No crash logs"
+                description="The system is stable. Crashes will appear here if they happen."
+              />
             )}
           </section>
 
@@ -122,7 +132,11 @@ export default function DevLogsPage() {
                   .join("\n\n")}
               </pre>
             ) : (
-              <div className="text-center py-8 text-slate-400">No audit logs found</div>
+              <EmptyState
+                tone="dark"
+                title="No audit logs"
+                description="Developer activity will be recorded here."
+              />
             )}
           </section>
         </div>

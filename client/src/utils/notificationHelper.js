@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 /**
  * Compute targetRoute based on type and role
@@ -13,6 +13,7 @@ function computeTargetRoute(type, role) {
       event: "/student/dashboard?section=events",
       announcement: "/student/dashboard?section=announcements",
       timetable: "/student/dashboard?section=timetable",
+      exam: "/student/dashboard?section=exams",
       syllabus: "/student/dashboard?section=syllabus",
       voice: "/student/dashboard?section=voice",
       marks: "/student/dashboard?section=marks",
@@ -24,6 +25,7 @@ function computeTargetRoute(type, role) {
       event: "/teacher/dashboard?section=events",
       announcement: "/teacher/dashboard?section=announcements",
       timetable: "/teacher/dashboard?section=timetable",
+      exam: "/teacher/dashboard?section=exam-timetable",
       voice: "/teacher/dashboard?section=voice",
       marks: "/teacher/dashboard?section=marks",
       attendance: "/teacher/dashboard?section=attendance",

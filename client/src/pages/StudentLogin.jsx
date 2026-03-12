@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { GraduationCap, Menu, Shield, Users } from "lucide-react";
 import { sessionTracker } from "../utils/sessionTracker";
 import FingerprintAuthActions from "../components/FingerprintAuthActions";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function StudentLogin() {
   const [email, setEmail] = useState("");
@@ -15,6 +16,7 @@ export default function StudentLogin() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotMessage, setForgotMessage] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const navigate = useNavigate();
 
@@ -115,81 +117,141 @@ export default function StudentLogin() {
   };
 
   return (
-    <div className="min-h-screen flex justify-center items-center bg-slate-50 px-4 py-8 font-sans">
-      <form
-        onSubmit={handleLogin}
-        className="w-full max-w-sm bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-lg"
-      >
-        <div className="mb-8 text-center">
-          <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Student Login</h2>
-          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">Sign in to your account</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white">
+      <main className="relative flex min-h-[calc(100vh-72px)] items-center justify-center px-6 py-10">
+        <div className="absolute right-6 top-6 z-10">
+          <div className="relative">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white/90 transition hover:bg-white/20"
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            {menuOpen ? (
+              <div className="absolute right-0 mt-3 w-48 rounded-xl border border-white/15 bg-slate-900/80 p-2 text-sm text-white/80 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+                <button
+                  type="button"
+                  onClick={() => navigate("/")}
+                  className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-white/10"
+                >
+                  Back to Home
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/student/login")}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition hover:bg-white/10"
+                >
+                  <GraduationCap className="h-4 w-4" />
+                  Student Portal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/teacher/login")}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition hover:bg-white/10"
+                >
+                  <Users className="h-4 w-4" />
+                  Teacher Portal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/admin/login")}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition hover:bg-white/10"
+                >
+                  <Shield className="h-4 w-4" />
+                  Admin Console
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="h-80 w-80 rounded-full bg-emerald-400/20 blur-[120px]" />
+          <div className="-ml-24 h-72 w-72 rounded-full bg-cyan-400/20 blur-[120px]" />
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm font-semibold">
-            {error}
-          </div>
-        )}
-
-        {info && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg mb-6 text-sm font-semibold">
-            {info}
-          </div>
-        )}
-
-        <input
-          type="email"
-          placeholder="Email address"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full px-4 py-3 mb-4 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-        />
-
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          className="w-full px-4 py-3 mb-6 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-        />
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 text-sm md:text-base"
+        <form
+          onSubmit={handleLogin}
+          className="relative mx-auto w-full max-w-lg rounded-2xl border border-white/20 bg-slate-800/70 p-8 shadow-[0_25px_70px_rgba(0,0,0,0.6)] backdrop-blur-xl"
         >
-          {loading ? "Logging in..." : "Login"}
-        </button>
+          <div className="text-center">
+            <p className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              EduNest
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold text-white">Student Login</h1>
+          <p className="mt-2 text-center text-sm text-slate-300">Sign in to access your learning dashboard.</p>
+          </div>
 
-        <FingerprintAuthActions
-          email={email}
-          password={password}
-          role="STUDENT"
-          onLoginSuccess={completeStudentLogin}
-          setError={setError}
-          setInfo={setInfo}
-        />
+          {error && (
+            <div className="mt-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">
+              {error}
+            </div>
+          )}
 
-        <button
-          type="button"
-          onClick={() => {
-            setForgotEmail(email);
-            setForgotMessage("");
-            setShowForgotModal(true);
-          }}
-          className="w-full mt-3 py-2 text-sm font-semibold text-blue-700 hover:text-blue-800"
-        >
-          Forgot Password?
-        </button>
-      </form>
+          {info && (
+            <div className="mt-6 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-100">
+              {info}
+            </div>
+          )}
+
+          <div className="mt-6 space-y-4">
+            <input
+              type="email"
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full rounded-lg border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full rounded-lg border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-6 w-full rounded-lg bg-gradient-to-r from-emerald-400 to-green-500 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl disabled:opacity-50"
+          >
+            {loading ? "Logging in..." : "Login"}
+          </button>
+
+          <FingerprintAuthActions
+            email={email}
+            password={password}
+            role="STUDENT"
+            onLoginSuccess={completeStudentLogin}
+            setError={setError}
+            setInfo={setInfo}
+          />
+
+          <button
+            type="button"
+            onClick={() => {
+              setForgotEmail(email);
+              setForgotMessage("");
+              setShowForgotModal(true);
+            }}
+            className="mt-4 w-full text-sm font-semibold text-emerald-200 hover:text-emerald-100 transition"
+          >
+            Forgot Password?
+          </button>
+        </form>
+      </main>
 
       {showForgotModal && (
-        <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="w-full h-full sm:h-auto sm:max-w-md bg-white rounded-none sm:rounded-2xl border border-slate-200 shadow-xl p-4 sm:p-5 space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">Forgot Password</h3>
-            <p className="text-sm text-slate-600">
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
+          <div className="w-full h-full rounded-none border border-white/10 bg-slate-900/90 p-5 shadow-2xl sm:h-auto sm:max-w-md sm:rounded-2xl">
+            <h3 className="text-lg font-semibold text-white">Forgot Password</h3>
+            <p className="mt-2 text-sm text-slate-300">
               Submit a reset request. Your class teacher will set a temporary password.
             </p>
             <input
@@ -197,14 +259,14 @@ export default function StudentLogin() {
               value={forgotEmail}
               onChange={(e) => setForgotEmail(e.target.value)}
               placeholder="Enter your student email"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="mt-4 w-full rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             />
-            {forgotMessage && <p className="text-sm text-slate-700">{forgotMessage}</p>}
-            <div className="flex gap-2">
+            {forgotMessage && <p className="mt-2 text-sm text-slate-200">{forgotMessage}</p>}
+            <div className="mt-4 flex gap-2">
               <button
                 type="button"
                 onClick={() => setShowForgotModal(false)}
-                className="flex-1 py-2 rounded-lg border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition"
+                className="flex-1 rounded-lg border border-white/10 bg-white/5 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
               >
                 Close
               </button>
@@ -212,7 +274,7 @@ export default function StudentLogin() {
                 type="button"
                 onClick={submitForgotRequest}
                 disabled={forgotLoading}
-                className="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition disabled:opacity-50"
+                className="flex-1 rounded-lg bg-gradient-to-r from-emerald-400 to-green-500 py-2 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl disabled:opacity-50"
               >
                 {forgotLoading ? "Submitting..." : "Submit Request"}
               </button>

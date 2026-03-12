@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import EmptyState from "./ui/EmptyState";
 import { useToast } from "./ToastProvider";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const getStatusTone = (pct) => {
   if (pct > 75) return "text-emerald-700";
@@ -627,7 +628,7 @@ export default function TeacherExamsMarksV2({ token, className, section, student
               {exams.length === 0 && !examsLoading ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-5 text-center text-slate-500">
-                    No exams found. Create your first exam above.
+                    <EmptyState title="No exams yet" description="Create your first exam to start capturing marks." />
                   </td>
                 </tr>
               ) : (

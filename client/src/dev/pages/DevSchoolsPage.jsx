@@ -5,7 +5,7 @@ import DevStatusBadge from "../components/DevStatusBadge";
 import DevRowActionMenu from "../components/DevRowActionMenu";
 import { pushDevToast } from "../utils/devToast";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const DEV_PORTAL_BASE = "/internal/dev-portal";
 const portalPath = (segment) => `${DEV_PORTAL_BASE}${segment}`;
 

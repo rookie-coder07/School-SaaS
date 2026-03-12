@@ -3,7 +3,7 @@ import { AlertTriangle, Bug, Clock3, ShieldAlert } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import DevPortalLayout from "../components/DevPortalLayout";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const MetricCard = ({ label, value, icon, theme }) => {
   const Icon = icon;

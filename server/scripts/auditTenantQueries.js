@@ -70,7 +70,7 @@ const inspectFile = (filePath) => {
   }
 
   const raw = fs.readFileSync(filePath, "utf8");
-  const lines = raw.split(/\r?\n/);
+  const lines = raw.split(/\r?/);
   const findings = [];
 
   for (let i = 0; i < lines.length; i += 1) {

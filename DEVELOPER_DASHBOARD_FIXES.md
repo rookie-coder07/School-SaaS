@@ -168,7 +168,9 @@ const handleCreateSchool = async (e) => {
     }
     
     setSchoolMessage(
-      `✅ School "${data.school.name}" created!\nAdmin: ${data.admin.email}\nPassword: ${data.admin.password}`
+      `✅ School "${data.school.name}" created!
+Admin: ${data.admin.email}
+Password: ${data.admin.password}`
     );
     setSchoolName("");
     

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import DevPortalLayout from "../components/DevPortalLayout";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const StatCard = ({ label, value, theme = "from-cyan-400/35 to-blue-500/25" }) => (
   <article className={`rounded-2xl border border-white/20 bg-gradient-to-br ${theme} p-4 shadow-xl backdrop-blur-lg`}>

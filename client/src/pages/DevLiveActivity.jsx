@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import DevPortalLayout from "../components/DevPortalLayout";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const activityColor = (action = "") => {
   if (action.includes("error")) return "bg-rose-400/25 border-rose-200/40 text-rose-100";

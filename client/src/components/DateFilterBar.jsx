@@ -8,7 +8,7 @@ export default function DateFilterBar({ value, onChange }) {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-3 md:p-4 flex flex-col gap-3">
+    <div className="date-filter-bar bg-white rounded-xl border border-slate-200 p-3 md:p-4 flex flex-col gap-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="text-xs text-slate-600 font-semibold">
           From Date
@@ -46,4 +46,3 @@ export default function DateFilterBar({ value, onChange }) {
     </div>
   );
 }
-

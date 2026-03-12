@@ -84,7 +84,9 @@ async function seed() {
     await client.connect();
     const db = client.db("school_saas");
 
-    console.log("\n🌱 Starting database seed...\n");
+    console.log("
+🌱 Starting database seed...
+");
 
     // Clear existing data (optional - comment out if you want to keep data)
     // await db.collection("schools").deleteMany({});
@@ -298,7 +300,8 @@ async function seed() {
     // SUMMARY
     // ============================================
 
-    console.log("\n" + "=".repeat(50));
+    console.log("
+" + "=".repeat(50));
     console.log("✅ SEEDING COMPLETED SUCCESSFULLY");
     console.log("=".repeat(50));
     console.log(`📊 Summary:`);
@@ -308,12 +311,14 @@ async function seed() {
     console.log(`   Students created: ${studentsCreated}`);
     console.log("=".repeat(50));
 
-    console.log("\n🔑 Test Credentials:");
+    console.log("
+🔑 Test Credentials:");
     console.log("   Admin Login: admin1@delhipublicacademy.com / Password@123");
     console.log("   Admin Login: admin2@mumbaiinternationalschool.com / Password@123");
     console.log("   Sample Teacher: firstname.lastname@schoolname.edu.in / Password@123");
     console.log("   Sample Student: firstname.lastname### @gmail.com / Password@123");
-    console.log("\n");
+    console.log("
+");
   } catch (err) {
     console.error("❌ SEEDING ERROR:", err);
     process.exit(1);

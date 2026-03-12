@@ -5,7 +5,7 @@ import DevRowActionMenu from "../components/DevRowActionMenu";
 import { pushDevToast } from "../utils/devToast";
 import { getCachedValue } from "../utils/devApiCache";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const FILTERS_STORAGE_KEY = "dev_data_explorer_filters_v1";
 const PRESETS_STORAGE_KEY = "dev_data_explorer_presets_v1";
 const DEV_SCHOOLS_CACHE_KEY = "dev_schools_meta_v1";
@@ -525,25 +525,25 @@ export default function DevDataExplorerPage() {
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <input value={presetName} onChange={(e) => setPresetName(e.target.value)} placeholder="Preset name" className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400" />
-          <button onClick={savePreset} className="rounded-lg bg-emerald-500/20 px-3 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/30">Save Preset</button>
+          <input value={presetName} onChange={(e) => setPresetName(e.target.value)} placeholder="Preset name" className="saas-input-dark" />
+          <button onClick={savePreset} className="saas-button-dark">Save Preset</button>
           <select value={selectedPreset} onChange={(e) => { const name = e.target.value; setSelectedPreset(name); if (name) applyPreset(name); }} className={selectClass} style={selectStyle}>
             <option value="">Apply Preset</option>
             {Object.keys(presets).map((name) => (
               <option key={name} value={name}>{name}</option>
             ))}
           </select>
-          <button onClick={deletePreset} disabled={!selectedPreset} className="rounded-lg bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-60">Delete Preset</button>
+          <button onClick={deletePreset} disabled={!selectedPreset} className="saas-button-dark disabled:cursor-not-allowed disabled:opacity-60">Delete Preset</button>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={exportRowsCsv} className="rounded-lg bg-sky-500/20 px-3 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-500/30">Export CSV</button>
-          <button onClick={exportRowsJson} className="rounded-lg bg-violet-500/20 px-3 py-2 text-sm font-semibold text-violet-100 hover:bg-violet-500/30">Export JSON</button>
+          <button onClick={exportRowsCsv} className="saas-button-dark">Export CSV</button>
+          <button onClick={exportRowsJson} className="saas-button-dark">Export JSON</button>
         </div>
       </section>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/45 backdrop-blur-xl">
-        <table className="w-full min-w-[1100px] text-left text-sm text-slate-200">
+      <div className="hidden md:block overflow-x-auto max-h-[520px] rounded-2xl border border-white/10 bg-slate-950/45 backdrop-blur-xl">
+        <table className="saas-table-dark min-w-[1100px]">
           <thead className="sticky top-0 z-10 bg-slate-900/95 text-xs uppercase tracking-wide text-slate-400">
             <tr>
               {activeColumns.map((column) => (
@@ -579,6 +579,39 @@ export default function DevDataExplorerPage() {
             )}
           </tbody>
         </table>
+      </div>
+      <div className="space-y-3 md:hidden">
+        {loading ? (
+          <div className="rounded-xl border border-white/10 bg-slate-950/45 p-4 text-center text-sm text-slate-400">Loading data...</div>
+        ) : pagedRows.length === 0 ? (
+          <div className="rounded-xl border border-white/10 bg-slate-950/45 p-4 text-center text-sm text-slate-400">No data found</div>
+        ) : (
+          pagedRows.map((row, index) => {
+            const titleColumn = activeColumns[0];
+            const subtitleColumns = activeColumns.slice(1, 4);
+            return (
+              <article key={String(row?._id || index)} className="rounded-xl border border-white/10 bg-slate-950/45 p-4">
+                <p className="text-sm font-semibold text-white">{toText(row?.[titleColumn]) || "Record"}</p>
+                <div className="mt-2 space-y-1 text-xs text-slate-300">
+                  {subtitleColumns.map((column) => (
+                    <p key={`${String(row?._id || index)}-${column}`}>
+                      <span className="text-slate-400">{column}:</span> {toText(row?.[column]) || "-"}
+                    </p>
+                  ))}
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <DevRowActionMenu
+                    actions={[
+                      { label: "Edit", disabled: actionBusyId === String(row?._id || ""), onClick: () => editRow(row) },
+                      { label: "Undo", disabled: actionBusyId === String(row?._id || ""), onClick: () => undoRow(row) },
+                      { label: "Delete", danger: true, disabled: actionBusyId === String(row?._id || ""), onClick: () => requestDeleteRow(row) },
+                    ]}
+                  />
+                </div>
+              </article>
+            );
+          })
+        )}
       </div>
       <div className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/45 px-4 py-3 text-xs text-slate-300">
         <p>Records: {filteredRows.length}</p>

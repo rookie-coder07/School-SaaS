@@ -42,6 +42,7 @@ const DevActivityPage = lazyWithRetry(() => import("./dev/pages/DevActivityPage"
 const DevFeaturesPage = lazyWithRetry(() => import("./dev/pages/DevFeaturesPage"), "DevFeaturesPage");
 const DevTracesPage = lazyWithRetry(() => import("./dev/pages/DevTracesPage"), "DevTracesPage");
 const DevToolsPage = lazyWithRetry(() => import("./dev/pages/DevToolsPage"), "DevToolsPage");
+const DevSettingsPage = lazyWithRetry(() => import("./dev/pages/DevSettingsPage"), "DevSettingsPage");
 const SettingsPage = lazyWithRetry(() => import("./pages/SettingsPage"), "SettingsPage");
 const SettingsInfoPage = lazyWithRetry(() => import("./pages/SettingsInfoPage"), "SettingsInfoPage");
 
@@ -75,6 +76,11 @@ const shouldSkipPreload = () => {
 export default function App() {
   const location = useLocation();
   const hideNavbar =
+    location.pathname === "/" ||
+    location.pathname.startsWith("/student/login") ||
+    location.pathname.startsWith("/teacher/login") ||
+    location.pathname.startsWith("/admin/login") ||
+    location.pathname.startsWith("/settings") ||
     location.pathname.startsWith("/admin/dashboard") ||
     (location.pathname.startsWith("/teacher/") && location.pathname !== "/teacher/login") ||
     location.pathname.startsWith("/student/dashboard") ||
@@ -226,6 +232,7 @@ export default function App() {
             <Route path="data-explorer" element={<DevDataExplorerPage />} />
             <Route path="system-controls" element={<DevSystemControlsPage />} />
             <Route path="audit-logs" element={<DevAuditLogsPage />} />
+            <Route path="settings" element={<DevSettingsPage />} />
 
             {/* Legacy aliases kept for backward compatibility */}
             <Route path="system" element={<DevSystemPage />} />

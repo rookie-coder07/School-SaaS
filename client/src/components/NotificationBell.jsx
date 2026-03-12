@@ -12,7 +12,7 @@ export default function NotificationBell({ onClick, unreadCount = 0, isOpen = fa
     setDisplayCount(unreadCount);
     if (unreadCount > 0) {
       console.log(
-        `🔔 NotificationBell updated - unreadCount: ${unreadCount}, isOpen: ${isOpen}`
+        `ðŸ”” NotificationBell updated - unreadCount: ${unreadCount}, isOpen: ${isOpen}`
       );
     }
   }, [unreadCount, isOpen]);
@@ -20,12 +20,12 @@ export default function NotificationBell({ onClick, unreadCount = 0, isOpen = fa
   return (
     <button
       onClick={onClick}
-      className={`relative p-2 transition-colors rounded-lg ${
-        isOpen 
-          ? "bg-amber-100 text-amber-600" 
-          : displayCount > 0 
-          ? "text-amber-500 hover:text-amber-400 hover:bg-amber-50" 
-          : "text-gray-600 hover:text-gray-700 hover:bg-gray-100"
+      className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-slate-200 transition-all ${
+        isOpen
+          ? "bg-white/20 text-white ring-1 ring-white/20"
+          : displayCount > 0
+          ? "hover:bg-white/15 hover:text-white"
+          : "text-slate-300 hover:bg-white/10 hover:text-white"
       }`}
       title={displayCount > 0 ? `${displayCount} unread notifications` : "Notifications"}
       aria-label={displayCount > 0 ? `Notifications: ${displayCount} unread` : "Notifications"}
@@ -49,7 +49,7 @@ export default function NotificationBell({ onClick, unreadCount = 0, isOpen = fa
       {/* Unread Count Badge - Only show if count > 0 */}
       {displayCount > 0 && (
         <span
-          className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-500 rounded-full min-w-[20px] h-5 shadow-md"
+          className="absolute top-0 right-0 inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-rose-500 px-1.5 py-0.5 text-xs font-bold leading-none text-white shadow-md translate-x-1/2 -translate-y-1/2"
           aria-live="polite"
           aria-atomic="true"
         >

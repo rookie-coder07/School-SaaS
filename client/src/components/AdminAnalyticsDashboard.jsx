@@ -1,7 +1,7 @@
 import React, { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TeacherComparisonChartStatic from "./analytics/TeacherComparisonChart";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const PAGE_SIZE = 10;
 const ATTENTION_PAGE_SIZE = 4;
 const IS_DEV = Boolean(import.meta.env.DEV);

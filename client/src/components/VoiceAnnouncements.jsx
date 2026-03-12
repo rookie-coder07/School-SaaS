@@ -2,23 +2,26 @@ import { useState, useEffect, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 import DateFilterBar from "./DateFilterBar";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
+import EmptyState from "./ui/EmptyState";
+import { ListSkeleton } from "./ui/Skeleton";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 /**
  * VoiceAnnouncements Component
  * Displays a list of voice announcements with audio playback
- * 
+ *
  * Props:
  * - endpoint: API endpoint to fetch announcements from (e.g., "/api/teacher/voice-announces")
  * - title: Section title (e.g., "School Announcements")
- * - icon: Icon emoji (e.g., "🎙️")
+ * - icon: Optional icon element
  * - emptyMessage: Message when no announcements (e.g., "No announcements yet")
+ * - emptyIllustration: Deprecated (illustrations removed)
  */
 export default function VoiceAnnouncements({
   endpoint,
   title = "School Announcements",
-  icon = "🎙️",
+  icon = null,
   emptyMessage = "No announcements yet",
 }) {
   const [announcements, setAnnouncements] = useState([]);
@@ -29,8 +32,10 @@ export default function VoiceAnnouncements({
   const [undoStack, setUndoStack] = useState([]);
   const [undoing, setUndoing] = useState(false);
   const [dateFilter, setDateFilter] = useState({ from: "", to: "" });
+  const [page, setPage] = useState(1);
   const toast = useToast();
   const isAdminEndpoint = endpoint.includes("/admin/");
+  const pageSize = 10;
 
   // Get the correct token based on what the endpoint expects
   // This is determined by the API endpoint path
@@ -107,6 +112,15 @@ export default function VoiceAnnouncements({
     fetchAnnouncements();
   }, [fetchAnnouncements]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [dateFilter, endpoint]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(announcements.length / pageSize));
+    if (page > totalPages) setPage(totalPages);
+  }, [announcements.length, page, pageSize]);
+
   const handleDeleteAnnouncement = async (announcementId) => {
     const confirmed = window.confirm("This will remove this message for all teachers and students. Continue?");
     if (!confirmed) return;
@@ -177,10 +191,15 @@ export default function VoiceAnnouncements({
   if (loading) {
     return (
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <h2 className="text-lg font-bold text-slate-900 mb-4">{icon} {title}</h2>
-        <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-        </div>
+        <h2 className="text-lg font-bold text-slate-900 mb-4">
+          {icon ? (
+            <span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+              {icon}
+            </span>
+          ) : null}
+          {title}
+        </h2>
+        <ListSkeleton rows={2} />
       </div>
     );
   }
@@ -188,7 +207,14 @@ export default function VoiceAnnouncements({
   if (error) {
     return (
       <div className="bg-white p-6 rounded-xl border border-red-200 shadow-sm">
-        <h2 className="text-lg font-bold text-slate-900 mb-4">{icon} {title}</h2>
+        <h2 className="text-lg font-bold text-slate-900 mb-4">
+          {icon ? (
+            <span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+              {icon}
+            </span>
+          ) : null}
+          {title}
+        </h2>
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
@@ -199,18 +225,36 @@ export default function VoiceAnnouncements({
   if (announcements.length === 0) {
     return (
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-        <h2 className="text-lg font-bold text-slate-900 mb-4">{icon} {title}</h2>
+        <h2 className="text-lg font-bold text-slate-900 mb-4">
+          {icon ? (
+            <span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+              {icon}
+            </span>
+          ) : null}
+          {title}
+        </h2>
         <DateFilterBar value={dateFilter} onChange={setDateFilter} />
-        <div className="text-center py-12">
-          <p className="text-slate-500 text-sm">{hasDateFilter(dateFilter) ? "No items for selected date range" : emptyMessage}</p>
-        </div>
+        <EmptyState
+          title={emptyMessage}
+          description={hasDateFilter(dateFilter) ? "No items for selected date range." : "Updates will appear here once published."}
+        />
       </div>
     );
   }
 
+  const totalPages = Math.max(1, Math.ceil(announcements.length / pageSize));
+  const pagedAnnouncements = announcements.slice((page - 1) * pageSize, page * pageSize);
+
   return (
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-      <h2 className="text-lg font-bold text-slate-900">{icon} {title}</h2>
+      <h2 className="text-lg font-bold text-slate-900">
+        {icon ? (
+          <span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+            {icon}
+          </span>
+        ) : null}
+        {title}
+      </h2>
       <DateFilterBar value={dateFilter} onChange={setDateFilter} />
       {isAdminEndpoint && undoStack.length > 0 && (
         <div className="flex justify-end">
@@ -225,7 +269,7 @@ export default function VoiceAnnouncements({
       )}
 
       <div className="space-y-3">
-        {announcements.map((announcement) => (
+        {pagedAnnouncements.map((announcement) => (
           <div
             key={announcement._id}
             className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors"
@@ -266,7 +310,7 @@ export default function VoiceAnnouncements({
                   }`}
                   title={playingId === announcement._id ? "Pause" : "Play"}
                 >
-                  {playingId === announcement._id ? "⏸️" : "▶️"}
+                  {playingId === announcement._id ? "Pause" : "Play"}
                 </button>
 
                 <div className="w-full min-w-0 max-w-full sm:flex-1">
@@ -294,7 +338,42 @@ export default function VoiceAnnouncements({
             )}
           </div>
         ))}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2 mt-6">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-sm disabled:opacity-50"
+            >
+              Previous
+            </button>
+            {Array.from({ length: totalPages }).map((_, idx) => {
+              const pageNum = idx + 1;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setPage(pageNum)}
+                  className={`px-3 py-1 rounded-md text-sm ${
+                    pageNum === page ? "bg-blue-500 text-white" : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-sm disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+
+

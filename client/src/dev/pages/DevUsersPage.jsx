@@ -6,7 +6,7 @@ import DevStatusBadge from "../components/DevStatusBadge";
 import { pushDevToast } from "../utils/devToast";
 import { getCachedValue } from "../utils/devApiCache";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 const FILTERS_STORAGE_KEY = "dev_users_filters_v1";
 const PRESETS_STORAGE_KEY = "dev_users_filter_presets_v1";
 const DEV_SCHOOLS_CACHE_KEY = "dev_schools_meta_v1";
@@ -342,46 +342,46 @@ export default function DevUsersPage() {
             value={filters.search}
             onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
             placeholder="Search name or email"
-            className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+            className="saas-input-dark"
           />
-          <select value={filters.role} onChange={(e) => setFilters((prev) => ({ ...prev, role: e.target.value }))} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white">
+          <select value={filters.role} onChange={(e) => setFilters((prev) => ({ ...prev, role: e.target.value }))} className="saas-input-dark">
             <option value="">All Roles</option>
             <option value="ADMIN">ADMIN</option>
             <option value="TEACHER">TEACHER</option>
             <option value="STUDENT">STUDENT</option>
           </select>
-          <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white">
+          <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="saas-input-dark">
             <option value="">All Status</option>
             <option value="active">Active</option>
             <option value="disabled">Disabled</option>
           </select>
-          <select value={filters.schoolId} onChange={(e) => setFilters((prev) => ({ ...prev, schoolId: e.target.value }))} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white">
+          <select value={filters.schoolId} onChange={(e) => setFilters((prev) => ({ ...prev, schoolId: e.target.value }))} className="saas-input-dark">
             <option value="">All Schools</option>
             {schools.map((school) => (
               <option key={school._id} value={school._id}>{school.name}</option>
             ))}
           </select>
-          <button onClick={searchUsers} className="rounded-lg bg-cyan-500/20 px-3 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/30">Search</button>
+          <button onClick={searchUsers} className="saas-button-dark">Search</button>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <input value={presetName} onChange={(e) => setPresetName(e.target.value)} placeholder="Preset name" className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400" />
-          <button onClick={savePreset} className="rounded-lg bg-emerald-500/20 px-3 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/30">Save Preset</button>
-          <select value={selectedPreset} onChange={(e) => { const name = e.target.value; setSelectedPreset(name); if (name) applyPreset(name); }} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white">
+          <input value={presetName} onChange={(e) => setPresetName(e.target.value)} placeholder="Preset name" className="saas-input-dark" />
+          <button onClick={savePreset} className="saas-button-dark">Save Preset</button>
+          <select value={selectedPreset} onChange={(e) => { const name = e.target.value; setSelectedPreset(name); if (name) applyPreset(name); }} className="saas-input-dark">
             <option value="">Apply Preset</option>
             {Object.keys(presets).map((name) => (
               <option key={name} value={name}>{name}</option>
             ))}
           </select>
-          <button onClick={deletePreset} disabled={!selectedPreset} className="rounded-lg bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-60">Delete Preset</button>
+          <button onClick={deletePreset} disabled={!selectedPreset} className="saas-button-dark disabled:cursor-not-allowed disabled:opacity-60">Delete Preset</button>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={exportUsersCsv} className="rounded-lg bg-sky-500/20 px-3 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-500/30">Export CSV</button>
-          <button onClick={exportUsersJson} className="rounded-lg bg-violet-500/20 px-3 py-2 text-sm font-semibold text-violet-100 hover:bg-violet-500/30">Export JSON</button>
+          <button onClick={exportUsersCsv} className="saas-button-dark">Export CSV</button>
+          <button onClick={exportUsersJson} className="saas-button-dark">Export JSON</button>
         </div>
       </section>
 
-      <div className="hidden overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/45 backdrop-blur-xl md:block">
-        <table className="w-full min-w-[1100px] text-left text-sm text-slate-200">
+      <div className="hidden overflow-x-auto max-h-[520px] rounded-2xl border border-white/10 bg-slate-950/45 backdrop-blur-xl md:block">
+        <table className="saas-table-dark min-w-[1100px]">
           <thead className="sticky top-0 z-10 bg-slate-900/95 text-xs uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">User Name</th>

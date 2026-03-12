@@ -1,4 +1,5 @@
 import React from "react";
+import { motion } from "framer-motion";
 
 /**
  * ConfirmationModal Component
@@ -20,7 +21,12 @@ export default function ConfirmationModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-sm w-full animate-in fade-in zoom-in duration-200">
+      <motion.div
+        className="glass-panel rounded-2xl max-w-sm w-full"
+        initial={{ opacity: 0, scale: 0.96, y: 6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+      >
         {/* Header */}
         <div className={`px-6 py-4 border-b ${isDangerous ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"}`}>
           <h3 className={`text-lg font-bold ${isDangerous ? "text-red-900" : "text-slate-900"}`}>
@@ -33,7 +39,7 @@ export default function ConfirmationModal({
           <p className="text-slate-700 text-sm">{message}</p>
           {warning && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-red-700 text-xs font-semibold">⚠️ {warning}</p>
+              <p className="text-red-700 text-xs font-semibold">Warning: {warning}</p>
             </div>
           )}
         </div>
@@ -59,7 +65,8 @@ export default function ConfirmationModal({
             {isLoading ? "Processing..." : confirmText}
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
+

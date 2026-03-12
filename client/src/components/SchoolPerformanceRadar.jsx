@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { TrendingUp, Award, AlertCircle, Filter } from 'lucide-react';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL;
 const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
   const [classComparison, setClassComparison] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -556,8 +556,8 @@ const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
             {atRiskClasses.map((classData, idx) => (
               <div key={idx} className="bg-white/10 rounded-lg p-3 sm:p-4 border-l-4 border-red-400 hover:bg-white/[0.12] transition-colors">
                 <div className="flex items-start gap-2 sm:gap-3">
-                  <span className="text-lg sm:text-xl mt-0.5 flex-shrink-0\">⚡</span>
-                  <p className="text-xs sm:text-sm font-semibold text-red-200 break-words\">
+                  <span className="text-lg sm:text-xl mt-0.5 flex-shrink-0">⚡</span>
+                  <p className="text-xs sm:text-sm font-semibold text-red-200 break-words">
                     Class {classData.class}-{classData.section}
                     {classData.avgAttendancePercent < 70 && ` • Attendance: ${classData.avgAttendancePercent}%`}
                     {classData.avgMarksPercent < 50 && ` • Marks: ${classData.avgMarksPercent}%`}
@@ -574,8 +574,8 @@ const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
           <div className="flex items-center gap-2 mb-4">
             <span className="text-2xl">👥</span>
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm sm:text-base font-bold text-white truncate\">Students in Class {selectedClass}-{selectedSection}</h3>
-              <p className="text-xs text-blue-200\">Complete class roster</p>
+              <h3 className="text-sm sm:text-base font-bold text-white truncate">Students in Class {selectedClass}-{selectedSection}</h3>
+              <p className="text-xs text-blue-200">Complete class roster</p>
             </div>
           </div>
           
@@ -646,3 +646,4 @@ const SchoolPerformanceRadar = memo(({ token, schoolId }) => {
 });
 SchoolPerformanceRadar.displayName = 'SchoolPerformanceRadar';
 export default SchoolPerformanceRadar;
+

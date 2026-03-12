@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "./ToastProvider";
+import { createNotification } from "../utils/notificationHelper";
 import DateFilterBar from "./DateFilterBar";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
+import EmptyState from "./ui/EmptyState";
+import { ListSkeleton } from "./ui/Skeleton";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const emptyForm = {
   subject: "",
@@ -135,6 +138,27 @@ export default function ExamTimetableManager({ token, teacher }) {
       if (!res.ok) throw new Error(data.error || `Failed to ${isEdit ? "update" : "add"} exam`);
 
       toast.success(isEdit ? "Exam updated" : "Exam added successfully");
+      try {
+        const dateLabel = form.date ? new Date(form.date).toLocaleDateString() : "TBA";
+        await createNotification(
+          isEdit ? "🗓️ Exam Updated" : "📝 New Exam Scheduled",
+          `${form.examName} (${form.subject}) on ${dateLabel} ${form.startTime}-${form.endTime}`,
+          "student",
+          "exam",
+          token,
+          null,
+          {
+            type: "exam",
+            examName: form.examName,
+            subject: form.subject,
+            date: form.date,
+            startTime: form.startTime,
+            endTime: form.endTime,
+          }
+        );
+      } catch (notifErr) {
+        console.warn("Failed to create exam notification (non-critical):", notifErr);
+      }
       closeModal();
       fetchExams();
     } catch (err) {
@@ -189,10 +213,15 @@ export default function ExamTimetableManager({ token, teacher }) {
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {loading ? (
-          <div className="p-6 text-center text-slate-500">Loading exam timetable...</div>
+          <div className="p-6">
+            <ListSkeleton rows={3} />
+          </div>
         ) : exams.length === 0 ? (
-          <div className="p-6 text-center text-slate-500">
-            {hasDateFilter(dateFilter) ? "No items for selected date range" : "No exams found for this class & section"}
+          <div className="p-6">
+            <EmptyState
+              title="No exams scheduled"
+              description={hasDateFilter(dateFilter) ? "No items for selected date range." : "No exams found for this class yet."}
+            />
           </div>
         ) : (
           <>

@@ -1,6 +1,7 @@
 import express from "express";
 import os from "os";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { exec } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -29,6 +30,23 @@ const toObjectId = (value) => {
     return null;
   }
 };
+
+const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+const normalizeEmail = (value = "") => String(value || "").trim().toLowerCase();
+
+const buildDeveloperToken = (developerId, email) =>
+  jwt.sign(
+    {
+      userId: developerId,
+      developerEmail: email,
+      role: "DEVELOPER",
+      schoolId: null,
+      timestamp: Date.now(),
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "1h" }
+  );
 
 const formatUptime = (secondsValue = 0) => {
   const seconds = Math.max(0, Math.floor(Number(secondsValue) || 0));
@@ -123,6 +141,192 @@ export default function devRoutes({
       req,
     });
   };
+
+  const logSystemEvent = async (entry) => {
+    try {
+      await db.collection("systemLogs").insertOne({
+        timestamp: new Date(),
+        level: "INFO",
+        category: "DEV_CREDENTIALS",
+        ...entry,
+      });
+    } catch (err) {
+      console.error("Failed to log developer credential change:", err?.message || err);
+    }
+  };
+
+  const loadDeveloperUser = async (req) => {
+    const developerId = toObjectId(req?.user?.userId);
+    if (!developerId) {
+      const err = new Error("Developer access required");
+      err.statusCode = 403;
+      throw err;
+    }
+    const developerUser = await db.collection("users").findOne({
+      _id: developerId,
+      role: "DEVELOPER",
+      isDeleted: { $ne: true },
+    });
+    if (!developerUser) {
+      const err = new Error("Developer account not found");
+      err.statusCode = 403;
+      throw err;
+    }
+    return developerUser;
+  };
+
+  router.patch("/change-email", async (req, res) => {
+    try {
+      if (!process.env.JWT_SECRET) {
+        return res.status(500).json({ success: false, error: "Server configuration error" });
+      }
+      const currentPassword = String(req.body?.currentPassword || "");
+      const nextEmail = normalizeEmail(req.body?.newEmail);
+      if (!currentPassword || !nextEmail) {
+        return res.status(400).json({ success: false, error: "Current password and new email are required" });
+      }
+      if (!EMAIL_REGEX.test(nextEmail)) {
+        return res.status(400).json({ success: false, error: "Invalid email format" });
+      }
+
+      const developerUser = await loadDeveloperUser(req);
+      const passwordMatch = await bcrypt.compare(currentPassword, String(developerUser.passwordHash || ""));
+      if (!passwordMatch) {
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
+      }
+
+      if (normalizeEmail(developerUser.email) === nextEmail) {
+        return res.status(400).json({ success: false, error: "Email is already set to this value" });
+      }
+
+      const conflict = await db.collection("users").findOne({
+        email: nextEmail,
+        _id: { $ne: developerUser._id },
+        isDeleted: { $ne: true },
+      });
+      if (conflict) {
+        return res.status(409).json({ success: false, error: "Email already in use" });
+      }
+
+      await db.collection("users").updateOne(
+        { _id: developerUser._id },
+        { $set: { email: nextEmail, updatedAt: new Date() } }
+      );
+
+      await audit(req, {
+        action: "DEVELOPER_CHANGE_EMAIL",
+        targetType: "developer",
+        targetId: developerUser._id.toString(),
+        metadata: { newEmail: nextEmail },
+      });
+      await logSystemEvent({
+        message: "Developer email updated",
+        developer: nextEmail,
+        developerId: developerUser._id?.toString?.() || String(developerUser._id),
+      });
+
+      const token = buildDeveloperToken(developerUser._id.toString(), nextEmail);
+      return res.json({
+        success: true,
+        message: "Developer email updated",
+        developerEmail: nextEmail,
+        token,
+      });
+    } catch (err) {
+      return handleError(res, err, "Failed to update developer email");
+    }
+  });
+
+  router.patch("/change-password", async (req, res) => {
+    try {
+      const currentPassword = String(req.body?.currentPassword || "");
+      const nextPassword = String(req.body?.newPassword || "");
+      if (!currentPassword || !nextPassword) {
+        return res.status(400).json({ success: false, error: "Current password and new password are required" });
+      }
+      if (nextPassword.length < 8) {
+        return res.status(400).json({ success: false, error: "New password must be at least 8 characters" });
+      }
+
+      const developerUser = await loadDeveloperUser(req);
+      const passwordMatch = await bcrypt.compare(currentPassword, String(developerUser.passwordHash || ""));
+      if (!passwordMatch) {
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
+      }
+
+      const newPasswordMatchesOld = await bcrypt.compare(nextPassword, String(developerUser.passwordHash || ""));
+      if (newPasswordMatchesOld) {
+        return res.status(400).json({ success: false, error: "New password must be different from the current password" });
+      }
+
+      const passwordHash = await bcrypt.hash(nextPassword, 10);
+      await db.collection("users").updateOne(
+        { _id: developerUser._id },
+        { $set: { passwordHash, updatedAt: new Date() } }
+      );
+
+      await audit(req, {
+        action: "DEVELOPER_CHANGE_PASSWORD",
+        targetType: "developer",
+        targetId: developerUser._id.toString(),
+      });
+      await logSystemEvent({
+        message: "Developer password updated",
+        developer: developerUser.email,
+        developerId: developerUser._id?.toString?.() || String(developerUser._id),
+      });
+
+      return res.json({ success: true, message: "Developer password updated" });
+    } catch (err) {
+      return handleError(res, err, "Failed to update developer password");
+    }
+  });
+
+  router.patch("/change-access-code", async (req, res) => {
+    try {
+      const currentAccessCode = String(req.body?.currentAccessCode || "").trim();
+      const nextAccessCode = String(req.body?.newAccessCode || "").trim();
+      if (!currentAccessCode || !nextAccessCode) {
+        return res.status(400).json({ success: false, error: "Current and new access codes are required" });
+      }
+      if (nextAccessCode.length < 8) {
+        return res.status(400).json({ success: false, error: "New access code must be at least 8 characters" });
+      }
+
+      const configuredAccessCode = String(process.env.DEVELOPER_ACCESS_CODE || process.env.DEV_ACCESS_CODE || "").trim();
+      if (!configuredAccessCode) {
+        return res.status(500).json({ success: false, error: "Developer access code not configured" });
+      }
+      if (configuredAccessCode !== currentAccessCode) {
+        return res.status(403).json({ success: false, error: "Invalid current access code" });
+      }
+      if (configuredAccessCode === nextAccessCode) {
+        return res.status(400).json({ success: false, error: "New access code must be different" });
+      }
+
+      process.env.DEVELOPER_ACCESS_CODE = nextAccessCode;
+
+      const developerUser = await loadDeveloperUser(req);
+      await audit(req, {
+        action: "DEVELOPER_ROTATE_ACCESS_CODE",
+        targetType: "developer",
+        targetId: developerUser._id.toString(),
+      });
+      await logSystemEvent({
+        message: "Developer access code rotated",
+        developer: developerUser.email,
+        developerId: developerUser._id?.toString?.() || String(developerUser._id),
+      });
+
+      return res.json({
+        success: true,
+        message: "Developer access code rotated. Restart the server to persist the change.",
+        restartRequired: true,
+      });
+    } catch (err) {
+      return handleError(res, err, "Failed to rotate developer access code");
+    }
+  });
 
   router.get("/dashboard", async (_req, res) => {
     try {

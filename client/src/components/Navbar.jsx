@@ -1,5 +1,6 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
+import { Search, UserCircle2 } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 import NotificationDropdown from "./NotificationDropdown";
 import useUnreadCount from "../hooks/useUnreadCount";
@@ -11,14 +12,14 @@ const resolveToken = () =>
   localStorage.getItem("token");
 
 export default function Navbar() {
-  const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [token, setToken] = useState(null);
   const { unreadCount, refreshUnreadCount } = useUnreadCount(token);
   const menuRef = useRef(null);
   const notificationsRef = useRef(null);
+  const location = useLocation();
 
-  // Get token from localStorage on mount
   useEffect(() => {
     const syncToken = () => setToken(resolveToken());
     syncToken();
@@ -32,16 +33,12 @@ export default function Navbar() {
     };
   }, []);
 
-  // Close menus when clicking outside
   useEffect(() => {
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setOpen(false);
+        setMenuOpen(false);
       }
-      if (
-        notificationsRef.current &&
-        !notificationsRef.current.contains(e.target)
-      ) {
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target)) {
         setShowNotifications(false);
       }
     };
@@ -49,108 +46,79 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
   return (
-    <nav style={styles.nav}>
-      <div style={styles.row}>
-        <button style={styles.menuBtn} onClick={() => setOpen(!open)}>
-          ☰
-        </button>
-
-        <div style={styles.brand}>EduNest</div>
-
-        {/* Notification Bell - Only show if user is logged in */}
-        {token && (
-          <div
-            ref={notificationsRef}
-            style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}
+    <nav className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((prev) => !prev)}
+            className="relative h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+            aria-label="Toggle menu"
           >
-            <NotificationBell
-              onClick={() => setShowNotifications(!showNotifications)}
-              unreadCount={unreadCount}
-              isOpen={showNotifications}
+            <span
+              className={`absolute left-2 right-2 top-2 h-0.5 bg-slate-600 transition-all ${
+                menuOpen ? "translate-y-2.5 rotate-45" : "" 
+              }`}
             />
-            <NotificationDropdown
-              isOpen={showNotifications}
-              onClose={() => setShowNotifications(false)}
-              token={token}
-              onNotificationsUpdated={refreshUnreadCount}
+            <span
+              className={`absolute left-2 right-2 top-4 h-0.5 bg-slate-600 transition-all ${
+                menuOpen ? "opacity-0" : "" 
+              }`}
             />
+            <span
+              className={`absolute left-2 right-2 top-6 h-0.5 bg-slate-600 transition-all ${
+                menuOpen ? "-translate-y-2.5 -rotate-45" : "" 
+              }`}
+            />
+          </button>
+          <div className="text-sm font-bold text-slate-700">EduNest</div>
+        </div>
+
+        <div className="hidden md:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-600">
+          <Search className="h-4 w-4 text-slate-600" />
+          <input
+            className="w-64 bg-transparent text-sm outline-none placeholder:text-slate-400 text-slate-700"
+            placeholder="Search admissions, updates, or help..."
+          />
+        </div>
+
+        <div className="flex items-center gap-3 text-slate-600">
+          {token && (
+            <div ref={notificationsRef}>
+              <NotificationBell
+                onClick={() => setShowNotifications(!showNotifications)}
+                unreadCount={unreadCount}
+                isOpen={showNotifications}
+              />
+              <NotificationDropdown
+                isOpen={showNotifications}
+                onClose={() => setShowNotifications(false)}
+                token={token}
+                onNotificationsUpdated={refreshUnreadCount}
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1.5">
+            <UserCircle2 className="h-5 w-5 text-slate-600" />
+            <span className="hidden sm:inline text-xs font-semibold text-slate-700">Guest</span>
           </div>
-        )}
+        </div>
       </div>
 
-      {open && (
-        <div ref={menuRef} style={styles.dropdown}>
-          <Link to="/" onClick={() => setOpen(false)} style={styles.link}>
-            Home
-          </Link>
-          <Link to="/settings" onClick={() => setOpen(false)} style={styles.link}>
-            Settings
-          </Link>
-          <Link to="/student/login" onClick={() => setOpen(false)} style={styles.link}>
-            Student Login
-          </Link>
-          <Link to="/teacher/login" onClick={() => setOpen(false)} style={styles.link}>
-            Teacher Login
-          </Link>
-          <Link to="/admin/login" onClick={() => setOpen(false)} style={styles.link}>
-            Admin Login
-          </Link>
+      {menuOpen && (
+        <div ref={menuRef} className="border-t border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-2">
+            <Link to="/student/login" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Student Login</Link>
+            <Link to="/teacher/login" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Teacher Login</Link>
+            <Link to="/admin/login" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Admin Login</Link>
+          </div>
         </div>
       )}
     </nav>
   );
 }
-
-const styles = {
-  nav: {
-    background: "#020617",
-    color: "#fff",
-    padding: "12px 16px",
-    position: "relative",
-    borderBottom: "1px solid rgba(255,255,255,0.1)",
-  },
-
-  row: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-  },
-
-  menuBtn: {
-    background: "none",
-    border: "none",
-    color: "#fff",
-    fontSize: "22px",
-    cursor: "pointer",
-  },
-
-  brand: {
-    fontSize: "18px",
-    fontWeight: "700",
-    letterSpacing: "0.4px",
-  },
-
-  dropdown: {
-    position: "absolute",
-    top: "52px",
-    left: "16px",
-    background: "#020617",
-    borderRadius: "10px",
-    padding: "10px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
-    zIndex: 50,
-  },
-
-  link: {
-    color: "#fff",
-    textDecoration: "none",
-    fontSize: "14px",
-    padding: "8px 12px",
-    borderRadius: "8px",
-    background: "rgba(255,255,255,0.05)",
-  },
-};

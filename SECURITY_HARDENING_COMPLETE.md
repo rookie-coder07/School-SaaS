@@ -162,3 +162,20 @@ function requireTenantId(req, res, next) {
 - Encryption at rest (MongoDB level)
 - SSL/TLS setup
 
+---
+
+## Spreadsheet Library Security Note
+
+The platform uses the "xlsx" library for spreadsheet import/export.
+
+npm audit reports high-severity advisories with no upstream fix currently available.
+
+Risk mitigation strategies implemented:
+
+- Upload size limited to 5MB
+- Only .xlsx files accepted
+- File type validation before parsing
+- Input sanitization before database insertion
+- Backend-only processing environment
+
+A migration to a maintained library such as "exceljs" is planned in a future release.
