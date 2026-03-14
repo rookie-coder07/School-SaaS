@@ -985,28 +985,6 @@ export default function StudentDashboard() {
                       </div>
                     </div>
                   </div>
-
-                  {/* ===== TIMETABLE PREVIEW CARD ===== */}
-                  <div className="rounded-2xl border border-white/15 bg-slate-900/45 p-6 shadow-[0_14px_34px_rgba(2,6,23,0.38)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-100">Class Timetable</h3>
-                        <p className="text-xs text-slate-400 mt-1">View your weekly schedule</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => navigate("/student/timetable/full")}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 text-cyan-200 hover:from-cyan-500/30 hover:to-blue-500/30 text-xs font-semibold transition duration-200"
-                      >
-                        View Full Timetable
-                        <span className="text-lg">→</span>
-                      </button>
-                    </div>
-                    <div className="mt-4 text-xs text-slate-300">
-                      <p>📚 Access your complete class schedule with a mobile-friendly layout.</p>
-                      <p className="mt-2 text-slate-400">Optimize for landscape view on mobile devices.</p>
-                    </div>
-                  </div>
                 </PageContainer>
               )}
 
@@ -1223,7 +1201,17 @@ export default function StudentDashboard() {
                 icon={<CalendarDays className="h-16 w-16" aria-hidden="true" />}
                 showTitle={true}
               />
-              <TimetableGrid token={token} isTeacher={false} readOnly={true} theme="dark" />
+              <div className="flex items-center justify-center min-h-96 p-8">
+                <button
+                  type="button"
+                  onClick={() => navigate("/student/timetable/full")}
+                  className="inline-flex items-center gap-3 px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold hover:from-blue-700 hover:to-cyan-700 transition shadow-lg hover:shadow-xl"
+                >
+                  <CalendarClock size={24} />
+                  View Your Timetable
+                  <span>→</span>
+                </button>
+              </div>
             </div>
           )}
 

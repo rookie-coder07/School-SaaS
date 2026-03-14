@@ -29,8 +29,9 @@ const processTimeTable = (data) => {
   // Build day periods for mobile/card view
   days.forEach((day) => {
     dayPeriods[day] = data
-      .filter((item) => item.day === day)
+      .filter((item) => item.day === day && item.time)
       .sort((a, b) => {
+        if (!a.time || !b.time) return 0;
         const timeA = a.time.split(':').map(Number);
         const timeB = b.time.split(':').map(Number);
         return timeA[0] * 60 + timeA[1] - (timeB[0] * 60 + timeB[1]);
