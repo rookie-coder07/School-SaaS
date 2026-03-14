@@ -1682,31 +1682,49 @@ const getWebAuthnRPName = () => WEB_AUTHN_RP_NAME;
 
 /**
  * Get RP_ID for WebAuthn request
- * Priority: Environment variable > derived from request host (dev only)
- * Always use env variable in production
+ * Dynamically selects correct RP_ID based on request hostname in production
+ * Supports multiple production domains: Render and Vercel
  */
 const getRequestRpID = (req) => {
-  const envRpID = getWebAuthnRPID();
   const requestHost = String(req?.hostname || "").trim().replace(/:\d+$/, "");
   
-  // In production, always use environment variable
+  // In production, match request hostname to appropriate RP_ID
   if (process.env.NODE_ENV === "production") {
-    return envRpID || requestHost;
+    // Check if request is from Vercel domain
+    if (requestHost.includes("vercel.app") || requestHost === "school-saa-s.vercel.app") {
+      const vercelRpID = process.env.RP_ID_VERCEL;
+      if (vercelRpID) {
+        console.log(`[WebAuthn] Using Vercel RP_ID: ${vercelRpID}`);
+        return vercelRpID;
+      }
+    }
+    
+    // Default to configured prod RP_ID
+    const prodRpID = process.env.RP_ID_PROD || process.env.RP_ID;
+    if (prodRpID) {
+      console.log(`[WebAuthn] Using prod RP_ID: ${prodRpID}`);
+      return prodRpID;
+    }
+    
+    // Fallback to request host (last resort)
+    console.warn(`[WebAuthn] No RP_ID configured, using request host: ${requestHost}`);
+    return requestHost;
   }
   
-  // In development, prefer env variable, fall back to request host
-  if (envRpID) {
-    // Env variable is set, use it
-    return envRpID;
+  // In development
+  const devRpID = process.env.RP_ID_DEV;
+  if (devRpID) {
+    console.log(`[WebAuthn] Using dev RP_ID: ${devRpID}`);
+    return devRpID;
   }
   
   // No env variable set and development mode, use request host
   if (requestHost) {
-    console.warn(`[WebAuthn] Using request hostname "${requestHost}" because RP_ID_DEV is not configured`);
+    console.warn(`[WebAuthn] Using request hostname in dev: ${requestHost}`);
     return requestHost;
   }
   
-  return envRpID;
+  return process.env.RP_ID;
 };
 
   async function startServer() {
@@ -2841,7 +2859,22 @@ app.post("/api/auth/webauthn/login/options", authLoginRateLimit, async (req, res
       .toArray();
 
     if (!users.length) {
-      return res.status(404).json({ error: "Fingerprint not registered for this account" });
+      // Check if user exists but has no credentials
+      const userExists = await db
+        .collection("users")
+        .findOne({
+          email,
+          ...roleQuery,
+        });
+      
+      if (userExists) {
+        return res.status(400).json({ 
+          error: "Please register fingerprint on this device first",
+          code: "NO_CREDENTIALS_REGISTERED"
+        });
+      }
+      
+      return res.status(404).json({ error: "Account not found" });
     }
     if (users.length > 1 && !role) {
       return res.status(400).json({ error: "Multiple roles found for this email. Provide role." });
@@ -2851,8 +2884,11 @@ app.post("/api/auth/webauthn/login/options", authLoginRateLimit, async (req, res
 
     const rpID = getRequestRpID(req);
     if (!rpID) {
-      return res.status(500).json({ error: "Server WebAuthn configuration missing RP ID" });
+      console.error("[WebAuthn] Missing RP_ID for login/options");
+      return res.status(500).json({ error: "Server WebAuthn configuration missing RP_ID" });
     }
+
+    console.log(`[WebAuthn Login] User: ${email}, RP_ID: ${rpID}, RequestHost: ${req.hostname}, Credential exists: ${Boolean(user.webauthnCredentialID)}`);
 
     const options = await generateAuthenticationOptions({
       rpID,
@@ -2885,12 +2921,27 @@ app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res)
     }
 
     const user = await db.collection("users").findOne({ email, role });
-    if (!user || !user.webauthnCredentialID || !user.publicKey) {
-      return res.status(404).json({ error: "Fingerprint not registered for this account" });
+    if (!user) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+    
+    if (!user.webauthnCredentialID || !user.publicKey) {
+      return res.status(400).json({ 
+        error: "Please register fingerprint on this device first",
+        code: "NO_CREDENTIALS_REGISTERED"
+      });
     }
 
     const expectedChallenge = consumeWebAuthnChallenge(`login:${role}:${user._id.toString()}`, "login");
-    if (!expectedChallenge) return res.status(400).json({ error: "Login challenge expired. Retry fingerprint login." });
+    if (!expectedChallenge) {
+      console.warn(`[WebAuthn] Challenge expired for ${email}`);
+      return res.status(400).json({ error: "Login challenge expired. Retry fingerprint login." });
+    }
+
+    const rpID = getRequestRpID(req);
+    const origins = getWebAuthnOrigin();
+    
+    console.log(`[WebAuthn Verify Login] User: ${email}, RP_ID: ${rpID}, Origins: ${origins.join(", ")}`);
 
     const verification = await verifyAuthenticationResponse({
       response: authenticationResponse,
