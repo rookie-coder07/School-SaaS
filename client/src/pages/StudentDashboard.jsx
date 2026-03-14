@@ -547,6 +547,18 @@ export default function StudentDashboard() {
     }
   }, []);
 
+  // Handle scroll lock when sidebar opens/closes (mobile)
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.classList.add("nav-open");
+    } else {
+      document.body.classList.remove("nav-open");
+    }
+    return () => {
+      document.body.classList.remove("nav-open");
+    };
+  }, [sidebarOpen]);
+
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "attendance", label: "Attendance", icon: CalendarCheck },
@@ -614,7 +626,8 @@ export default function StudentDashboard() {
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
-          className="lg:hidden fixed inset-0 bg-black/30 z-30"
+          className="lg:hidden fixed inset-0 bg-black/45 z-20"
+          aria-hidden="true"
         />
       )}
 

@@ -33,6 +33,18 @@ export default function Navbar() {
     };
   }, []);
 
+  // Handle scroll lock when menu opens/closes
+  useEffect(() => {
+    if (menuOpen) {
+      document.body.classList.add("nav-open");
+    } else {
+      document.body.classList.remove("nav-open");
+    }
+    return () => {
+      document.body.classList.remove("nav-open");
+    };
+  }, [menuOpen]);
+
   useEffect(() => {
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -111,13 +123,22 @@ export default function Navbar() {
       </div>
 
       {menuOpen && (
-        <div ref={menuRef} className="border-t border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="flex flex-col gap-2">
-            <Link to="/student/login" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Student Login</Link>
-            <Link to="/teacher/login" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Teacher Login</Link>
-            <Link to="/admin/login" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Admin Login</Link>
+        <>
+          {/* Backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-black/45 z-30 lg:hidden"
+            onClick={() => setMenuOpen(false)}
+            aria-hidden="true"
+          />
+          {/* Menu drawer */}
+          <div ref={menuRef} className="fixed left-0 right-0 top-16 bg-white border-t border-slate-200 shadow-lg z-40 max-h-[calc(100vh-64px)] overflow-y-auto">
+            <div className="mx-auto max-w-6xl px-4 py-3 flex flex-col gap-2">
+              <Link to="/student/login" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Student Login</Link>
+              <Link to="/teacher/login" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Teacher Login</Link>
+              <Link to="/admin/login" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Admin Login</Link>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </nav>
   );

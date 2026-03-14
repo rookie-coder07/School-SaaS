@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 const navItems = [
@@ -24,6 +24,18 @@ export default function DevPortalLayout({ title, subtitle, actions = null, child
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Handle scroll lock when menu opens/closes
+  useEffect(() => {
+    if (menuOpen) {
+      document.body.classList.add("nav-open");
+    } else {
+      document.body.classList.remove("nav-open");
+    }
+    return () => {
+      document.body.classList.remove("nav-open");
+    };
+  }, [menuOpen]);
+
   const handleLogout = () => {
     localStorage.removeItem("developerToken");
     localStorage.removeItem("userRole");
@@ -32,8 +44,19 @@ export default function DevPortalLayout({ title, subtitle, actions = null, child
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900">
+      {/* Mobile backdrop */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 bg-black/45 z-30 md:hidden"
+          onClick={() => setMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-4 md:flex-row md:gap-6 md:p-6">
-        <aside className="w-full rounded-2xl border border-white/20 bg-white/10 p-4 shadow-xl backdrop-blur-lg md:sticky md:top-6 md:h-fit md:w-72">
+        <aside className={`md:sticky md:top-6 md:h-fit w-full md:w-72 rounded-2xl border border-white/20 bg-white/10 p-4 shadow-xl backdrop-blur-lg ${
+          menuOpen ? "fixed inset-0 top-0 left-0 right-auto z-40 md:static md:inset-auto md:z-auto" : "hidden md:block"
+        }`}>
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-black text-white">Developer Portal</h2>
