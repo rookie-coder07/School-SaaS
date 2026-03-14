@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ListSkeleton } from "../components/ui/Skeleton";
 import { useToast } from "../components/ToastProvider";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const processTimeTable = (data) => {
   if (!Array.isArray(data) || data.length === 0) {
-    return { timeSlots: [], days: [], grid: {} };
+    return { timeSlots: [], days: [], grid: {}, dayPeriods: {} };
   }
 
   const timeSlots = [...new Set(data.map((item) => item.time))].sort();
@@ -17,26 +18,49 @@ const processTimeTable = (data) => {
   });
 
   const grid = {};
+  const dayPeriods = {};
+
+  // Build grid for desktop view
   data.forEach((item) => {
     const key = `${item.time}-${item.day}`;
     grid[key] = item.subject || "Break";
   });
 
-  return { timeSlots, days, grid };
+  // Build day periods for mobile/card view
+  days.forEach((day) => {
+    dayPeriods[day] = data
+      .filter((item) => item.day === day)
+      .sort((a, b) => {
+        const timeA = a.time.split(':').map(Number);
+        const timeB = b.time.split(':').map(Number);
+        return timeA[0] * 60 + timeA[1] - (timeB[0] * 60 + timeB[1]);
+      })
+      .map((item, idx) => ({
+        period: idx + 1,
+        time: item.time,
+        subject: item.subject || "Free Period",
+        teacher: item.teacher || null,
+        isFree: !item.subject,
+      }));
+  });
+
+  return { timeSlots, days, grid, dayPeriods };
 };
 
-const getSubjectColorClass = (subject) => {
-  if (!subject || subject === "Break") return "bg-slate-600 text-slate-100 border-slate-500";
+const getSubjectColorClass = (subject, isFree = false) => {
+  if (isFree || !subject || subject === "Break" || subject === "Free Period") {
+    return "bg-slate-600/50 text-slate-200 border-slate-500";
+  }
 
   const subjectMap = {
-    math: "bg-blue-600 text-white border-blue-500",
-    english: "bg-purple-600 text-white border-purple-500",
-    science: "bg-emerald-600 text-white border-emerald-500",
-    social: "bg-amber-600 text-white border-amber-500",
-    computer: "bg-pink-600 text-white border-pink-500",
-    hindi: "bg-orange-600 text-white border-orange-500",
-    sports: "bg-cyan-600 text-white border-cyan-500",
-    lunch: "bg-slate-700 text-slate-100 border-slate-600",
+    math: "bg-blue-600/90 text-white border-blue-500",
+    english: "bg-purple-600/90 text-white border-purple-500",
+    science: "bg-emerald-600/90 text-white border-emerald-500",
+    social: "bg-amber-600/90 text-white border-amber-500",
+    computer: "bg-pink-600/90 text-white border-pink-500",
+    hindi: "bg-orange-600/90 text-white border-orange-500",
+    sports: "bg-cyan-600/90 text-white border-cyan-500",
+    lunch: "bg-slate-700/50 text-slate-100 border-slate-600",
   };
 
   const lower = subject.toLowerCase();
@@ -44,9 +68,10 @@ const getSubjectColorClass = (subject) => {
     if (lower.includes(key)) return value;
   }
 
-  return "bg-indigo-600 text-white border-indigo-500";
+  return "bg-indigo-600/90 text-white border-indigo-500";
 };
 
+// Desktop Table View
 const TimetableGridRenderer = ({ data }) => {
   if (!data.grid || data.days.length === 0) {
     return <div className="text-center text-slate-300 py-8">No timetable data available</div>;
@@ -61,27 +86,22 @@ const TimetableGridRenderer = ({ data }) => {
           minWidth: "900px",
         }}
       >
-        {/* Header Row - Time */}
         <div className="font-bold text-slate-300 text-xs uppercase flex items-center justify-center bg-slate-700/60 rounded p-2 border border-slate-600">
           Time
         </div>
 
-        {/* Header Row - Days */}
         {data.days.map((day) => (
           <div key={`header-${day}`} className="font-bold text-slate-100 text-xs uppercase flex items-center justify-center bg-slate-700/60 rounded p-2 border border-slate-600">
-            {day}
+            {day.slice(0, 3)}
           </div>
         ))}
 
-        {/* Data Rows */}
         {data.timeSlots.map((timeSlot) => (
           <div key={`row-${timeSlot}`} className="contents">
-            {/* Time Column */}
             <div className="font-semibold text-slate-200 text-xs flex items-center justify-center bg-slate-800/40 rounded p-2 border border-slate-600">
               {timeSlot}
             </div>
 
-            {/* Subject Cells */}
             {data.days.map((day) => {
               const key = `${timeSlot}-${day}`;
               const subject = data.grid[key] || "—";
@@ -103,14 +123,132 @@ const TimetableGridRenderer = ({ data }) => {
   );
 };
 
+// Mobile Card View
+const MobileSwipeableView = ({ data, currentDay, onDayChange, touchStart, touchEnd }) => {
+  const dayPeriods = data.dayPeriods[currentDay] || [];
+  const dayIndex = data.days.indexOf(currentDay);
+
+  return (
+    <div
+      className="touch-pan-y"
+      onTouchStart={touchStart}
+      onTouchEnd={touchEnd}
+      onMouseDown={touchStart}
+      onMouseUp={touchEnd}
+    >
+      {/* Day Navigation */}
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <button
+          onClick={() => onDayChange(dayIndex - 1)}
+          disabled={dayIndex === 0}
+          className="p-2 rounded-lg bg-blue-600/50 hover:bg-blue-600 disabled:bg-slate-600/30 disabled:cursor-not-allowed transition text-white"
+        >
+          <ChevronLeft size={20} />
+        </button>
+
+        <div className="flex-1 px-2">
+          <div className="text-center">
+            <h3 className="text-2xl font-bold text-white">{currentDay}</h3>
+            <p className="text-blue-200 text-sm">
+              {dayPeriods.length} periods
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => onDayChange(dayIndex + 1)}
+          disabled={dayIndex === data.days.length - 1}
+          className="p-2 rounded-lg bg-blue-600/50 hover:bg-blue-600 disabled:bg-slate-600/30 disabled:cursor-not-allowed transition text-white"
+        >
+          <ChevronRight size={20} />
+        </button>
+      </div>
+
+      {/* Period Cards */}
+      <div className="space-y-3">
+        {dayPeriods.length === 0 ? (
+          <div className="text-center py-12 px-6 bg-slate-800/40 rounded-lg border border-slate-700">
+            <p className="text-slate-300 text-sm">No periods scheduled for {currentDay}</p>
+          </div>
+        ) : (
+          dayPeriods.map((period, idx) => (
+            <div
+              key={`${currentDay}-period-${idx}`}
+              className={`rounded-lg p-4 border transition transform hover:scale-105 ${getSubjectColorClass(
+                period.subject,
+                period.isFree
+              )}`}
+            >
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-bold opacity-75">Period {period.period}</span>
+                    <span className="text-xs font-semibold opacity-75">{period.time}</span>
+                  </div>
+                  <h4 className="text-lg font-bold truncate">{period.subject}</h4>
+                  {period.teacher && (
+                    <p className="text-xs opacity-90 mt-1 truncate">
+                      👨‍🏫 {period.teacher}
+                    </p>
+                  )}
+                </div>
+                {period.isFree && (
+                  <div className="text-xs font-semibold bg-white/20 px-2 py-1 rounded">
+                    Free
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Day Tabs Component
+const DayTabs = ({ days, activeDay, onDayChange }) => {
+  const dayShortMap = {
+    Monday: "Mon",
+    Tuesday: "Tue",
+    Wednesday: "Wed",
+    Thursday: "Thu",
+    Friday: "Fri",
+    Saturday: "Sat",
+  };
+
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-2 mb-6 -mx-4 px-4 sm:mx-0 sm:px-0">
+      {days.map((day) => (
+        <button
+          key={day}
+          onClick={() => onDayChange(days.indexOf(day))}
+          className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition ${
+            activeDay === day
+              ? "bg-blue-600 text-white shadow-lg scale-105"
+              : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/80"
+          }`}
+        >
+          {dayShortMap[day]}
+        </button>
+      ))}
+    </div>
+  );
+};
+
 export default function StudentTimetableFullPage() {
   const navigate = useNavigate();
   const [timetable, setTimetable] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [studentInfo, setStudentInfo] = useState({ name: "Student", class: "—", section: "—" });
+  const [currentDayIndex, setCurrentDayIndex] = useState(0);
+  const [processedData, setProcessedData] = useState({ timeSlots: [], days: [], grid: {}, dayPeriods: {} });
+  const touchStartRef = useRef(null);
+  const touchEndRef = useRef(null);
   const toast = useToast();
 
+  // Fetch timetable data
   useEffect(() => {
     const fetchTimetable = async () => {
       try {
@@ -120,7 +258,6 @@ export default function StudentTimetableFullPage() {
           return;
         }
 
-        // Get student info from localStorage
         const storedInfo = localStorage.getItem("studentInfo");
         if (storedInfo) {
           setStudentInfo(JSON.parse(storedInfo));
@@ -132,7 +269,9 @@ export default function StudentTimetableFullPage() {
 
         if (!res.ok) throw new Error("Failed to fetch timetable");
         const data = await res.json();
+        const processed = processTimeTable(Array.isArray(data) ? data : []);
         setTimetable(Array.isArray(data) ? data : []);
+        setProcessedData(processed);
       } catch (err) {
         console.error("Timetable fetch error:", err);
         toast.error("Failed to load timetable");
@@ -144,6 +283,44 @@ export default function StudentTimetableFullPage() {
 
     fetchTimetable();
   }, [navigate, toast]);
+
+  // Swipe handlers
+  const handleTouchStart = (e) => {
+    touchStartRef.current = e.targetTouches?.[0]?.clientX || e.clientX;
+  };
+
+  const handleTouchEnd = (e) => {
+    touchEndRef.current = e.changedTouches?.[0]?.clientX || e.clientX;
+    handleSwipe();
+  };
+
+  const handleSwipe = () => {
+    if (!touchStartRef.current || !touchEndRef.current) return;
+
+    const diff = touchStartRef.current - touchEndRef.current;
+    const threshold = 50;
+
+    // Swipe left → next day
+    if (diff > threshold && currentDayIndex < processedData.days.length - 1) {
+      setCurrentDayIndex((prev) => prev + 1);
+    }
+
+    // Swipe right → previous day
+    if (diff < -threshold && currentDayIndex > 0) {
+      setCurrentDayIndex((prev) => prev - 1);
+    }
+
+    touchStartRef.current = null;
+    touchEndRef.current = null;
+  };
+
+  const handleDayChange = (newIndex) => {
+    if (newIndex >= 0 && newIndex < processedData.days.length) {
+      setCurrentDayIndex(newIndex);
+    }
+  };
+
+  const currentDay = processedData.days[currentDayIndex] || "Monday";
 
   if (loading) {
     return (
@@ -183,18 +360,9 @@ export default function StudentTimetableFullPage() {
           </div>
         </div>
 
-        {/* Timetable Card */}
-        <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-2xl shadow-xl overflow-hidden">
-          <div className="mb-6">
-            <h2 className="text-lg font-bold text-white">Your Timetable</h2>
-            <p className="text-blue-200 text-sm mt-1">View your complete daily schedule across all weekdays</p>
-          </div>
-          <TimetableGridRenderer data={processTimeTable(timetable)} />
-        </div>
-
-        {/* Error Section */}
-        {error && (
-          <div className="mt-6 p-6 bg-red-500/20 border border-red-300/40 rounded-xl text-center">
+        {/* Main Content */}
+        {error ? (
+          <div className="p-6 bg-red-500/20 border border-red-300/40 rounded-xl text-center">
             <p className="text-red-100 font-semibold">Error: {error}</p>
             <button
               onClick={() => navigate(-1)}
@@ -203,6 +371,39 @@ export default function StudentTimetableFullPage() {
               Go Back
             </button>
           </div>
+        ) : (
+          <>
+            {/* Desktop View - Full Table */}
+            <div className="hidden lg:block bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-2xl shadow-xl overflow-hidden">
+              <div className="mb-6">
+                <h2 className="text-lg font-bold text-white">Weekly Timetable</h2>
+                <p className="text-blue-200 text-sm mt-1">Your complete schedule across all weekdays</p>
+              </div>
+              <TimetableGridRenderer data={processedData} />
+            </div>
+
+            {/* Mobile & Tablet View - Swipeable Daily Cards */}
+            <div className="lg:hidden">
+              <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-2xl shadow-xl">
+                {/* Day Tabs */}
+                <DayTabs days={processedData.days} activeDay={currentDay} onDayChange={handleDayChange} />
+
+                {/* Swipeable Content */}
+                <MobileSwipeableView
+                  data={processedData}
+                  currentDay={currentDay}
+                  onDayChange={handleDayChange}
+                  touchStart={handleTouchStart}
+                  touchEnd={handleTouchEnd}
+                />
+              </div>
+
+              {/* Swipe Hint for Mobile */}
+              <div className="mt-4 text-center text-blue-200 text-xs">
+                💡 Swipe left/right to change days
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>
