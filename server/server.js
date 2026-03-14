@@ -1686,29 +1686,15 @@ const getWebAuthnRPName = () => WEB_AUTHN_RP_NAME;
  * Supports multiple production domains: Render and Vercel
  */
 const getRequestRpID = (req) => {
-  const requestHost = String(req?.hostname || "").trim().replace(/:\d+$/, "");
+  // Use a canonical RP_ID for all environments
+  // This allows credentials to work across multiple deployment domains (Render + Vercel)
   
-  // In production, match request hostname to appropriate RP_ID
   if (process.env.NODE_ENV === "production") {
-    // Check if request is from Vercel domain
-    if (requestHost.includes("vercel.app") || requestHost === "school-saa-s.vercel.app") {
-      const vercelRpID = process.env.RP_ID_VERCEL;
-      if (vercelRpID) {
-        console.log(`[WebAuthn] Using Vercel RP_ID: ${vercelRpID}`);
-        return vercelRpID;
-      }
+    const rpID = process.env.RP_ID_PROD || process.env.RP_ID;
+    if (rpID) {
+      console.log(`[WebAuthn] Using canonical prod RP_ID: ${rpID}`);
+      return rpID;
     }
-    
-    // Default to configured prod RP_ID
-    const prodRpID = process.env.RP_ID_PROD || process.env.RP_ID;
-    if (prodRpID) {
-      console.log(`[WebAuthn] Using prod RP_ID: ${prodRpID}`);
-      return prodRpID;
-    }
-    
-    // Fallback to request host (last resort)
-    console.warn(`[WebAuthn] No RP_ID configured, using request host: ${requestHost}`);
-    return requestHost;
   }
   
   // In development
@@ -1718,12 +1704,8 @@ const getRequestRpID = (req) => {
     return devRpID;
   }
   
-  // No env variable set and development mode, use request host
-  if (requestHost) {
-    console.warn(`[WebAuthn] Using request hostname in dev: ${requestHost}`);
-    return requestHost;
-  }
-  
+  // Fallback
+  console.warn(`[WebAuthn] No RP_ID configured, using fallback`);
   return process.env.RP_ID;
 };
 
