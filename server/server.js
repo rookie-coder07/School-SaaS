@@ -1679,13 +1679,34 @@ const getWebAuthnOrigin = () => {
   return raw.split(",").map((item) => item.trim()).filter(Boolean);
 };
 const getWebAuthnRPName = () => WEB_AUTHN_RP_NAME;
+
+/**
+ * Get RP_ID for WebAuthn request
+ * Priority: Environment variable > derived from request host (dev only)
+ * Always use env variable in production
+ */
 const getRequestRpID = (req) => {
   const envRpID = getWebAuthnRPID();
   const requestHost = String(req?.hostname || "").trim().replace(/:\d+$/, "");
-  if (process.env.NODE_ENV !== "production" && requestHost) {
+  
+  // In production, always use environment variable
+  if (process.env.NODE_ENV === "production") {
+    return envRpID || requestHost;
+  }
+  
+  // In development, prefer env variable, fall back to request host
+  if (envRpID) {
+    // Env variable is set, use it
+    return envRpID;
+  }
+  
+  // No env variable set and development mode, use request host
+  if (requestHost) {
+    console.warn(`[WebAuthn] Using request hostname "${requestHost}" because RP_ID_DEV is not configured`);
     return requestHost;
   }
-  return envRpID || requestHost;
+  
+  return envRpID;
 };
 
   async function startServer() {

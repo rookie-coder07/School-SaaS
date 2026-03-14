@@ -17,6 +17,64 @@ const fromBase64Url = (value = "") => {
 export const isWebAuthnSupported = () =>
   Boolean(window?.PublicKeyCredential && navigator?.credentials);
 
+/**
+ * Get configured WebAuthn origins from environment variable
+ * Supports comma-separated list of origins for development/production flexibility
+ */
+export const getConfiguredWebAuthnOrigins = () => {
+  const originStr = import.meta.env.VITE_WEBAUTHN_ORIGIN || "";
+  if (!originStr) return [];
+  return originStr
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+};
+
+/**
+ * Validate if current window origin is allowed for WebAuthn
+ * Returns true if origin is configured or if no origins are configured (unsafe fallback)
+ */
+export const isWebAuthnOriginValid = () => {
+  if (typeof window === "undefined") return false;
+  
+  const configuredOrigins = getConfiguredWebAuthnOrigins();
+  
+  // If no origins configured in environment, allow (development mode)
+  if (configuredOrigins.length === 0) {
+    console.warn("[WebAuthn] No VITE_WEBAUTHN_ORIGIN configured - allowing all origins");
+    return true;
+  }
+
+  const currentOrigin = window.location.origin;
+  const isValid = configuredOrigins.includes(currentOrigin);
+  
+  if (!isValid) {
+    console.error(
+      `[WebAuthn] Origin mismatch: current="${currentOrigin}" configured="${configuredOrigins.join(", ")}"`
+    );
+  }
+
+  return isValid;
+};
+
+/**
+ * Get error message when WebAuthn origin is invalid
+ */
+export const getWebAuthnOriginErrorMessage = () => {
+  const currentOrigin = window.location.origin;
+  const configuredOrigins = getConfiguredWebAuthnOrigins();
+  
+  if (configuredOrigins.length === 0) {
+    return null; // No origins configured, allow
+  }
+
+  if (!configuredOrigins.includes(currentOrigin)) {
+    return `Fingerprint login is unavailable on this domain. Expected: ${configuredOrigins.join(" or ")}, Got: ${currentOrigin}`;
+  }
+
+  return null;
+};
+
 export const prepareRegistrationOptions = (options = {}) => ({
   ...options,
   challenge: fromBase64Url(options.challenge),

@@ -982,7 +982,7 @@ export default function StudentDashboard() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => navigate("/student/timetable")}
+                        onClick={() => navigate("/student/timetable/full")}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 text-cyan-200 hover:from-cyan-500/30 hover:to-blue-500/30 text-xs font-semibold transition duration-200"
                       >
                         View Full Timetable

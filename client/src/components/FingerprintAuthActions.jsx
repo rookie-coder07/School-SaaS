@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   isWebAuthnSupported,
+  isWebAuthnOriginValid,
+  getWebAuthnOriginErrorMessage,
   prepareAuthenticationOptions,
   prepareRegistrationOptions,
   serializeAuthenticationCredential,
@@ -25,12 +27,34 @@ export default function FingerprintAuthActions({
     setInfo("");
   };
 
-  const handleFingerprintRegister = async () => {
-    resetMessages();
+  /**
+   * Validate WebAuthn prerequisites before attempting to create/get credentials
+   */
+  const validateWebAuthnPrerequisites = () => {
     if (!isWebAuthnSupported()) {
       setError("Fingerprint login is not supported on this device/browser");
+      return false;
+    }
+
+    if (!isWebAuthnOriginValid()) {
+      const originError = getWebAuthnOriginErrorMessage();
+      if (originError) {
+        setError(originError);
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleFingerprintRegister = async () => {
+    resetMessages();
+
+    // Validate prerequisites before registration
+    if (!validateWebAuthnPrerequisites()) {
       return;
     }
+
     if (!email || !password) {
       setError("Enter email and password first to register fingerprint");
       return;
@@ -71,10 +95,12 @@ export default function FingerprintAuthActions({
 
   const handleFingerprintLogin = async () => {
     resetMessages();
-    if (!isWebAuthnSupported()) {
-      setError("Fingerprint login is not supported on this device/browser");
+
+    // Validate prerequisites before login
+    if (!validateWebAuthnPrerequisites()) {
       return;
     }
+
     if (!email) {
       setError("Enter email to continue fingerprint login");
       return;
