@@ -61,6 +61,7 @@ export default function DevLogin() {
 
       // Store developer token
       localStorage.setItem("developerToken", payload.token);
+      localStorage.setItem("dev_token", payload.token);
       localStorage.setItem("devAccess", "true");
       localStorage.setItem("userRole", "DEVELOPER");
       navigate("/internal/dev-portal/dashboard", { replace: true });

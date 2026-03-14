@@ -62,6 +62,17 @@ class MockCollection {
     return Promise.resolve({ deletedCount: 0 });
   }
 
+  deleteMany(query = {}) {
+    const before = this.data.length;
+    this.data = this.data.filter(item => !this._matches(item, query));
+    return Promise.resolve({ deletedCount: before - this.data.length });
+  }
+
+  countDocuments(query = {}) {
+    const count = this.data.filter(item => this._matches(item, query)).length;
+    return Promise.resolve(count);
+  }
+
   aggregate(pipeline) {
     let results = [...this.data];
     for (const stage of pipeline) {

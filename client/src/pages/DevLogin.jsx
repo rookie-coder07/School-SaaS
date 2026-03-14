@@ -12,6 +12,7 @@ const API_URL = import.meta.env.VITE_API_URL;
 export default function DevLogin() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [accessCode, setAccessCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -28,6 +29,7 @@ export default function DevLogin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
+          password: password.trim(),
           accessCode: accessCode.trim(),
         }),
       });
@@ -41,7 +43,8 @@ export default function DevLogin() {
 
       // ✅ Store developer token
       localStorage.setItem("developerToken", payload.token);
-      localStorage.setItem("userRole", "developer");
+      localStorage.setItem("dev_token", payload.token);
+      localStorage.setItem("userRole", "DEVELOPER");
       localStorage.setItem("developerEmail", email);
 
       // Redirect to dev dashboard
@@ -165,10 +168,27 @@ export default function DevLogin() {
               </p>
             </div>
 
+            {/* Password Field */}
+            <div>
+              <label htmlFor="dev-password" className="block text-xs font-bold text-slate-200 uppercase mb-2">
+                Developer Password
+              </label>
+              <input
+                id="dev-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+                placeholder="Enter developer password"
+                className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading || !email || !accessCode}
+              disabled={loading || !email || !accessCode || !password}
               className="w-full mt-6 rounded-lg bg-gradient-to-r from-cyan-400 via-blue-400 to-blue-500 px-4 py-3 font-bold text-slate-950 transition hover:shadow-lg hover:shadow-cyan-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? (
@@ -199,4 +219,3 @@ export default function DevLogin() {
     </div>
   );
 }
-

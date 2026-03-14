@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import EmptyState from "../../components/ui/EmptyState";
-import { AlertTriangle, Bug, Clock3, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Bug, Clock3, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -50,6 +50,7 @@ export default function DevErrorsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [severityFilter, setSeverityFilter] = useState("all");
+  const [showResolved, setShowResolved] = useState(false);
   const [expandedRowKey, setExpandedRowKey] = useState("");
   const [payload, setPayload] = useState({
     cards: { errorsToday: 0, errorsLastHour: 0, mostFailingApi: "N/A", totalSystemErrors: 0 },
@@ -64,7 +65,11 @@ export default function DevErrorsPage() {
       try {
         setLoading(true);
         setError("");
-        const response = await fetch(`${API_URL}/api/dev/errors?limit=50`, {
+        const queryParams = new URLSearchParams({ limit: "50" });
+        if (showResolved) {
+          queryParams.append("includeResolved", "true");
+        }
+        const response = await fetch(`${API_URL}/api/dev/errors?${queryParams.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
@@ -76,12 +81,14 @@ export default function DevErrorsPage() {
           errorsByRoute: [],
           errorsTimeline: [],
           recentErrors: errors.slice(0, 50).map((e) => ({
+            _id: e._id,
             timestamp: e.timestamp,
             route: e.endpoint || e.route || "Unknown",
             message: e.message || "No message",
             userRole: e.userRole || "system",
             school: e.school || "-",
             statusCode: e.statusCode || "500",
+            status: e.status || "ACTIVE",
           })),
         });
       } catch (requestError) {
@@ -93,7 +100,27 @@ export default function DevErrorsPage() {
     };
     load();
     return () => controller.abort();
-  }, [token]);
+  }, [token, showResolved]);
+
+  const resolveError = async (errorId) => {
+    try {
+      const response = await fetch(`${API_URL}/api/dev/errors/${errorId}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Failed to resolve error");
+      
+      // Remove resolved error from list or update its status
+      setPayload((prev) => ({
+        ...prev,
+        recentErrors: prev.recentErrors.map((err) =>
+          err._id === errorId ? { ...err, status: "RESOLVED" } : err
+        ),
+      }));
+    } catch (err) {
+      console.error("Error resolving error:", err);
+    }
+  };
 
   const cards = useMemo(
     () => [
@@ -115,8 +142,12 @@ export default function DevErrorsPage() {
   }, [payload.recentErrors]);
 
   const filteredErrors = useMemo(
-    () => payload.recentErrors.filter((item) => severityFilter === "all" || getSeverity(item) === severityFilter),
-    [payload.recentErrors, severityFilter]
+    () => payload.recentErrors.filter((item) => {
+      const matchesSeverity = severityFilter === "all" || getSeverity(item) === severityFilter;
+      const matchesStatus = showResolved || item.status === "ACTIVE";
+      return matchesSeverity && matchesStatus;
+    }),
+    [payload.recentErrors, severityFilter, showResolved]
   );
 
   const severityCounts = useMemo(
@@ -142,7 +173,7 @@ export default function DevErrorsPage() {
       )}
 
       <section className="rounded-2xl border border-slate-700 bg-slate-800 p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Severity</p>
             <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} className={selectClass}>
@@ -164,6 +195,16 @@ export default function DevErrorsPage() {
             <p className="text-xs text-slate-400">Ignorable</p>
             <p className="text-lg font-black text-slate-200">{severityCounts.ignorable}</p>
           </div>
+          <button
+            onClick={() => setShowResolved(!showResolved)}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+              showResolved
+                ? "border border-blue-400/50 bg-blue-500/20 text-blue-200"
+                : "border border-slate-600 bg-slate-900/50 text-slate-300 hover:border-slate-500"
+            }`}
+          >
+            {showResolved ? "✓ Show Resolved" : "Show Resolved"}
+          </button>
         </div>
       </section>
 
@@ -226,6 +267,7 @@ export default function DevErrorsPage() {
             <table className="min-w-full w-full text-left text-sm">
               <thead className="text-slate-300">
                 <tr className="border-b border-slate-700">
+                  <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Time</th>
                   <th className="px-3 py-2">Route</th>
                   <th className="px-3 py-2">Severity</th>
@@ -238,11 +280,19 @@ export default function DevErrorsPage() {
               </thead>
                 {filteredErrors.map((item) => {
                   if (!item?.timestamp) return null;
-                  const errorKey = `error-${item.timestamp}-${item.route || "unknown"}`;
+                  const errorKey = `error-${item._id || item.timestamp}-${item.route || "unknown"}`;
                   const severity = getSeverity(item);
+                  const isResolved = item.status === "RESOLVED";
                   return (
                     <tbody key={errorKey}>
-                      <tr className="border-t border-slate-700 text-slate-300 hover:bg-slate-700/50">
+                      <tr className={`border-t border-slate-700 text-slate-300 ${isResolved ? "bg-slate-800/50 opacity-75" : "hover:bg-slate-700/50"}`}>
+                        <td className="px-3 py-2">
+                          <span className={`rounded px-2 py-0.5 text-xs font-semibold  ${
+                            isResolved ? "border border-green-400/40 bg-green-500/15 text-green-300" : "border border-blue-400/40 bg-blue-500/15 text-blue-300"
+                          }`}>
+                            {isResolved ? "✓ RESOLVED" : "⚠ ACTIVE"}
+                          </span>
+                        </td>
                         <td className="whitespace-nowrap px-3 py-2 text-xs">{new Date(item.timestamp).toLocaleString()}</td>
                         <td className="px-3 py-2">{item.route || "N/A"}</td>
                         <td className="px-3 py-2">
@@ -262,12 +312,22 @@ export default function DevErrorsPage() {
                           >
                             {expandedRowKey === errorKey ? "Hide" : "View"}
                           </button>
+                          {!isResolved && (
+                            <button
+                              type="button"
+                              onClick={() => resolveError(item._id)}
+                              className="ml-2 rounded border border-green-500/40 bg-green-500/15 px-2 py-1 text-xs font-semibold text-green-300 hover:bg-green-500/25"
+                            >
+                              Resolve
+                            </button>
+                          )}
                         </td>
                       </tr>
                       {expandedRowKey === errorKey ? (
                         <tr className="border-t border-slate-700 bg-slate-900/60 text-slate-200">
-                          <td colSpan={8} className="px-3 py-3">
-                            <div className="space-y-1 text-xs">
+                          <td colSpan={9} className="px-3 py-3">
+                            <div className="space-y-2 text-xs">
+                              <p><span className="font-semibold text-slate-300">Status:</span> {isResolved ? "✓ RESOLVED" : "⚠ ACTIVE"}</p>
                               <p><span className="font-semibold text-slate-300">Exact message:</span> {item.message || "N/A"}</p>
                               <p><span className="font-semibold text-slate-300">Route:</span> {item.route || "N/A"}</p>
                               <p><span className="font-semibold text-slate-300">Timestamp:</span> {new Date(item.timestamp).toISOString()}</p>

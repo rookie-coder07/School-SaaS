@@ -1,5 +1,6 @@
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import * as XLSX from "xlsx";
 import NotificationBell from "../components/NotificationBell";
 import ConfirmationModal from "../components/ConfirmationModal";
 import PageContainer from "../components/ui/PageContainer";
@@ -108,6 +109,20 @@ export default function AdminDashboard() {
   const [uploadedTeachers, setUploadedTeachers] = useState([]);
   const [assignmentMode, setAssignmentMode] = useState(null);
   const [selectedForAssignment, setSelectedForAssignment] = useState({});
+
+  // Preview Import Mode State
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [previewId, setPreviewId] = useState(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+
+  // Teacher Preview State
+  const [showTeacherPreview, setShowTeacherPreview] = useState(false);
+  const [teacherPreviewData, setTeacherPreviewData] = useState(null);
+  const [teacherPreviewId, setTeacherPreviewId] = useState(null);
+  const [isTeacherPreviewLoading, setIsTeacherPreviewLoading] = useState(false);
+  const [teacherImportResult, setTeacherImportResult] = useState(null);
 
   // Manual add
   const [modeAdd, setModeAdd] = useState("student");
@@ -1466,6 +1481,213 @@ export default function AdminDashboard() {
       toast.error(`UPLOAD FAILED: ${err.message}`);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  // Preview Student Upload - Calls preview API
+  const previewStudentUpload = async () => {
+    if (!studentFile) {
+      toast.warning("Please select a file");
+      return;
+    }
+    setIsPreviewLoading(true);
+    setShowPreview(false);
+    setPreviewData(null);
+    setImportResult(null);
+    
+    const formData = new FormData();
+    formData.append("file", studentFile);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/upload-students-preview`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error("Preview failed. Please check spreadsheet format.");
+        console.error("Preview error:", data);
+        return;
+      }
+      
+      setPreviewId(data.previewId);
+      setPreviewData(data);
+      setShowPreview(true);
+      toast.success(`Preview ready: ${data.validRows} valid, ${data.invalidRows} invalid`);
+    } catch (err) {
+      console.error("PREVIEW UPLOAD ERROR:", err);
+      toast.error(`Preview failed: ${err.message}`);
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
+  // Confirm and Import Students - Calls confirm API
+  const confirmStudentImport = async () => {
+    if (!previewId) {
+      toast.error("Preview not found");
+      return;
+    }
+    
+    setIsUploading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/confirm-student-import`, {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ previewId }),
+      });
+      const data = await res.json();
+      
+      if (res.status === 409) {
+        // Preview already imported
+        toast.error("This import was already processed. Please upload the file again to import more students.");
+        console.warn("Preview already used:", data);
+        setShowPreview(false);
+        setPreviewData(null);
+        setPreviewId(null);
+        setStudentFile(null);
+        return;
+      }
+      
+      if (!res.ok) {
+        toast.error(data.error || "Import failed");
+        console.error("Import error:", data);
+        return;
+      }
+      
+      setImportResult(data);
+      toast.success(`Import complete! ${data.imported} students imported, ${data.skipped} skipped`);
+      
+      // Reset upload state (but keep preview for reference)
+      setShowPreview(true);
+      setPreviewData(previewData);
+      setStudentFile(null);
+      
+      // Refresh paginated users after upload
+      setTimeout(() => {
+        reloadUsers();
+      }, 500);
+    } catch (err) {
+      console.error("CONFIRM IMPORT ERROR:", err);
+      toast.error(`Import failed: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Preview Teacher Upload - Calls preview API
+  const previewTeacherUpload = async () => {
+    if (!teacherFile) {
+      toast.warning("Please select a file");
+      return;
+    }
+    setIsTeacherPreviewLoading(true);
+    setShowTeacherPreview(false);
+    setTeacherPreviewData(null);
+    setTeacherImportResult(null);
+    
+    const formData = new FormData();
+    formData.append("file", teacherFile);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/upload-teachers-preview`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error("Preview failed. Please check spreadsheet format.");
+        console.error("Preview error:", data);
+        return;
+      }
+      
+      setTeacherPreviewId(data.previewId);
+      setTeacherPreviewData(data);
+      setShowTeacherPreview(true);
+      toast.success(`Preview ready: ${data.validRows} valid, ${data.invalidRows} invalid, ${data.duplicateRows} duplicate`);
+    } catch (err) {
+      console.error("PREVIEW UPLOAD ERROR:", err);
+      toast.error(`Preview failed: ${err.message}`);
+    } finally {
+      setIsTeacherPreviewLoading(false);
+    }
+  };
+
+  // Confirm and Import Teachers - Calls confirm API
+  const confirmTeacherImport = async () => {
+    if (!teacherPreviewId) {
+      toast.error("Preview not found");
+      return;
+    }
+    
+    setIsUploading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/confirm-teacher-import`, {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ previewId: teacherPreviewId }),
+      });
+      const data = await res.json();
+      
+      if (res.status === 409) {
+        // Preview already imported
+        toast.error("This import was already processed. Please upload the file again to import more teachers.");
+        console.warn("Preview already used:", data);
+        setShowTeacherPreview(false);
+        setTeacherPreviewData(null);
+        setTeacherPreviewId(null);
+        setTeacherFile(null);
+        return;
+      }
+      
+      if (!res.ok) {
+        toast.error(data.error || "Import failed");
+        console.error("Import error:", data);
+        return;
+      }
+      
+      setTeacherImportResult(data);
+      toast.success(`Import complete! ${data.imported} teachers imported, ${data.skipped} skipped`);
+      
+      // Reset upload state (but keep preview for reference)
+      setShowTeacherPreview(true);
+      setTeacherPreviewData(teacherPreviewData);
+      setTeacherFile(null);
+      
+      // Refresh paginated users after upload
+      setTimeout(() => {
+        reloadUsers();
+      }, 500);
+    } catch (err) {
+      console.error("CONFIRM IMPORT ERROR:", err);
+      toast.error(`Import failed: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Download error rows as Excel
+  const downloadErrorRows = (rows, filename) => {
+    if (!rows || rows.length === 0) {
+      toast.warning("No error rows to download");
+      return;
+    }
+    
+    try {
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Errors");
+      XLSX.writeFile(wb, filename);
+      toast.success("Error rows downloaded");
+    } catch (err) {
+      console.error("Download error:", err);
+      toast.error("Failed to download error rows");
     }
   };
 
@@ -3274,22 +3496,191 @@ export default function AdminDashboard() {
 
               {/* STUDENT UPLOAD */}
               {uploadMode === "student" && (
-                <div className="saas-card p-3 md:p-6 space-y-4">
-                  <h3 className="font-bold text-slate-900">Upload Students (CSV/Excel)</h3>
-                  <p className="text-xs text-slate-600">Upload a file with columns: name, email, className/class, section, rollNo, parentName, parentPhone (or phone)</p>
-                  <input
-                    type="file"
-                    onChange={(e) => setStudentFile(e.target.files?.[0])}
-                    accept=".csv,.xlsx,.xls"
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm"
-                  />
-                  <button
-                    onClick={bulkUploadStudents}
-                    disabled={isUploading}
-                    className="w-full py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition text-sm disabled:opacity-50"
-                  >
-                    {isUploading ? "Uploading..." : "Upload Students"}
-                  </button>
+                <div className="space-y-4">
+                  <div className="saas-card p-3 md:p-6 space-y-4">
+                    <h3 className="font-bold text-slate-900">Upload Students (CSV/Excel)</h3>
+                    <p className="text-xs text-slate-600">Upload a file with columns: name, email, className/class, section, rollNo, parentName, parentPhone (or phone)</p>
+                    <input
+                      type="file"
+                      onChange={(e) => setStudentFile(e.target.files?.[0])}
+                      accept=".csv,.xlsx,.xls"
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm"
+                    />
+                    <button
+                      onClick={previewStudentUpload}
+                      disabled={isPreviewLoading || !studentFile}
+                      className="w-full py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition text-sm disabled:opacity-50"
+                    >
+                      {isPreviewLoading ? "Generating Preview..." : "👁️ Preview Import"}
+                    </button>
+                  </div>
+
+                  {/* PREVIEW TABLE */}
+                  {showPreview && previewData && (
+                    <div className="saas-card p-3 md:p-6 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-slate-900">Import Preview</h3>
+                        <button
+                          onClick={() => {
+                            setShowPreview(false);
+                            setPreviewData(null);
+                            setPreviewId(null);
+                          }}
+                          className="text-sm text-slate-600 hover:text-slate-900"
+                        >
+                          ✕ Close
+                        </button>
+                      </div>
+
+                      {/* Summary */}
+                      <div className="grid grid-cols-4 gap-2 text-sm">
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                          <div className="text-blue-900 font-semibold">Total Rows</div>
+                          <div className="text-lg text-blue-600">{previewData.totalRows}</div>
+                        </div>
+                        <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                          <div className="text-green-900 font-semibold">Valid</div>
+                          <div className="text-lg text-green-600">{previewData.validRows}</div>
+                        </div>
+                        <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                          <div className="text-orange-900 font-semibold">Duplicate</div>
+                          <div className="text-lg text-orange-600">{previewData.duplicateRows || 0}</div>
+                        </div>
+                        <div className="bg-red-50 p-3 rounded-lg border border-red-200">
+                          <div className="text-red-900 font-semibold">Invalid</div>
+                          <div className="text-lg text-red-600">{previewData.invalidRows}</div>
+                        </div>
+                      </div>
+
+                      {/* Preview Table */}
+                      <div className="overflow-x-auto max-h-96 border border-slate-200 rounded-lg">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-100 sticky top-0 border-b border-slate-200">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Name</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Class</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Section</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Roll No</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Parent Phone</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Status</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Error</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {previewData.preview && previewData.preview.map((row, idx) => (
+                              <tr
+                                key={idx}
+                                className={`border-b ${
+                                  row.status === "valid"
+                                    ? "bg-green-50 hover:bg-green-100 text-green-900"
+                                    : row.status === "duplicate"
+                                    ? "hover:opacity-90 text-orange-900"
+                                    : "bg-red-50 hover:bg-red-100 text-red-900"
+                                }`}
+                                style={
+                                  row.status === "duplicate"
+                                    ? { backgroundColor: "#fff4e5" }
+                                    : {}
+                                }
+                              >
+                                <td className="px-3 py-2 font-medium">{row.name || "-"}</td>
+                                <td className="px-3 py-2">{row.class || "-"}</td>
+                                <td className="px-3 py-2">{row.section || "-"}</td>
+                                <td className="px-3 py-2">{row.rollNo || "-"}</td>
+                                <td className="px-3 py-2">{row.parentPhone || "-"}</td>
+                                <td className="px-3 py-2">
+                                  <span
+                                    className={`px-2 py-1 rounded text-xs font-bold ${
+                                      row.status === "valid"
+                                        ? "bg-green-200 text-green-900"
+                                        : row.status === "duplicate"
+                                        ? "bg-orange-200 text-orange-900"
+                                        : "bg-red-200 text-red-900"
+                                    }`}
+                                  >
+                                    {row.status?.toUpperCase() || "UNKNOWN"}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-xs">
+                                  {row.error || "-"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Confirm Button */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={confirmStudentImport}
+                          disabled={isUploading || previewData.validRows === 0 || importResult !== null}
+                          className={`flex-1 py-2 text-white font-bold rounded-lg transition text-sm ${
+                            importResult
+                              ? "bg-slate-400 cursor-not-allowed opacity-50"
+                              : "bg-green-600 hover:bg-green-700"
+                          }`}
+                        >
+                          {isUploading ? "Importing..." : importResult ? "✓ Import Completed" : `✓ Confirm Import (${previewData.validRows} rows)`}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowPreview(false);
+                            setPreviewData(null);
+                            setPreviewId(null);
+                            setStudentFile(null);
+                            setImportResult(null);
+                          }}
+                          disabled={isUploading}
+                          className="flex-1 py-2 border border-slate-300 text-slate-700 font-bold rounded-lg hover:bg-slate-50 transition text-sm disabled:opacity-50"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* IMPORT RESULT */}
+                  {importResult && (
+                    <div className="saas-card p-3 md:p-6 space-y-4 bg-blue-50 border border-blue-200">
+                      <h3 className="font-bold text-blue-900">✓ Import Complete</h3>
+                      
+                      {/* Skipped warning */}
+                      {importResult.skipped > 0 && (
+                        <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
+                          <p className="text-sm font-semibold text-yellow-900">
+                            ⚠️ {importResult.skipped} student{importResult.skipped !== 1 ? "s" : ""} were skipped because they already exist.
+                          </p>
+                          {importResult.errors && importResult.errors.length > 0 && (
+                            <p className="text-xs text-yellow-800 mt-1">
+                              {importResult.errors[0].row}: {importResult.errors[0].message}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white p-3 rounded-lg border border-blue-100">
+                          <div className="text-sm text-slate-600">Imported</div>
+                          <div className="text-2xl font-bold text-green-600">{importResult.imported || 0}</div>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg border border-blue-100">
+                          <div className="text-sm text-slate-600">Skipped</div>
+                          <div className="text-2xl font-bold text-yellow-600">{importResult.skipped || 0}</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setImportResult(null);
+                          setShowPreview(false);
+                          setPreviewData(null);
+                        }}
+                        className="w-full py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition text-sm"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -3297,7 +3688,7 @@ export default function AdminDashboard() {
               {uploadMode === "teacher" && (
                 <div className="saas-card p-3 md:p-6 space-y-4">
                   <h3 className="font-bold text-slate-900">Upload Teachers (CSV/Excel)</h3>
-                  <p className="text-xs text-slate-600">Upload a file with columns: name, email, class/className, section, subject, phone/mobile</p>
+                  <p className="text-xs text-slate-600">Upload a file with columns: name, email, subject, phone</p>
                   <input
                     type="file"
                     onChange={(e) => setTeacherFile(e.target.files?.[0])}
@@ -3305,12 +3696,177 @@ export default function AdminDashboard() {
                     className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm"
                   />
                   <button
-                    onClick={bulkUploadTeachers}
-                    disabled={isUploading}
-                    className="w-full py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition text-sm disabled:opacity-50"
+                    onClick={previewTeacherUpload}
+                    disabled={isTeacherPreviewLoading || !teacherFile}
+                    className="w-full py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition text-sm disabled:opacity-50"
                   >
-                    {isUploading ? "Uploading..." : "Upload Teachers"}
+                    {isTeacherPreviewLoading ? "Generating Preview..." : "👁️ Preview Import"}
                   </button>
+
+                  {/* TEACHER PREVIEW TABLE */}
+                  {showTeacherPreview && teacherPreviewData && (
+                    <div className="saas-card p-3 md:p-6 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-slate-900">Import Preview</h3>
+                        <button
+                          onClick={() => {
+                            setShowTeacherPreview(false);
+                            setTeacherPreviewData(null);
+                            setTeacherPreviewId(null);
+                          }}
+                          className="text-sm text-slate-600 hover:text-slate-900"
+                        >
+                          ✕ Close
+                        </button>
+                      </div>
+
+                      {/* Summary */}
+                      <div className="grid grid-cols-4 gap-2 text-sm">
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                          <div className="text-blue-900 font-semibold">Total Rows</div>
+                          <div className="text-lg text-blue-600">{teacherPreviewData.totalRows}</div>
+                        </div>
+                        <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                          <div className="text-green-900 font-semibold">Valid</div>
+                          <div className="text-lg text-green-600">{teacherPreviewData.validRows}</div>
+                        </div>
+                        <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                          <div className="text-orange-900 font-semibold">Duplicate</div>
+                          <div className="text-lg text-orange-600">{teacherPreviewData.duplicateRows || 0}</div>
+                        </div>
+                        <div className="bg-red-50 p-3 rounded-lg border border-red-200">
+                          <div className="text-red-900 font-semibold">Invalid</div>
+                          <div className="text-lg text-red-600">{teacherPreviewData.invalidRows}</div>
+                        </div>
+                      </div>
+
+                      {/* Preview Table */}
+                      <div className="overflow-x-auto max-h-96 border border-slate-200 rounded-lg">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-100 sticky top-0 border-b border-slate-200">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Name</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Email</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Subject</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Phone</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Status</th>
+                              <th className="px-3 py-2 text-left text-slate-700 font-semibold">Error</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {teacherPreviewData.preview && teacherPreviewData.preview.map((row, idx) => (
+                              <tr
+                                key={idx}
+                                className={`border-b ${
+                                  row.status === "valid"
+                                    ? "bg-green-50 hover:bg-green-100 text-green-900"
+                                    : row.status === "duplicate"
+                                    ? "hover:opacity-90 text-orange-900"
+                                    : "bg-red-50 hover:bg-red-100 text-red-900"
+                                }`}
+                                style={
+                                  row.status === "duplicate"
+                                    ? { backgroundColor: "#fff4e5" }
+                                    : {}
+                                }
+                              >
+                                <td className="px-3 py-2 font-medium">{row.name || "-"}</td>
+                                <td className="px-3 py-2">{row.email || "-"}</td>
+                                <td className="px-3 py-2">{row.subject || "-"}</td>
+                                <td className="px-3 py-2">{row.phone || "-"}</td>
+                                <td className="px-3 py-2">
+                                  <span
+                                    className={`px-2 py-1 rounded text-xs font-bold ${
+                                      row.status === "valid"
+                                        ? "bg-green-200 text-green-900"
+                                        : row.status === "duplicate"
+                                        ? "bg-orange-200 text-orange-900"
+                                        : "bg-red-200 text-red-900"
+                                    }`}
+                                  >
+                                    {row.status?.toUpperCase() || "UNKNOWN"}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-xs">
+                                  {row.error || "-"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Confirm Button */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={confirmTeacherImport}
+                          disabled={isUploading || teacherPreviewData.validRows === 0 || teacherImportResult !== null}
+                          className={`flex-1 py-2 text-white font-bold rounded-lg transition text-sm ${
+                            teacherImportResult
+                              ? "bg-slate-400 cursor-not-allowed opacity-50"
+                              : "bg-green-600 hover:bg-green-700"
+                          }`}
+                        >
+                          {isUploading ? "Importing..." : teacherImportResult ? "✓ Import Completed" : `✓ Confirm Import (${teacherPreviewData.validRows} rows)`}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowTeacherPreview(false);
+                            setTeacherPreviewData(null);
+                            setTeacherPreviewId(null);
+                            setTeacherFile(null);
+                            setTeacherImportResult(null);
+                          }}
+                          disabled={isUploading}
+                          className="flex-1 py-2 border border-slate-300 text-slate-700 font-bold rounded-lg hover:bg-slate-50 transition text-sm disabled:opacity-50"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* IMPORT RESULT */}
+                  {teacherImportResult && (
+                    <div className="saas-card p-3 md:p-6 space-y-4 bg-blue-50 border border-blue-200">
+                      <h3 className="font-bold text-blue-900">✓ Import Complete</h3>
+                      
+                      {/* Skipped warning */}
+                      {teacherImportResult.skipped > 0 && (
+                        <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
+                          <p className="text-sm font-semibold text-yellow-900">
+                            ⚠️ {teacherImportResult.skipped} teacher{teacherImportResult.skipped !== 1 ? "s" : ""} were skipped because they already exist.
+                          </p>
+                          {teacherImportResult.errors && teacherImportResult.errors.length > 0 && (
+                            <p className="text-xs text-yellow-800 mt-1">
+                              {teacherImportResult.errors[0].row}: {teacherImportResult.errors[0].message}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white p-3 rounded-lg border border-blue-100">
+                          <div className="text-sm text-slate-600">Imported</div>
+                          <div className="text-2xl font-bold text-green-600">{teacherImportResult.imported || 0}</div>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg border border-blue-100">
+                          <div className="text-sm text-slate-600">Skipped</div>
+                          <div className="text-2xl font-bold text-yellow-600">{teacherImportResult.skipped || 0}</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setTeacherImportResult(null);
+                          setShowTeacherPreview(false);
+                          setTeacherPreviewData(null);
+                        }}
+                        className="w-full py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition text-sm"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

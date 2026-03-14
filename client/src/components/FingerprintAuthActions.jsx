@@ -85,6 +85,7 @@ export default function FingerprintAuthActions({
       const optionsRes = await fetch(`${API_URL}/api/auth/webauthn/login/options`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, role }),
       });
       const optionsPayload = await optionsRes.json();
@@ -99,6 +100,7 @@ export default function FingerprintAuthActions({
       const verifyRes = await fetch(`${API_URL}/api/auth/webauthn/login/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, role, authenticationResponse }),
       });
       const verifyPayload = await verifyRes.json();

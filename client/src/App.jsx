@@ -20,6 +20,7 @@ const Contact = lazyWithRetry(() => import("./pages/Contact"), "ContactPage");
 const AdminDashboard = lazyWithRetry(() => import("./pages/AdminDashboard"), "AdminDashboardPage");
 
 const StudentDashboard = lazyWithRetry(() => import("./pages/StudentDashboard"), "StudentDashboardPage");
+const StudentTimetablePage = lazyWithRetry(() => import("./pages/StudentTimetablePage"), "StudentTimetablePagePage");
 
 const TeacherDashboard = lazyWithRetry(() => import("./pages/TeacherDashboard"), "TeacherDashboardPage");
 const TeacherChangePassword = lazyWithRetry(() => import("./pages/TeacherChangePassword"), "TeacherChangePasswordPage");
@@ -84,6 +85,7 @@ export default function App() {
     location.pathname.startsWith("/admin/dashboard") ||
     (location.pathname.startsWith("/teacher/") && location.pathname !== "/teacher/login") ||
     location.pathname.startsWith("/student/dashboard") ||
+    location.pathname.startsWith("/student/timetable") ||
     location.pathname.startsWith("/dev-console") ||
     location.pathname.startsWith(DEV_PORTAL_BASE);
 
@@ -139,6 +141,14 @@ export default function App() {
             element={
               <ProtectedRoute role="student">
                 <StudentDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/timetable"
+            element={
+              <ProtectedRoute role="student">
+                <StudentTimetablePage />
               </ProtectedRoute>
             }
           />

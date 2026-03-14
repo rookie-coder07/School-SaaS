@@ -35,6 +35,22 @@ VITE_API_URL=https://school-saas-somv.onrender.com
 
 ---
 
+## Backend MongoDB (Server)
+
+**File:** `server/.env`
+```dotenv
+MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/school_saas
+MONGO_URI_STANDARD=mongodb://host1:27017,host2:27017,host3:27017/school_saas?replicaSet=atlas-cluster
+```
+
+**Behavior**
+- Always tries `MONGO_URI` (SRV) first.
+- In development, if SRV DNS fails, it falls back to `MONGO_URI_STANDARD`.
+- In production, SRV only (no fallback).
+- If both fail, server runs with mock DB and logs: `MongoDB unreachable, using mock database`.
+
+---
+
 ## 🔄 How Environment Variables Work
 
 ### During Development (`npm run dev`)

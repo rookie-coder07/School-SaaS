@@ -15,7 +15,6 @@ import {
   validateAnalyticsInput,
   validateNotificationInput,
 } from "../validators/entitySchemas.js";
-import devIpGuard from "../middleware/devIpGuard.js";
 import { logDeveloperAction } from "../services/devAuditService.js";
 import { createPlatformControlService } from "../services/platformControlService.js";
 
@@ -126,7 +125,10 @@ export default function devRoutes({
   clearCache = () => true,
 }) {
   const router = express.Router();
-  router.use(requireAuth, requireDeveloper, devIpGuard);
+  router.use((req, res, next) => {
+    if (req.path === "/login") return next();
+    return requireAuth(req, res, () => requireDeveloper(req, res, next));
+  });
   const platformControlService = createPlatformControlService({ db, controlState, clearCache });
 
   const audit = async (req, { action, targetType, targetId, metadata = {} }) => {
@@ -560,14 +562,21 @@ export default function devRoutes({
   router.get("/errors", async (req, res) => {
     try {
       const limit = Math.min(200, Math.max(10, Number.parseInt(req.query.limit, 10) || 50));
-      const errors = await db.collection("activityLogs").find({ action: "error" }).sort({ createdAt: -1 }).limit(limit).toArray();
+      const includeResolved = String(req.query.includeResolved || "false").toLowerCase() === "true";
+      const query = { action: "error" };
+      if (!includeResolved) {
+        query.status = "ACTIVE";
+      }
+      const errors = await db.collection("activityLogs").find(query).sort({ createdAt: -1 }).limit(limit).toArray();
       const recentErrors = errors.map((entry) => ({
+        _id: String(entry._id),
         timestamp: entry.createdAt || new Date(),
         route: entry.metadata?.route || "unknown",
         message: entry.metadata?.message || "error",
         userRole: entry.role || "unknown",
         school: entry.schoolId || null,
         statusCode: Number(entry.metadata?.statusCode || 500),
+        status: entry.status || "ACTIVE",
       }));
       const routeCounts = new Map();
       const timelineCounts = new Map();
@@ -596,6 +605,37 @@ export default function devRoutes({
       });
     } catch (err) {
       return handleError(res, err, "Failed to fetch error analytics");
+    }
+  });
+
+  // PATCH /api/dev/errors/:errorId to mark as resolved
+  router.patch("/errors/:errorId", async (req, res) => {
+    try {
+      const errorId = toObjectId(req.params.errorId);
+      if (!errorId) {
+        const err = new Error("Invalid error ID");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const result = await db.collection("activityLogs").updateOne(
+        { _id: errorId, action: "error" },
+        { $set: { status: "RESOLVED", resolvedAt: new Date() } }
+      );
+
+      if (!result.matchedCount) {
+        const err = new Error("Error not found");
+        err.statusCode = 404;
+        throw err;
+      }
+
+      return res.json({
+        success: true,
+        message: "Error marked as resolved",
+        data: { _id: String(errorId), status: "RESOLVED" },
+      });
+    } catch (err) {
+      return handleError(res, err, "Failed to mark error as resolved");
     }
   });
 
@@ -758,6 +798,106 @@ export default function devRoutes({
       });
     } catch (err) {
       return handleError(res, err, "Failed to fetch schools");
+    }
+  });
+
+  // GET single school by ID with stats
+  router.get("/schools/:schoolId", async (req, res) => {
+    try {
+      const schoolId = toObjectId(req.params.schoolId);
+      if (!schoolId) {
+        const err = new Error("Invalid school ID");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const school = await db.collection("schools").findOne({ _id: schoolId });
+      if (!school) {
+        const err = new Error("School not found");
+        err.statusCode = 404;
+        throw err;
+      }
+
+      const [studentCount, teacherCount, adminCount] = await Promise.all([
+        db.collection("users").countDocuments({ schoolId, role: "STUDENT" }),
+        db.collection("users").countDocuments({ schoolId, role: "TEACHER" }),
+        db.collection("users").countDocuments({ schoolId, role: "ADMIN" }),
+      ]);
+
+      return res.json({
+        success: true,
+        _id: String(school._id),
+        name: school.name,
+        address: school.address || "",
+        status: normalizeSchoolStatus(school.status || (school.isEnabled === false ? "disabled" : "active")),
+        enabled: school.isEnabled !== false && school.enabled !== false,
+        isEnabled: school.isEnabled !== false && school.enabled !== false,
+        code: school.code || "SCH",
+        totalStudents: studentCount,
+        totalTeachers: teacherCount,
+        totalAdmins: adminCount,
+        features: school.features || {},
+        createdAt: school.createdAt,
+        updatedAt: school.updatedAt,
+      });
+    } catch (err) {
+      return handleError(res, err, "Failed to fetch school");
+    }
+  });
+
+  // PATCH update school status
+  router.patch("/schools/:schoolId", async (req, res) => {
+    try {
+      const schoolId = toObjectId(req.params.schoolId);
+      if (!schoolId) {
+        const err = new Error("Invalid school ID");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const school = await db.collection("schools").findOne({ _id: schoolId });
+      if (!school) {
+        const err = new Error("School not found");
+        err.statusCode = 404;
+        throw err;
+      }
+
+      // Parse status from request body
+      const requestedStatus = String(req.body?.status || "").toLowerCase().trim();
+      const isDisabling = requestedStatus === "disabled" || req.body?.isEnabled === false;
+      const nextStatus = isDisabling ? "disabled" : "active";
+      const nextEnabled = nextStatus === "active";
+
+      const result = await db.collection("schools").updateOne(
+        { _id: schoolId },
+        {
+          $set: {
+            status: nextStatus,
+            isEnabled: nextEnabled,
+            enabled: nextEnabled,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      if (!result.matchedCount) {
+        const err = new Error("School not found");
+        err.statusCode = 404;
+        throw err;
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          _id: String(schoolId),
+          isEnabled: nextEnabled,
+          enabled: nextEnabled,
+          status: nextStatus,
+          affectedSchools: result.modifiedCount,
+        },
+      });
+    } catch (err) {
+      return handleError(res, err, "Failed to update school");
     }
   });
 
@@ -988,20 +1128,33 @@ export default function devRoutes({
             uploadsAllowed: true,
             createdAt: new Date(),
           },
-          $set: { nameKey, updatedAt: new Date() },
+          $set: { updatedAt: new Date() },
         },
         { upsert: true, returnDocument: "after" }
       );
       if (result?.lastErrorObject?.updatedExisting === true) {
         console.log("School already exists, returning existing record");
       }
+      let resolvedDoc = result?.value || null;
+      let resolvedId =
+        resolvedDoc?._id ||
+        result?.lastErrorObject?.upserted ||
+        result?.lastErrorObject?.upsertedId ||
+        null;
+      if (!resolvedDoc || !resolvedId) {
+        resolvedDoc = await db.collection("schools").findOne(
+          { name, address },
+          { projection: { _id: 1, name: 1, address: 1, status: 1, isEnabled: 1 } }
+        );
+        resolvedId = resolvedDoc?._id || resolvedId;
+      }
       return res.json({
         success: true,
         school: {
-          _id: String(result.value?._id),
-          name: result.value?.name || name,
-          address: result.value?.address || address,
-          status: normalizeSchoolStatus(result.value?.status || (result.value?.isEnabled === false ? "disabled" : "active")),
+          _id: String(resolvedId || ""),
+          name: resolvedDoc?.name || name,
+          address: resolvedDoc?.address || address,
+          status: normalizeSchoolStatus(resolvedDoc?.status || (resolvedDoc?.isEnabled === false ? "disabled" : "active")),
         },
         existing: result?.lastErrorObject?.updatedExisting === true,
       });
@@ -1267,51 +1420,54 @@ export default function devRoutes({
 
   router.delete("/schools/:schoolId", async (req, res) => {
     try {
-      requireConfirmation(req);
       const schoolId = toObjectId(req.params.schoolId);
       if (!schoolId) throw Object.assign(new Error("Invalid school ID"), { statusCode: 400 });
-      const hardDelete = String(req.query.hardDelete || "").toLowerCase() === "true";
+      const school = await db.collection("schools").findOne({ _id: schoolId });
+      if (!school) throw Object.assign(new Error("School not found"), { statusCode: 404 });
 
-      if (!hardDelete) {
-        const disabled = await db.collection("schools").updateOne(
-          { _id: schoolId },
-          { $set: { status: "disabled", isEnabled: false, enabled: false, updatedAt: new Date() } }
-        );
-        if (!disabled.matchedCount) throw Object.assign(new Error("School not found"), { statusCode: 404 });
-        await audit(req, {
-          action: "DELETE_SCHOOL",
-          targetType: "school",
-          targetId: String(schoolId),
-          metadata: { hardDelete: false, behavior: "disabled" },
-        });
-        return res.json({ success: true, message: "School disabled" });
-      }
+      const studentsResult = await db.collection("students").deleteMany({ schoolId });
+      const teachersResult = await db.collection("teachers").deleteMany({ schoolId });
+      const usersResult = await db.collection("users").deleteMany({ schoolId });
+      const announcementsResult = await db.collection("announcements").deleteMany({ schoolId });
+      const messagesResult = await db.collection("messages").deleteMany({ schoolId });
+      const attendanceResult = await db.collection("attendance").deleteMany({ schoolId });
+      const homeworkResult = await db.collection("homework").deleteMany({ schoolId });
+      const marksResult = await db.collection("marks").deleteMany({ schoolId });
+      const timetablesResult = await db.collection("timetables").deleteMany({ schoolId });
+      const timetableResult = await db.collection("timetable").deleteMany({ schoolId });
+      const notificationsResult = await db.collection("notifications").deleteMany({ schoolId });
+      const voiceMessagesResult = await db.collection("voiceMessages").deleteMany({ schoolId });
 
-      await Promise.all([
-        db.collection("users").deleteMany({ schoolId }),
-        db.collection("teachers").deleteMany({ schoolId }),
-        db.collection("students").deleteMany({ schoolId }),
-        db.collection("attendance").deleteMany({ schoolId }),
-        db.collection("homework").deleteMany({ schoolId }),
-        db.collection("exams").deleteMany({ schoolId }),
-        db.collection("marks").deleteMany({ schoolId }),
-        db.collection("notifications").deleteMany({ schoolId }),
-        db.collection("voiceMessages").deleteMany({ schoolId }),
-      ]);
       const deleted = await db.collection("schools").deleteOne({ _id: schoolId });
       if (!deleted.deletedCount) throw Object.assign(new Error("School not found"), { statusCode: 404 });
+
+      console.log("School deleted with cascade cleanup", {
+        schoolId: schoolId.toString(),
+        studentsDeleted: studentsResult.deletedCount,
+        teachersDeleted: teachersResult.deletedCount,
+        usersDeleted: usersResult.deletedCount,
+        announcementsDeleted: announcementsResult.deletedCount,
+        messagesDeleted: messagesResult.deletedCount,
+        attendanceDeleted: attendanceResult.deletedCount,
+        homeworkDeleted: homeworkResult.deletedCount,
+        marksDeleted: marksResult.deletedCount,
+        timetablesDeleted: timetablesResult.deletedCount,
+        timetableDeleted: timetableResult.deletedCount,
+        notificationsDeleted: notificationsResult.deletedCount,
+        voiceMessagesDeleted: voiceMessagesResult.deletedCount,
+      });
+
       await audit(req, {
         action: "DELETE_SCHOOL",
         targetType: "school",
         targetId: String(schoolId),
-        metadata: { hardDelete: true },
+        metadata: { cascade: true },
       });
-      return res.json({ success: true, message: "School hard deleted" });
+      return res.json({ success: true, message: "School and all related data deleted" });
     } catch (err) {
       return handleError(res, err, "Delete failed");
     }
   });
-
   router.get("/voice-messages", async (req, res) => {
     try {
       const { page, limit, skip } = parsePagination(req.query, 50);
