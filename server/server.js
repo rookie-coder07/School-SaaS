@@ -2987,19 +2987,16 @@ app.post("/api/auth/webauthn/login/options", authLoginRateLimit, async (req, res
 
     const safeAllowCredentials = [];
     for (const cred of creds) {
-      try {
-        const id = decodeBase64Url(cred.credentialID);
-        safeAllowCredentials.push({
-          id,
-          type: "public-key",
-          transports: cred.transports || ["internal"],
-        });
-      } catch (decodeErr) {
-        console.warn("[WebAuthn Login] Skipping malformed credential", {
-          credentialID: cred?.credentialID?.slice?.(0, 12) || "unknown",
-          error: decodeErr?.message || decodeErr,
-        });
+      const id = String(cred?.credentialID || "");
+      if (!id) {
+        console.warn("[WebAuthn Login] Skipping credential with missing ID");
+        continue;
       }
+      safeAllowCredentials.push({
+        id, // keep base64url string as expected by simplewebauthn
+        type: "public-key",
+        transports: cred.transports || ["internal"],
+      });
     }
 
     if (!safeAllowCredentials.length) {
