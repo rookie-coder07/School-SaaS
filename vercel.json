@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "school-saa-*.vercel.app"
+        }
+      ],
+      "destination": "https://school-saa-s.vercel.app/:1",
+      "permanent": true
+    }
+  ]
+}
