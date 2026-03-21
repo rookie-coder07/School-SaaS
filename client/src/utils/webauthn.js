@@ -1,4 +1,7 @@
 const toBase64Url = (input) => {
+  if (typeof input === "string") {
+    return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
@@ -6,7 +9,11 @@ const toBase64Url = (input) => {
 };
 
 const fromBase64Url = (value = "") => {
-  const base64 = String(value).replace(/-/g, "+").replace(/_/g, "/");
+  // If it's already ArrayBuffer/TypedArray, just return the underlying buffer
+  if (value instanceof ArrayBuffer) return value;
+  if (ArrayBuffer.isView(value)) return value.buffer;
+
+  const base64 = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64 + "=".repeat((4 - (base64.length % 4 || 4)) % 4);
   const binary = atob(padded);
   const bytes = new Uint8Array(binary.length);

@@ -4,6 +4,7 @@ import TypeConfirmModal from "../components/TypeConfirmModal";
 import DevRowActionMenu from "../components/DevRowActionMenu";
 import { pushDevToast } from "../utils/devToast";
 import { getCachedValue } from "../utils/devApiCache";
+import AudioPlayer from "../../components/common/AudioPlayer";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const FILTERS_STORAGE_KEY = "dev_voice_filters_v1";
@@ -331,9 +332,9 @@ export default function DevVoiceMessagesPage() {
                     <td className="px-4 py-3">{createdAt}</td>
                     <td className="px-4 py-3">
                       {audioUrl ? (
-                        <audio controls preload="none" className="h-8 w-56">
-                          <source src={audioUrl} />
-                        </audio>
+                        <div className="w-56">
+                          <AudioPlayer src={audioUrl} />
+                        </div>
                       ) : (
                         <span className="text-xs text-slate-400">No audio</span>
                       )}
@@ -374,9 +375,7 @@ export default function DevVoiceMessagesPage() {
               <p className="mt-1 text-xs text-slate-400">Duration: {duration} | {createdAt}</p>
               <div className="mt-2">
                 {audioUrl ? (
-                  <audio controls preload="none" className="h-8 w-full">
-                    <source src={audioUrl} />
-                  </audio>
+                  <AudioPlayer src={audioUrl} />
                 ) : (
                   <span className="text-xs text-slate-400">No audio</span>
                 )}

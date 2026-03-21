@@ -8,44 +8,56 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 const processTimeTable = (data) => {
   if (!Array.isArray(data) || data.length === 0) {
-    return { timeSlots: [], days: [], grid: {}, dayPeriods: {} };
+    return { days: [], periods: [], dayPeriods: {} };
   }
 
-  const timeSlots = [...new Set(data.map((item) => item.time))].sort();
-  const days = [...new Set(data.map((item) => item.day))].sort((a, b) => {
-    const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    return dayOrder.indexOf(a) - dayOrder.indexOf(b);
-  });
+  const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-  const grid = {};
-  const dayPeriods = {};
+  const days = [...new Set(data.map((item) => item.day))]
+    .filter(Boolean)
+    .sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b));
 
-  // Build grid for desktop view
+  const periodsMap = new Map();
+
   data.forEach((item) => {
-    const key = `${item.time}-${item.day}`;
-    grid[key] = item.subject || "Break";
+    const periodNumber = Number(item.period) || 0;
+    const day = item.day;
+    if (!periodNumber || !day) return;
+
+    const timeValue =
+      item.time ||
+      (item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : "—");
+
+    if (!periodsMap.has(periodNumber)) {
+      periodsMap.set(periodNumber, {
+        period: periodNumber,
+        time: timeValue,
+        subjects: {},
+      });
+    }
+
+    const entry = periodsMap.get(periodNumber);
+    if (!entry.time || entry.time === "—") entry.time = timeValue;
+    entry.subjects[day] = item.subject?.trim() || "Free Period";
   });
 
-  // Build day periods for mobile/card view
+  const periods = Array.from(periodsMap.values()).sort((a, b) => a.period - b.period);
+
+  // Build per-day view using the consolidated period list so gaps become "Free Period"
+  const dayPeriods = {};
   days.forEach((day) => {
-    dayPeriods[day] = data
-      .filter((item) => item.day === day && item.time)
-      .sort((a, b) => {
-        if (!a.time || !b.time) return 0;
-        const timeA = a.time.split(':').map(Number);
-        const timeB = b.time.split(':').map(Number);
-        return timeA[0] * 60 + timeA[1] - (timeB[0] * 60 + timeB[1]);
-      })
-      .map((item, idx) => ({
-        period: idx + 1,
-        time: item.time,
-        subject: item.subject || "Free Period",
-        teacher: item.teacher || null,
-        isFree: !item.subject,
-      }));
+    dayPeriods[day] = periods.map((p) => {
+      const subject = p.subjects[day] || "Free Period";
+      return {
+        period: p.period,
+        time: p.time,
+        subject,
+        isFree: subject === "Free Period",
+      };
+    });
   });
 
-  return { timeSlots, days, grid, dayPeriods };
+  return { days, periods, dayPeriods };
 };
 
 const getSubjectColorClass = (subject, isFree = false) => {
@@ -74,7 +86,7 @@ const getSubjectColorClass = (subject, isFree = false) => {
 
 // Desktop Table View
 const TimetableGridRenderer = ({ data }) => {
-  if (!data.grid || data.days.length === 0) {
+  if (!Array.isArray(data.periods) || data.periods.length === 0) {
     return <div className="text-center text-slate-300 py-8">No timetable data available</div>;
   }
 
@@ -83,10 +95,13 @@ const TimetableGridRenderer = ({ data }) => {
       <div
         className="grid gap-1 p-4 bg-slate-800/50 rounded-lg"
         style={{
-          gridTemplateColumns: `120px repeat(${data.days.length}, minmax(140px, 1fr))`,
-          minWidth: "900px",
+          gridTemplateColumns: `90px 140px repeat(${data.days.length}, minmax(120px, 1fr))`,
+          minWidth: "960px",
         }}
       >
+        <div className="font-bold text-slate-300 text-xs uppercase flex items-center justify-center bg-slate-700/60 rounded p-2 border border-slate-600">
+          Period
+        </div>
         <div className="font-bold text-slate-300 text-xs uppercase flex items-center justify-center bg-slate-700/60 rounded p-2 border border-slate-600">
           Time
         </div>
@@ -97,20 +112,23 @@ const TimetableGridRenderer = ({ data }) => {
           </div>
         ))}
 
-        {data.timeSlots.map((timeSlot) => (
-          <div key={`row-${timeSlot}`} className="contents">
+        {data.periods.map((slot) => (
+          <div key={`row-${slot.period}`} className="contents">
             <div className="font-semibold text-slate-200 text-xs flex items-center justify-center bg-slate-800/40 rounded p-2 border border-slate-600">
-              {timeSlot}
+              {slot.period}
+            </div>
+            <div className="font-semibold text-slate-200 text-xs flex items-center justify-center bg-slate-800/40 rounded p-2 border border-slate-600">
+              {slot.time || "—"}
             </div>
 
             {data.days.map((day) => {
-              const key = `${timeSlot}-${day}`;
-              const subject = data.grid[key] || "—";
+              const subject = slot.subjects?.[day] || "Free Period";
               return (
                 <div
-                  key={key}
+                  key={`${slot.period}-${day}`}
                   className={`text-sm font-semibold rounded p-3 border flex items-center justify-center text-center min-h-12 ${getSubjectColorClass(
-                    subject
+                    subject,
+                    subject === "Free Period"
                   )}`}
                 >
                   {subject}
@@ -244,7 +262,7 @@ export default function StudentTimetableFullPage() {
   const [error, setError] = useState(null);
   const [studentInfo, setStudentInfo] = useState({ name: "Student", class: "—", section: "—" });
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
-  const [processedData, setProcessedData] = useState({ timeSlots: [], days: [], grid: {}, dayPeriods: {} });
+  const [processedData, setProcessedData] = useState({ days: [], periods: [], dayPeriods: {} });
   const touchStartRef = useRef(null);
   const touchEndRef = useRef(null);
   const toast = useToast();
@@ -270,9 +288,11 @@ export default function StudentTimetableFullPage() {
 
         if (!res.ok) throw new Error("Failed to fetch timetable");
         const data = await res.json();
-        const processed = processTimeTable(Array.isArray(data) ? data : []);
-        setTimetable(Array.isArray(data) ? data : []);
+        const normalized = Array.isArray(data) ? data : [];
+        const processed = processTimeTable(normalized);
+        setTimetable(normalized);
         setProcessedData(processed);
+        setCurrentDayIndex(0);
       } catch (err) {
         console.error("Timetable fetch error:", err);
         toast.error("Failed to load timetable");
@@ -321,7 +341,8 @@ export default function StudentTimetableFullPage() {
     }
   };
 
-  const currentDay = processedData.days[currentDayIndex] || "Monday";
+  // keep current day in sync with loaded data
+  const currentDay = processedData.days[currentDayIndex] || processedData.days[0] || "Monday";
 
   if (loading) {
     return (

@@ -30,6 +30,9 @@ export function requireAuth(req, res, next) {
       role: decoded.role,
       teacherId: decoded.teacherId,
       studentId: decoded.studentId,
+      // include class/section for teacher-scoped queries (e.g., timetable, marks, subjects)
+      class: decoded.class || decoded.className,
+      section: decoded.section,
     };
 
     console.log(`AUTH PASSED: role=${decoded.role}, userId=${decoded.userId}, schoolId=${decoded.schoolId}`);

@@ -18,6 +18,7 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
+import crypto from "crypto";
 import cluster from "cluster";
 import os from "os";
 import MockDatabase from "./mockDb.js";
@@ -1678,6 +1679,20 @@ const getWebAuthnOrigin = () => {
   if (!raw) return [];
   return raw.split(",").map((item) => item.trim()).filter(Boolean);
 };
+const resolveWebAuthnOrigins = (req) => {
+  const origins = getWebAuthnOrigin();
+  if (Array.isArray(origins) && origins.length) return origins;
+
+  const headerOrigin = req.get?.("origin");
+  if (headerOrigin) return [headerOrigin];
+
+  // Fallback to request host if env + header are missing (prevents verification from throwing)
+  const proto =
+    req.headers?.["x-forwarded-proto"] ||
+    (req.secure ? "https" : "http");
+  const host = req.hostname || req.headers?.host || "localhost";
+  return [`${proto}://${host}`];
+};
 const getWebAuthnRPName = () => WEB_AUTHN_RP_NAME;
 
 /**
@@ -2614,6 +2629,18 @@ app.get("/api/debug/uploads", publicRateLimit, (req, res) => {
 const normalizeWebAuthnRole = (value = "") => String(value || "").trim().toUpperCase();
 const encodeBase64Url = (value) => Buffer.from(value).toString("base64url");
 const decodeBase64Url = (value = "") => Buffer.from(String(value || ""), "base64url");
+const collectUserWebAuthnCredentials = (user = {}) => {
+  const creds = Array.isArray(user.webauthnCredentials) ? [...user.webauthnCredentials] : [];
+  if ((!creds || creds.length === 0) && user.webauthnCredentialID && user.publicKey) {
+    creds.push({
+      credentialID: user.webauthnCredentialID,
+      publicKey: user.publicKey,
+      counter: Number(user.counter || 0),
+      transports: user.webauthnTransports || ["internal"],
+    });
+  }
+  return creds;
+};
 
 const setWebAuthnChallenge = (key, challenge, type) => {
   webauthnChallengeStore.set(key, {
@@ -2728,49 +2755,73 @@ app.post("/api/auth/webauthn/register/options", authLoginRateLimit, async (req, 
       if (!passwordOk) return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    let excludeCredentials = [];
-    if (user?.webauthnCredentialID) {
-      try {
-        excludeCredentials = [{
-          id: user.webauthnCredentialID,
-          type: "public-key",
-          transports: user.webauthnTransports || ["internal"],
-        }];
-      } catch (decodeErr) {
-        console.warn("WEBAUTHN REGISTER OPTIONS WARN: Failed to decode credential ID, ignoring excludeCredentials.", decodeErr?.message || decodeErr);
-        excludeCredentials = [];
-      }
-    }
+    const existingCreds = collectUserWebAuthnCredentials(user);
+    let excludeCredentials = existingCreds
+      .map((cred) => {
+        try {
+          // simplewebauthn expects base64url string IDs for excludeCredentials
+          return {
+            id: String(cred.credentialID || ""),
+            type: "public-key",
+            transports: cred.transports || ["internal"],
+          };
+        } catch (decodeErr) {
+          console.warn("WEBAUTHN REGISTER OPTIONS WARN: Failed to prepare credential ID, skipping.", decodeErr?.message || decodeErr);
+          return null;
+        }
+      })
+      .filter(Boolean);
 
     const rpName = getWebAuthnRPName();
-    const rpID = getRequestRpID(req);
-    if (!rpID) {
-      console.error("WEBAUTHN REGISTER OPTIONS ERROR: Missing RP_ID");
-      return res.status(500).json({ error: "Failed to generate WebAuthn registration options", details: "Missing RP_ID" });
+    const rpEnvValue = process.env.RP_ID || process.env.RP_ID_PROD || process.env.RP_ID_DEV;
+    const rpID =
+      process.env.NODE_ENV === "production"
+        ? process.env.RP_ID || process.env.RP_ID_PROD || req.hostname
+        : process.env.RP_ID_DEV || process.env.RP_ID || req.hostname;
+    const origins = resolveWebAuthnOrigins(req);
+
+    console.log("RP_ID:", rpID);
+    console.log("ORIGIN:", origins);
+    console.log("User:", { id: user?._id?.toString?.(), email: user?.email, role });
+
+    if (!rpID || !origins.length) {
+      console.error("WEBAUTHN REGISTER OPTIONS ERROR: Missing RP_ID or ORIGIN", {
+        rpEnvValue,
+        hostname: req.hostname,
+        origins,
+      });
+      return res.status(500).json({ error: "Failed to generate WebAuthn registration options", details: "Missing RP_ID or ORIGIN" });
     }
 
     const options = await generateRegistrationOptions({
-      rpName,
-      rpID,
-      userID: Buffer.from(user._id.toString()),
+      rpName: rpName || "EduNest",
+      rpID: rpID || "localhost",
+      userID: Buffer.from(user._id.toString(), "utf8"), // Buffer required by simplewebauthn v8+
       userName: user.email,
-      userDisplayName: user.name || user.email,
+      userDisplayName: user.email,
       timeout: 60000,
       attestationType: "none",
       authenticatorSelection: {
-        residentKey: "preferred",
         userVerification: "preferred",
       },
       excludeCredentials,
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }],
     });
 
     setWebAuthnChallenge(`register:${role}:${user._id.toString()}`, options.challenge, "register");
     return res.json(options);
   } catch (err) {
-    console.error("WEBAUTHN REGISTER OPTIONS ERROR:", err);
+    console.error("WEBAUTHN REGISTER OPTIONS ERROR:", err?.stack || err, {
+      hostname: req.hostname,
+      rpId: process.env.RP_ID,
+      rpProd: process.env.RP_ID_PROD,
+      rpDev: process.env.RP_ID_DEV,
+      origin: getWebAuthnOrigin(),
+    });
     return res.status(500).json({
-      error: "Failed to generate WebAuthn registration options",
-      details: err?.message || "Unknown error",
+      success: false,
+      message: "Failed to start fingerprint setup",
+      error: err?.message || "Unknown error",
     });
   }
 });
@@ -2779,39 +2830,99 @@ app.post("/api/auth/webauthn/register/verify", authLoginRateLimit, async (req, r
   try {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const role = normalizeWebAuthnRole(req.body?.role || "");
-    const registrationResponse = req.body?.registrationResponse;
-    if (!email || !role || !registrationResponse) return res.status(400).json({ error: "Email, role and registrationResponse are required" });
+    let registrationResponse = req.body?.registrationResponse;
+
+    if (typeof registrationResponse === "string") {
+      try {
+        registrationResponse = JSON.parse(registrationResponse);
+      } catch (parseErr) {
+        return res.status(400).json({ error: "Invalid registrationResponse payload" });
+      }
+    }
+
+    if (!email || !role || !registrationResponse || typeof registrationResponse !== "object") {
+      return res.status(400).json({ error: "Email, role and registrationResponse are required" });
+    }
 
     const user = await db.collection("users").findOne({ email, role });
     if (!user) return res.status(404).json({ error: "Account not found" });
     const expectedChallenge = consumeWebAuthnChallenge(`register:${role}:${user._id.toString()}`, "register");
     if (!expectedChallenge) return res.status(400).json({ error: "Registration challenge expired. Retry fingerprint setup." });
 
-    const verification = await verifyRegistrationResponse({
-      response: registrationResponse,
-      expectedChallenge,
-      expectedOrigin: getWebAuthnOrigin(),
-      expectedRPID: getRequestRpID(req),
-      requireUserVerification: true,
-    });
+    const rpID =
+      process.env.NODE_ENV === "production"
+        ? process.env.RP_ID || process.env.RP_ID_PROD || req.hostname
+        : process.env.RP_ID_DEV || process.env.RP_ID || req.hostname;
+    const expectedOrigins = resolveWebAuthnOrigins(req);
+
+    if (!expectedOrigins.length) {
+      console.error("WEBAUTHN REGISTER VERIFY ERROR: Missing expected origins", {
+        hostname: req.hostname,
+        originHeader: req.get?.("origin"),
+      });
+      return res.status(500).json({ error: "Failed to verify fingerprint registration" });
+    }
+
+    let verification;
+    try {
+      verification = await verifyRegistrationResponse({
+        response: registrationResponse,
+        expectedChallenge,
+        expectedOrigin: expectedOrigins,
+        expectedRPID: rpID,
+        requireUserVerification: true,
+      });
+    } catch (verifyErr) {
+      console.error("WEBAUTHN REGISTER VERIFY VALIDATION ERROR:", verifyErr?.message || verifyErr, {
+        rpID,
+        expectedOrigins,
+        expectedChallenge,
+      });
+      return res.status(400).json({ error: "Invalid fingerprint data. Please try again." });
+    }
 
     if (!verification.verified || !verification.registrationInfo?.credential) {
+      console.error("WEBAUTHN REGISTER VERIFY FAIL", {
+        verified: verification.verified,
+        registrationInfo: verification.registrationInfo,
+        rpID,
+        origins: expectedOrigins,
+      });
       return res.status(400).json({ error: "Fingerprint registration verification failed" });
     }
 
-    const credential = verification.registrationInfo.credential;
-    await db.collection("users").updateOne(
-      { _id: user._id },
-      {
-        $set: {
-          webauthnCredentialID: encodeBase64Url(credential.id),
-          publicKey: encodeBase64Url(credential.publicKey),
-          counter: Number(credential.counter || 0),
-          webauthnTransports: registrationResponse?.response?.transports || ["internal"],
-          updatedAt: new Date(),
-        },
-      }
-    );
+    const info = verification.registrationInfo;
+    console.log("User credentials (before save):", collectUserWebAuthnCredentials(user));
+    const transports = registrationResponse?.response?.transports || ["internal"];
+    const credentialDoc = {
+      credentialID: encodeBase64Url(info.credentialID),
+      publicKey: encodeBase64Url(info.credentialPublicKey),
+      counter: Number(info.counter || 0),
+      transports,
+    };
+
+    const existingCreds = collectUserWebAuthnCredentials(user);
+    const credentialExists = existingCreds.some((c) => c.credentialID === credentialDoc.credentialID);
+
+    const updateOps = {
+      $set: {
+        webauthnCredentialID: credentialDoc.credentialID,
+        publicKey: credentialDoc.publicKey,
+        counter: credentialDoc.counter,
+        webauthnTransports: transports,
+        updatedAt: new Date(),
+      },
+    };
+    const updateOptions = {};
+
+    if (!credentialExists) {
+      updateOps.$addToSet = { webauthnCredentials: credentialDoc };
+    } else {
+      updateOps.$set["webauthnCredentials.$[cred].counter"] = credentialDoc.counter;
+      updateOptions.arrayFilters = [{ "cred.credentialID": credentialDoc.credentialID }];
+    }
+
+    await db.collection("users").updateOne({ _id: user._id }, updateOps, updateOptions);
 
     return res.json({ success: true, message: "Fingerprint registered successfully" });
   } catch (err) {
@@ -2829,61 +2940,91 @@ app.post("/api/auth/webauthn/login/options", authLoginRateLimit, async (req, res
     const roleQuery = role
       ? { role }
       : { role: { $in: ["ADMIN", "TEACHER", "STUDENT"] } };
-    const users = await db
-      .collection("users")
-      .find({
-        email,
-        ...roleQuery,
-        webauthnCredentialID: { $exists: true, $ne: null },
-        publicKey: { $exists: true, $ne: null },
-      })
-      .limit(2)
-      .toArray();
+    const users = await db.collection("users").find({ email, ...roleQuery }).limit(5).toArray();
 
     if (!users.length) {
-      // Check if user exists but has no credentials
-      const userExists = await db
-        .collection("users")
-        .findOne({
-          email,
-          ...roleQuery,
-        });
-      
-      if (userExists) {
-        return res.status(400).json({ 
-          error: "Please register fingerprint on this device first",
-          code: "NO_CREDENTIALS_REGISTERED"
-        });
-      }
-      
       return res.status(404).json({ error: "Account not found" });
     }
     if (users.length > 1 && !role) {
       return res.status(400).json({ error: "Multiple roles found for this email. Provide role." });
     }
-    const user = users[0];
-    const resolvedRole = role || normalizeWebAuthnRole(user.role || "");
 
-    const rpID = getRequestRpID(req);
+    const resolvedRole = role || normalizeWebAuthnRole(users[0].role || "");
+    const userWithCreds = users
+      .map((u) => ({ user: u, creds: collectUserWebAuthnCredentials(u) }))
+      .find((entry) => entry.creds.length > 0) || null;
+
+    const creds = userWithCreds?.creds || [];
+    const user = userWithCreds?.user || users[0];
+
+    console.log("User credentials:", creds);
+
+    if (creds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No fingerprint registered. Please register first.",
+        code: "NO_CREDENTIALS_REGISTERED",
+      });
+    }
+
+    const rpID =
+      process.env.NODE_ENV === "production"
+        ? process.env.RP_ID || process.env.RP_ID_PROD || req.hostname
+        : process.env.RP_ID_DEV || process.env.RP_ID || getRequestRpID(req) || req.hostname;
     if (!rpID) {
-      console.error("[WebAuthn] Missing RP_ID for login/options");
+      console.error("[WebAuthn] Missing RP_ID for login/options", {
+        hostname: req.hostname,
+        rpIdEnv: {
+          RP_ID: process.env.RP_ID,
+          RP_ID_PROD: process.env.RP_ID_PROD,
+          RP_ID_DEV: process.env.RP_ID_DEV,
+        },
+      });
       return res.status(500).json({ error: "Server WebAuthn configuration missing RP_ID" });
     }
 
     console.log(`[WebAuthn Login] User: ${email}, RP_ID: ${rpID}, RequestHost: ${req.hostname}, Credential exists: ${Boolean(user.webauthnCredentialID)}`);
 
-    const options = await generateAuthenticationOptions({
-      rpID,
-      timeout: 60000,
-      userVerification: "preferred",
-        allowCredentials: [
-          {
-            id: user.webauthnCredentialID,
-            type: "public-key",
-            transports: user.webauthnTransports || ["internal"],
-          },
-        ],
+    const safeAllowCredentials = [];
+    for (const cred of creds) {
+      try {
+        const id = decodeBase64Url(cred.credentialID);
+        safeAllowCredentials.push({
+          id,
+          type: "public-key",
+          transports: cred.transports || ["internal"],
+        });
+      } catch (decodeErr) {
+        console.warn("[WebAuthn Login] Skipping malformed credential", {
+          credentialID: cred?.credentialID?.slice?.(0, 12) || "unknown",
+          error: decodeErr?.message || decodeErr,
+        });
+      }
+    }
+
+    if (!safeAllowCredentials.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid fingerprint credential found. Please re-register fingerprint.",
+        code: "NO_VALID_CREDENTIALS",
       });
+    }
+
+    let options;
+    try {
+      options = await generateAuthenticationOptions({
+        rpID,
+        timeout: 60000,
+        userVerification: "preferred",
+        allowCredentials: safeAllowCredentials,
+      });
+    } catch (genErr) {
+      console.error("WEBAUTHN LOGIN OPTIONS GENERATION ERROR:", genErr?.message || genErr, {
+        rpID,
+        credsCount: safeAllowCredentials.length,
+      });
+      return res.status(500).json({ error: "Failed to generate fingerprint login options" });
+    }
 
     setWebAuthnChallenge(`login:${resolvedRole}:${user._id.toString()}`, options.challenge, "login");
     return res.json(options);
@@ -2897,8 +3038,17 @@ app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res)
   try {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const role = normalizeWebAuthnRole(req.body?.role || "");
-    const authenticationResponse = req.body?.authenticationResponse;
-    if (!email || !role || !authenticationResponse) {
+    let authenticationResponse = req.body?.authenticationResponse;
+
+    if (typeof authenticationResponse === "string") {
+      try {
+        authenticationResponse = JSON.parse(authenticationResponse);
+      } catch (parseErr) {
+        return res.status(400).json({ error: "Invalid authenticationResponse payload" });
+      }
+    }
+
+    if (!email || !role || !authenticationResponse || typeof authenticationResponse !== "object") {
       return res.status(400).json({ error: "Email, role and authenticationResponse are required" });
     }
 
@@ -2907,12 +3057,18 @@ app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res)
       return res.status(404).json({ error: "Account not found" });
     }
     
-    if (!user.webauthnCredentialID || !user.publicKey) {
-      return res.status(400).json({ 
-        error: "Please register fingerprint on this device first",
-        code: "NO_CREDENTIALS_REGISTERED"
+    const creds = collectUserWebAuthnCredentials(user);
+    console.log("User credentials:", creds);
+    if (!creds.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No fingerprint registered. Please register first.",
+        code: "NO_CREDENTIALS_REGISTERED",
       });
     }
+
+    const responseCredentialId = String(authenticationResponse?.rawId || authenticationResponse?.id || "");
+    const matchedCredential = creds.find((c) => c.credentialID === responseCredentialId) || creds[0];
 
     const expectedChallenge = consumeWebAuthnChallenge(`login:${role}:${user._id.toString()}`, "login");
     if (!expectedChallenge) {
@@ -2920,33 +3076,69 @@ app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res)
       return res.status(400).json({ error: "Login challenge expired. Retry fingerprint login." });
     }
 
-    const rpID = getRequestRpID(req);
-    const origins = getWebAuthnOrigin();
-    
+    const rpID =
+      process.env.RP_ID ||
+      process.env.RP_ID_PROD ||
+      process.env.RP_ID_DEV ||
+      getRequestRpID(req) ||
+      req.hostname;
+    const origins = resolveWebAuthnOrigins(req);
+
+    if (!origins.length) {
+      console.error("WEBAUTHN LOGIN VERIFY ERROR: Missing expected origins", {
+        hostname: req.hostname,
+        originHeader: req.get?.("origin"),
+      });
+      return res.status(500).json({ error: "Failed to verify fingerprint login" });
+    }
+
     console.log(`[WebAuthn Verify Login] User: ${email}, RP_ID: ${rpID}, Origins: ${origins.join(", ")}`);
 
-    const verification = await verifyAuthenticationResponse({
-      response: authenticationResponse,
-      expectedChallenge,
-      expectedOrigin: getWebAuthnOrigin(),
-      expectedRPID: getRequestRpID(req),
-      requireUserVerification: true,
-      credential: {
-        id: user.webauthnCredentialID,
-        publicKey: decodeBase64Url(user.publicKey),
-        counter: Number(user.counter || 0),
-        transports: user.webauthnTransports || ["internal"],
-      },
-    });
+    let verification;
+    try {
+      verification = await verifyAuthenticationResponse({
+        response: authenticationResponse,
+        expectedChallenge,
+        expectedOrigin: origins,
+        expectedRPID: rpID || getRequestRpID(req),
+        requireUserVerification: true,
+        credential: {
+          id: decodeBase64Url(matchedCredential.credentialID),
+          publicKey: decodeBase64Url(matchedCredential.publicKey),
+          counter: Number(matchedCredential.counter || 0),
+          transports: matchedCredential.transports || ["internal"],
+        },
+      });
+    } catch (verifyErr) {
+      console.error("WEBAUTHN LOGIN VERIFY VALIDATION ERROR:", verifyErr?.message || verifyErr, {
+        rpID,
+        origins,
+        expectedChallenge,
+      });
+      return res.status(400).json({ error: "Invalid fingerprint login data. Please try again." });
+    }
 
     if (!verification.verified) {
       return res.status(401).json({ error: "Fingerprint verification failed" });
     }
 
-    await db.collection("users").updateOne(
-      { _id: user._id },
-      { $set: { counter: Number(verification.authenticationInfo?.newCounter || user.counter || 0), updatedAt: new Date() } }
-    );
+    const newCounter = Number(verification.authenticationInfo?.newCounter || matchedCredential.counter || 0);
+    const updateOps = {
+      $set: {
+        counter: newCounter,
+        updatedAt: new Date(),
+        webauthnCredentialID: matchedCredential.credentialID,
+        publicKey: matchedCredential.publicKey,
+        webauthnTransports: matchedCredential.transports || ["internal"],
+      },
+    };
+    const updateOptions = {};
+    if (matchedCredential?.credentialID) {
+      updateOps.$set["webauthnCredentials.$[cred].counter"] = newCounter;
+      updateOptions.arrayFilters = [{ "cred.credentialID": matchedCredential.credentialID }];
+    }
+
+    await db.collection("users").updateOne({ _id: user._id }, updateOps, updateOptions);
 
     const payload = await buildRoleLoginPayload(user);
     if (!payload.ok) return res.status(payload.status).json({ error: payload.error });
@@ -2954,6 +3146,33 @@ app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res)
   } catch (err) {
     console.error("WEBAUTHN LOGIN VERIFY ERROR:", err);
     return res.status(500).json({ error: "Failed to verify fingerprint login" });
+  }
+});
+
+// Allow user to clear stored WebAuthn credentials and re-register
+app.delete("/api/auth/webauthn/credentials", requireAuth, async (req, res) => {
+  try {
+    const userId = safeObjectId(req.user.userId);
+    if (!userId) return res.status(400).json({ error: "Invalid user" });
+
+    await db.collection("users").updateOne(
+      { _id: userId },
+      {
+        $set: {
+          webauthnCredentials: [],
+          webauthnCredentialID: null,
+          publicKey: null,
+          counter: 0,
+          webauthnTransports: [],
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    return res.json({ success: true, message: "Fingerprint credentials removed. You can re-register now." });
+  } catch (err) {
+    console.error("WEBAUTHN CREDENTIALS DELETE ERROR:", err);
+    return res.status(500).json({ error: "Failed to remove fingerprint credentials" });
   }
 });
 
@@ -13191,6 +13410,7 @@ app.post("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireT
   try {
     const { day, period, rowKey, subject, startTime, endTime, timetableId } = req.body;
     const schoolId = req.user.schoolIdObj;
+    const teacherId = safeObjectId(req.user.teacherId) || req.user.teacherId;
     const className = String(req.user.class || "").trim();
     const section = String(req.user.section || "").trim();
 
@@ -13226,10 +13446,12 @@ app.post("/api/teacher/timetable", requireAuth, requireRole("TEACHER"), requireT
       schoolId,
       class: className,
       section,
+      teacherId,
       day: dayValue,
       period: periodValue,
       rowKey: resolvedRowKey,
       subject: String(subject).trim(),
+      time: `${startTime}-${endTime}`,
       startTime: String(startTime),
       endTime: String(endTime),
       isDeleted: false,
@@ -13372,20 +13594,26 @@ app.get("/api/student/timetable", requireAuth, requireRole("STUDENT"), requireTe
     }
 
     // Find student profile to get class/section
-    const student = await db.collection("students").findOne(activeStudentFilter({
-      userId,
-      schoolId,
-    }));
+  const student = await db.collection("students").findOne(activeStudentFilter({
+    userId,
+    schoolId,
+  }));
 
-    if (!student) {
-      return res.status(404).json({ error: "Student profile not found" });
-    }
+  if (!student) {
+    return res.status(404).json({ error: "Student profile not found" });
+  }
 
-    const query = {
-      schoolId,
-      class: student.class,
-      section: student.section,
-      isDeleted: { $ne: true },
+  console.log("Student timetable query", {
+    schoolId: schoolId?.toString?.() || schoolId,
+    class: student.class,
+    section: student.section,
+  });
+
+  const query = {
+    schoolId,
+    class: student.class,
+    section: student.section,
+    isDeleted: { $ne: true },
     };
     const [timetable, totalCount] = await Promise.all([
       db.collection("timetables")

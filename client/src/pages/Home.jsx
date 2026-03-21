@@ -6,15 +6,6 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white">
-      <nav className="absolute left-0 right-0 top-0 z-10 flex items-center justify-end px-6 py-4">
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/20"
-        >
-          Back to Home
-        </button>
-      </nav>
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/10 blur-3xl" />
 
       <main className="relative flex min-h-screen items-center justify-center px-4 py-10">

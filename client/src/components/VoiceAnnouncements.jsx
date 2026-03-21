@@ -4,6 +4,7 @@ import DateFilterBar from "./DateFilterBar";
 import { buildDateFilterQuery, hasDateFilter } from "../utils/dateFilterUtils";
 import EmptyState from "./ui/EmptyState";
 import { ListSkeleton } from "./ui/Skeleton";
+import AudioPlayer from "./common/AudioPlayer";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -301,34 +302,8 @@ export default function VoiceAnnouncements({
 
             {announcement.audioUrl ? (
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0 max-w-full">
-                <button
-                  onClick={() => setPlayingId(playingId === announcement._id ? null : announcement._id)}
-                  className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                    playingId === announcement._id
-                      ? "bg-blue-100 text-blue-600"
-                      : "bg-slate-100 text-slate-600 hover:bg-blue-100"
-                  }`}
-                  title={playingId === announcement._id ? "Pause" : "Play"}
-                >
-                  {playingId === announcement._id ? "Pause" : "Play"}
-                </button>
-
                 <div className="w-full min-w-0 max-w-full sm:flex-1">
-                  <audio
-                    key={`${announcement._id}-audio`}
-                    controls
-                    className="block w-full max-w-full min-w-0 h-8"
-                    onPlay={() => setPlayingId(announcement._id)}
-                    onPause={() => setPlayingId(null)}
-                    onEnded={() => setPlayingId(null)}
-                    onError={(e) => {
-                      console.error(`❌ Audio failed to load for announcement ${announcement._id}:`, e);
-                      console.error(`   URL attempted: ${API_URL}${announcement.audioUrl}`);
-                    }}
-                  >
-                    <source src={`${API_URL}${announcement.audioUrl}`} type="audio/webm" />
-                    Your browser does not support the audio element.
-                  </audio>
+                  <AudioPlayer src={`${API_URL}${announcement.audioUrl}`} />
                 </div>
               </div>
             ) : (

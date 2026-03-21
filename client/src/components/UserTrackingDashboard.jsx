@@ -1,5 +1,6 @@
 import { useCallback, useState, useEffect } from "react";
 import { useToast } from "./ToastProvider";
+import StatCard from "./common/StatCard";
 
 export default function UserTrackingDashboard({ token }) {
   const API_URL = import.meta.env.VITE_API_URL;
@@ -99,15 +100,13 @@ export default function UserTrackingDashboard({ token }) {
       </div>
 
       {/* Concurrent Users Section */}
-      <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold text-slate-900">🟢 Active Now</h3>
-          <div className="text-right">
-            <div className="text-3xl font-bold text-blue-600">
-              {concurrentUsers.length}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">concurrent users</p>
-          </div>
+      <div className="bg-slate-900/70 border border-white/10 rounded-2xl shadow-lg p-6">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">🟢 Active Now</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <StatCard title="Total Users" value={concurrentUsers.length} icon="👤" color="text-blue-400" />
+          <StatCard title="Admins" value={concurrentUsers.filter((u) => u.role === "ADMIN").length} icon="🛡️" color="text-cyan-300" />
+          <StatCard title="Teachers" value={concurrentUsers.filter((u) => u.role === "TEACHER").length} icon="🎓" color="text-purple-300" />
+          <StatCard title="Students" value={concurrentUsers.filter((u) => u.role === "STUDENT").length} icon="📚" color="text-amber-300" />
         </div>
 
         {concurrentUsers.length === 0 ? (
@@ -173,20 +172,20 @@ export default function UserTrackingDashboard({ token }) {
       </div>
 
       {/* Daily Statistics Section */}
-      <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold text-slate-900">📊 Daily Activity</h3>
-          <div className="flex gap-4">
+      <div className="bg-slate-900/70 border border-white/10 rounded-2xl shadow-lg p-6">
+        <div className="flex items-center flex-wrap gap-4 justify-between mb-6">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">📊 Daily Activity</h3>
+          <div className="flex gap-3">
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 rounded-lg border border-white/15 bg-white/5 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <select
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
-              className="px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 rounded-lg border border-white/15 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Roles</option>
               <option value="ADMIN">Admin</option>
@@ -198,48 +197,37 @@ export default function UserTrackingDashboard({ token }) {
 
         {/* Stats Cards */}
         {dailyStats.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-2xl p-6">
-              <div className="text-xs font-semibold text-blue-700 uppercase">
-                Total Sessions
-              </div>
-              <div className="text-3xl font-bold text-blue-900 mt-2">
-                {dailyStats.length}
-              </div>
-            </div>
-            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-2xl p-6">
-              <div className="text-xs font-semibold text-emerald-700 uppercase">
-                Avg Duration
-              </div>
-              <div className="text-3xl font-bold text-emerald-900 mt-2">
-                {formatDuration(
-                  Math.floor(
-                    dailyStats.reduce((sum, s) => sum + (s.duration || 0), 0) /
-                      dailyStats.length
-                  )
-                )}
-              </div>
-            </div>
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-2xl p-6">
-              <div className="text-xs font-semibold text-purple-700 uppercase">
-                Total Time
-              </div>
-              <div className="text-3xl font-bold text-purple-900 mt-2">
-                {formatDuration(
-                  dailyStats.reduce((sum, s) => sum + (s.duration || 0), 0)
-                )}
-              </div>
-            </div>
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-2xl p-6">
-              <div className="text-xs font-semibold text-orange-700 uppercase">
-                Peak Hours
-              </div>
-              <div className="text-3xl font-bold text-orange-900 mt-2">
-                {dailyStats.length > 0
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <StatCard title="Total Sessions" value={dailyStats.length} icon="🗂️" color="text-blue-300" />
+            <StatCard
+              title="Avg Duration"
+              value={formatDuration(
+                Math.floor(
+                  dailyStats.reduce((sum, s) => sum + (s.duration || 0), 0) /
+                    dailyStats.length
+                )
+              )}
+              icon="⏱️"
+              color="text-emerald-300"
+            />
+            <StatCard
+              title="Total Time"
+              value={formatDuration(
+                dailyStats.reduce((sum, s) => sum + (s.duration || 0), 0)
+              )}
+              icon="⌛"
+              color="text-purple-300"
+            />
+            <StatCard
+              title="Peak Hours"
+              value={
+                dailyStats.length > 0
                   ? Math.max(...dailyStats.map((s) => s.concurrentCount || 0))
-                  : 0}
-              </div>
-            </div>
+                  : 0
+              }
+              icon="📈"
+              color="text-orange-300"
+            />
           </div>
         )}
 
@@ -313,4 +301,3 @@ export default function UserTrackingDashboard({ token }) {
     </div>
   );
 }
-

@@ -21,6 +21,7 @@ export default function FingerprintAuthActions({
 }) {
   const [fingerprintLoading, setFingerprintLoading] = useState(false);
   const [fingerprintEnrollLoading, setFingerprintEnrollLoading] = useState(false);
+  const [canFingerprintLogin, setCanFingerprintLogin] = useState(true);
 
   const resetMessages = () => {
     setError("");
@@ -84,7 +85,8 @@ export default function FingerprintAuthActions({
       const verifyPayload = await verifyRes.json();
       if (!verifyRes.ok) throw new Error(verifyPayload?.error || "Fingerprint setup failed");
 
-      setInfo("Fingerprint registered on this device. You can use it next login.");
+      setCanFingerprintLogin(true);
+      setInfo("Fingerprint registered on this device. Use the same device to login with fingerprint.");
     } catch (err) {
       console.error("Fingerprint register error:", err);
       setError(err?.message || "Fingerprint setup failed");
@@ -115,7 +117,16 @@ export default function FingerprintAuthActions({
         body: JSON.stringify({ email, role }),
       });
       const optionsPayload = await optionsRes.json();
+      if (
+        (optionsPayload?.message && optionsPayload.message.includes("No fingerprint registered")) ||
+        optionsPayload?.code === "NO_CREDENTIALS_REGISTERED"
+      ) {
+        setCanFingerprintLogin(false);
+        setError("Please register fingerprint first.");
+        return;
+      }
       if (!optionsRes.ok) throw new Error(optionsPayload?.error || "Fingerprint not set up");
+      setCanFingerprintLogin(true);
 
       const assertion = await navigator.credentials.get({
         publicKey: prepareAuthenticationOptions(optionsPayload),
@@ -146,7 +157,7 @@ export default function FingerprintAuthActions({
       <button
         type="button"
         onClick={handleFingerprintLogin}
-        disabled={fingerprintLoading}
+        disabled={fingerprintLoading || canFingerprintLogin === false}
         className="w-full mt-3 rounded-lg border border-white/20 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/5 disabled:opacity-50 md:text-base"
       >
         {fingerprintLoading ? "Checking fingerprint..." : "Login with Fingerprint"}
@@ -159,6 +170,9 @@ export default function FingerprintAuthActions({
       >
         {fingerprintEnrollLoading ? "Registering..." : "Register Fingerprint on this device"}
       </button>
+      <p className="text-center text-xs text-slate-400">
+        Fingerprint works only on the same device where it was registered.
+      </p>
     </div>
   );
 }

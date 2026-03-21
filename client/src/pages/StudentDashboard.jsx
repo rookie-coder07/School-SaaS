@@ -40,6 +40,7 @@ import {
   Settings,
   UserCircle2,
 } from "lucide-react";
+import AudioPlayer from "../components/common/AudioPlayer";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const lazyFallback = <ListSkeleton rows={2} />;
@@ -70,23 +71,7 @@ const getVoiceMessageTypeMeta = (msg = {}) => {
   return { label: "Empty", className: "bg-slate-100 text-slate-600 border border-slate-200" };
 };
 
-const getAudioSourceType = (audioUrl = "") => {
-  const value = String(audioUrl || "").toLowerCase();
-  if (value.endsWith(".mp3")) return "audio/mpeg";
-  if (value.endsWith(".wav")) return "audio/wav";
-  if (value.endsWith(".ogg")) return "audio/ogg";
-  return "audio/webm";
-};
-
-const enforceSingleAudioPlayback = (event) => {
-  const currentAudio = event?.currentTarget;
-  if (!currentAudio) return;
-  document.querySelectorAll("audio").forEach((audioEl) => {
-    if (audioEl !== currentAudio) {
-      audioEl.pause();
-    }
-  });
-};
+// Audio is handled by shared AudioPlayer
 
 export default function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -1305,25 +1290,7 @@ export default function StudentDashboard() {
                       </div>
                       {msg.audioUrl && !msg.audioMissing && !failedVoiceAudioIds.has(String(msg._id)) ? (
                         <div className="w-full min-w-0 max-w-full">
-                        <audio 
-                          controls 
-                          className="block w-full min-w-0 max-w-full"
-                          controlsList="nodownload"
-                          preload="metadata"
-                          onPlay={enforceSingleAudioPlayback}
-                          onError={() => {
-                            setFailedVoiceAudioIds((prev) => {
-                              const next = new Set(prev);
-                              next.add(String(msg._id));
-                              return next;
-                            });
-                          }}
-                          onLoadedMetadata={(e) => {
-                            console.log(`Audio loaded: ${msg._id}, duration: ${e.target.duration}s`);
-                          }}>
-                          <source src={`${API_URL}${msg.audioUrl}`} type={getAudioSourceType(msg.audioUrl)} />
-                          Your browser does not support the audio element.
-                        </audio>
+                          <AudioPlayer src={`${API_URL}${msg.audioUrl}`} />
                         </div>
                       ) : null}
                       {(msg.audioMissing || (msg.audioUrl && failedVoiceAudioIds.has(String(msg._id)))) && !msg.textMessage ? (
@@ -1434,7 +1401,5 @@ export default function StudentDashboard() {
     </div>
   );
 }
-
-
 
 
