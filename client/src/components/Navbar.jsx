@@ -4,6 +4,7 @@ import { Search, UserCircle2 } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 import NotificationDropdown from "./NotificationDropdown";
 import useUnreadCount from "../hooks/useUnreadCount";
+import { useLanguage } from "../context/LanguageContext";
 
 const resolveToken = () =>
   localStorage.getItem("adminToken") ||
@@ -19,6 +20,7 @@ export default function Navbar() {
   const menuRef = useRef(null);
   const notificationsRef = useRef(null);
   const location = useLocation();
+  const { t } = useLanguage();
 
   useEffect(() => {
     const syncToken = () => setToken(resolveToken());
@@ -63,14 +65,27 @@ export default function Navbar() {
   }, [location.pathname]);
 
   return (
-    <nav className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+    <nav
+      className="sticky top-0 z-40 shadow-sm backdrop-blur-md"
+      style={{ background: "var(--bg-card)", borderBottom: `1px solid var(--border-color)`, color: "var(--text-primary)" }}
+    >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setMenuOpen((prev) => !prev)}
-            className="relative h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+            className="relative h-9 w-9 rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+            style={{ background: "var(--bg-card)", color: "var(--text-primary)", border: `1px solid var(--border-color)` }}
             aria-label="Toggle menu"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setMenuOpen((prev) => !prev);
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            aria-pressed={menuOpen}
           >
             <span
               className={`absolute left-2 right-2 top-2 h-0.5 bg-slate-600 transition-all ${
@@ -88,18 +103,23 @@ export default function Navbar() {
               }`}
             />
           </button>
-          <div className="text-sm font-bold text-slate-700">EduNest</div>
+          <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>EduNest</div>
         </div>
 
-        <div className="hidden md:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-600">
-          <Search className="h-4 w-4 text-slate-600" />
+        <div
+          className="hidden md:flex items-center gap-2 rounded-xl px-3 py-2"
+          style={{ background: "var(--bg-card)", border: `1px solid var(--border-color)`, color: "var(--text-primary)" }}
+        >
+          <Search className="h-4 w-4" />
           <input
-            className="w-64 bg-transparent text-sm outline-none placeholder:text-slate-400 text-slate-700"
-            placeholder="Search admissions, updates, or help..."
+            className="w-64 bg-transparent text-sm outline-none placeholder:text-[var(--text-secondary)]"
+            style={{ color: "var(--text-primary)" }}
+            placeholder={t("common.searchPlaceholder")}
+            aria-label={t("common.searchPlaceholder")}
           />
         </div>
 
-        <div className="flex items-center gap-3 text-slate-600">
+        <div className="flex items-center gap-3" style={{ color: "var(--text-primary)" }}>
           {token && (
             <div ref={notificationsRef}>
               <NotificationBell
@@ -115,9 +135,14 @@ export default function Navbar() {
               />
             </div>
           )}
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1.5">
-            <UserCircle2 className="h-5 w-5 text-slate-600" />
-            <span className="hidden sm:inline text-xs font-semibold text-slate-700">Guest</span>
+          <div
+            className="flex items-center gap-2 rounded-full px-2 py-1.5"
+            style={{ background: "var(--bg-card)", border: `1px solid var(--border-color)` }}
+          >
+            <UserCircle2 className="h-5 w-5" />
+            <span className="hidden sm:inline text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+              {t("common.guest")}
+            </span>
           </div>
         </div>
       </div>
@@ -131,11 +156,36 @@ export default function Navbar() {
             aria-hidden="true"
           />
           {/* Menu drawer */}
-          <div ref={menuRef} className="fixed left-0 right-0 top-16 bg-white border-t border-slate-200 shadow-lg z-40 max-h-[calc(100vh-64px)] overflow-y-auto">
+          <div
+            ref={menuRef}
+            className="fixed left-0 right-0 top-16 shadow-lg z-40 max-h-[calc(100vh-64px)] overflow-y-auto"
+            style={{ background: "var(--bg-card)", borderTop: `1px solid var(--border-color)` }}
+          >
             <div className="mx-auto max-w-6xl px-4 py-3 flex flex-col gap-2">
-              <Link to="/student/login" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Student Login</Link>
-              <Link to="/teacher/login" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Teacher Login</Link>
-              <Link to="/admin/login" onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Admin Login</Link>
+              <Link
+                to="/student/login"
+                onClick={() => setMenuOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-white/5"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {t("nav.studentLogin")}
+              </Link>
+              <Link
+                to="/teacher/login"
+                onClick={() => setMenuOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-white/5"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {t("nav.teacherLogin")}
+              </Link>
+              <Link
+                to="/admin/login"
+                onClick={() => setMenuOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-white/5"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {t("nav.adminLogin")}
+              </Link>
             </div>
           </div>
         </>

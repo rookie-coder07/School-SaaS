@@ -16,15 +16,11 @@ import { useToast } from "../components/ToastProvider";
 import PageIntro from "../components/ui/PageIntro";
 import { sessionTracker } from "../utils/sessionTracker";
 import clientPackage from "../../package.json";
+import { useLanguage } from "../context/LanguageContext";
+
 
 const API_URL = import.meta.env.VITE_API_URL;
 const SETTINGS_FONT = { fontFamily: "'Manrope', 'Segoe UI', system-ui, sans-serif" };
-
-const languages = [
-  { label: "English (US)", locale: "en-US", note: "Default" },
-  { label: "English (UK)", locale: "en-GB", note: "British spellings" },
-  { label: "Hindi", locale: "hi-IN", note: "Hindi" },
-];
 
 const SettingRow = ({ label, description, actionLabel, onClick, icon, iconTone = "bg-white/10 text-slate-200" }) => (
   <button
@@ -59,7 +55,7 @@ const ToggleRow = ({ label, description, enabled, onToggle }) => (
     <button
       type="button"
       onClick={onToggle}
-      className={`flex h-8 w-16 items-center rounded-full px-0.5 transition ${enabled ? "bg-cyan-500" : "bg-slate-700"}`}
+      className={`flex h-8 w-16 items-center rounded-full px-0.5 transition ${enabled ? "bg-emerald-500" : "bg-slate-600"}`}
       aria-pressed={enabled}
     >
       <span
@@ -77,44 +73,6 @@ const SectionCard = ({ title, description, children }) => (
     </div>
     <div className="space-y-2 border-t border-white/10 pt-4">{children}</div>
   </section>
-);
-
-const LanguageSheet = ({ languages, selected, onSelect, onClose }) => (
-  <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/50 p-4">
-    <div className="w-full max-w-md rounded-3xl bg-slate-900/90 p-5 shadow-2xl border border-white/10 text-slate-100">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-slate-400">App Language</p>
-          <h2 className="text-lg font-bold text-white">Switch language</h2>
-        </div>
-        <button type="button" onClick={onClose} className="text-sm font-semibold text-slate-300">
-          Close
-        </button>
-      </div>
-      <div className="space-y-3">
-        {languages.map((language) => (
-          <button
-            key={language.locale}
-            type="button"
-            onClick={() => onSelect(language.locale)}
-            className={`flex w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition ${
-              selected === language.locale
-                ? "border-cyan-400/60 bg-cyan-500/10"
-                : "border-white/10 bg-white/5"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-base font-semibold text-slate-100">{language.label}</span>
-              {selected === language.locale && (
-                <span className="text-xs font-semibold text-cyan-200">Selected</span>
-              )}
-            </div>
-            <span className="text-xs text-slate-400">{language.note}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  </div>
 );
 
 const ChangePasswordModal = ({ show, form, setForm, onSubmit, onClose, loading }) => {
@@ -177,17 +135,23 @@ const getStoredToken = () => (
 export default function SettingsPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { language, setLanguage, t } = useLanguage();
   const [fingerprintEnabled, setFingerprintEnabled] = useState(() => {
     const storedValue = localStorage.getItem("fingerprintEnabled");
     return storedValue === null ? true : storedValue === "true";
   });
-  const [showLanguageSheet, setShowLanguageSheet] = useState(false);
-  const [language, setLanguage] = useState(() => localStorage.getItem("appLanguage") || languages[0].locale);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [profileDraft, setProfileDraft] = useState(() => {
+    const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
+    return {
+      name: admin?.name || localStorage.getItem("adminName") || "",
+      email: admin?.email || localStorage.getItem("adminEmail") || "",
+      phone: admin?.phone || admin?.mobile || localStorage.getItem("adminPhone") || "",
+      schoolName: localStorage.getItem("adminSchoolName") || admin?.schoolName || "",
+    };
+  });
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [passwordLoading, setPasswordLoading] = useState(false);
-
-  const selectedLanguage = languages.find((item) => item.locale === language);
 
   const supportLinks = useMemo(
     () => [
@@ -208,12 +172,6 @@ export default function SettingsPage() {
     []
   );
 
-  const handleLanguageSelect = (locale) => {
-    localStorage.setItem("appLanguage", locale);
-    setLanguage(locale);
-    setShowLanguageSheet(false);
-    toast.success("App language is saved for the next session");
-  };
 
   const handleConfirmChangePassword = async (event) => {
     event?.preventDefault?.();
@@ -312,7 +270,7 @@ export default function SettingsPage() {
           onClick={() => navigate(-1)}
           className="text-sm font-semibold text-slate-400 hover:text-white transition self-start"
         >
-          ← Go Back
+          ← {t("common.back", "Go Back")}
         </button>
         <SectionCard title="Account & Security" description="Keep your sign-in safe">
           <SettingRow
@@ -334,17 +292,68 @@ export default function SettingsPage() {
           />
         </SectionCard>
 
-        <SectionCard title="Preferences" description="Personalize the experience">
-          <SettingRow
-            label="App Language"
-            description="Choose your preferred locale"
-            actionLabel={selectedLanguage?.label}
-            icon={<Globe className="h-5 w-5" />}
-            iconTone="bg-emerald-500/20 text-emerald-200"
-            onClick={() => setShowLanguageSheet(true)}
-          />
+        <SectionCard title="Profile" description="Update details shown in admin profile">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { key: "name", label: "Name", placeholder: "Enter name" },
+              { key: "email", label: "Email", placeholder: "Enter email" },
+              { key: "phone", label: "Phone", placeholder: "Enter phone" },
+              { key: "schoolName", label: "School", placeholder: "Enter school name" },
+            ].map((field) => (
+              <label key={field.key} className="space-y-1 text-sm text-[var(--text-secondary)]">
+                <span className="block font-semibold text-[var(--text-primary)]">{field.label}</span>
+                <input
+                  value={profileDraft[field.key] || ""}
+                  onChange={(e) => setProfileDraft((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                  placeholder={field.placeholder}
+                  className="w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-cyan-400/60"
+                />
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
+                setProfileDraft({
+                  name: admin?.name || localStorage.getItem("adminName") || "",
+                  email: admin?.email || localStorage.getItem("adminEmail") || "",
+                  phone: admin?.phone || admin?.mobile || localStorage.getItem("adminPhone") || "",
+                  schoolName: localStorage.getItem("adminSchoolName") || admin?.schoolName || "",
+                });
+              }}
+              className="px-3 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const existing = JSON.parse(localStorage.getItem("adminData") || "{}");
+                const next = {
+                  ...existing,
+                  name: profileDraft.name?.trim() || existing?.name || "",
+                  email: profileDraft.email?.trim() || existing?.email || "",
+                  phone: profileDraft.phone?.trim() || existing?.phone || existing?.mobile || "",
+                  mobile: profileDraft.phone?.trim() || existing?.mobile || "",
+                  schoolName: profileDraft.schoolName?.trim() || existing?.schoolName || "",
+                };
+                localStorage.setItem("adminData", JSON.stringify(next));
+                if (next.name) localStorage.setItem("adminName", next.name);
+                if (next.email) localStorage.setItem("adminEmail", next.email);
+                if (next.phone) localStorage.setItem("adminPhone", next.phone);
+                if (next.schoolName) localStorage.setItem("adminSchoolName", next.schoolName);
+                toast.success("Profile updated locally");
+              }}
+              className="px-4 py-2 rounded-lg bg-cyan-500 text-white text-sm font-semibold shadow hover:bg-cyan-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+            >
+              Save
+            </button>
+          </div>
         </SectionCard>
 
+        {/* Preferences section removed: single-language app */}
         <SectionCard title="Support & Information" description="Need help? Start here">
           {supportLinks.map((link) => (
             <SettingRow
@@ -383,15 +392,6 @@ export default function SettingsPage() {
         </SectionCard>
       </div>
 
-      {showLanguageSheet && (
-        <LanguageSheet
-          languages={languages}
-          selected={language}
-          onSelect={handleLanguageSelect}
-          onClose={() => setShowLanguageSheet(false)}
-        />
-      )}
-
       <ChangePasswordModal
         show={showPasswordModal}
         form={passwordForm}
@@ -403,3 +403,7 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+
+
+

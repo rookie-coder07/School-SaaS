@@ -12,6 +12,13 @@
     --saas-muted: 100 116 139;
     --saas-border: 226 232 240;
     --saas-accent: 56 189 248;
+
+    /* Theme tokens */
+    --bg-main: #0b1320;
+    --bg-card: rgba(255, 255, 255, 0.05);
+    --text-primary: #ffffff;
+    --text-secondary: #9ca3af;
+    --border-color: rgba(255, 255, 255, 0.1);
   }
 
   html,
@@ -22,7 +29,9 @@
   body {
     margin: 0;
     font-family: "Plus Jakarta Sans", "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
-    @apply bg-slate-50 text-slate-900 antialiased;
+    background: var(--bg-main);
+    color: var(--text-primary);
+    @apply antialiased;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
@@ -38,7 +47,8 @@
 
   #root {
     min-height: 100vh;
-    background: linear-gradient(to bottom right, rgb(248 250 252), rgb(239 246 255), rgb(224 231 255));
+    background: var(--bg-main);
+    color: var(--text-primary);
   }
 
   select {
@@ -52,33 +62,73 @@
   }
 }
 
+/* Global dark-theme enforcement for legacy light classes */
+:root [class*="bg-white"] {
+  background-color: var(--bg-card) !important;
+}
+:root [class*="text-black"],
+:root [class*="text-slate-700"],
+:root [class*="text-slate-800"] {
+  color: var(--text-primary) !important;
+}
+:root [class*="border-slate-200"],
+:root [class*="border-white"] {
+  border-color: var(--border-color) !important;
+}
+:root [class*="bg-slate-50"],
+:root [class*="bg-gray-100"],
+:root [class*="bg-gray-200"] {
+  background-color: var(--bg-main) !important;
+}
+:root *:focus-visible {
+  outline: 2px solid var(--border-color);
+  outline-offset: 2px;
+}
 @layer components {
   .saas-page {
-    @apply rounded-xl border border-slate-200 bg-white p-4 md:p-7 shadow-sm;
+    @apply rounded-xl p-4 md:p-7;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .saas-card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
+    @apply rounded-xl transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .glass-panel {
-    @apply border border-slate-200 bg-white shadow-sm;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .saas-card-muted {
-    @apply rounded-2xl border border-slate-200/70 bg-slate-50/90 shadow-sm;
+    @apply rounded-2xl;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .saas-list-card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-lg hover:-translate-y-0.5;
+    @apply rounded-xl transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .saas-section-title {
-    @apply text-lg md:text-xl font-bold text-slate-900 tracking-tight;
+    @apply text-lg md:text-xl font-bold tracking-tight;
+    color: var(--text-primary);
   }
 
   .saas-input {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-200;
+    @apply w-full rounded-xl px-3 py-2 text-sm shadow-sm transition focus:outline-none;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
   }
 
   .saas-input-dark {
@@ -599,3 +649,16 @@
     color: #e5e7eb;
   }
 }
+
+/* Global theme enforcement for legacy utility classes */
+:root .bg-white {
+  background-color: var(--bg-card) !important;
+}
+:root .text-white {
+  color: var(--text-primary) !important;
+}
+:root .bg-gray-900 {
+  background-color: var(--bg-main) !important;
+}
+
+

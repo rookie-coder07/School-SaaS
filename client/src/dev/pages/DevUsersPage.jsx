@@ -37,6 +37,7 @@ export default function DevUsersPage() {
   const [actionBusyId, setActionBusyId] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const [studentNames, setStudentNames] = useState({});
   const [filters, setFilters] = useState(() => {
     try {
       const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
@@ -104,6 +105,28 @@ export default function DevUsersPage() {
     setUsers(Array.isArray(payload?.data) ? payload.data : []);
   }, [filters.role, filters.schoolId, token]);
 
+  const loadStudentNames = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "500");
+      params.set("page", "1");
+      if (filters.schoolId) params.set("schoolId", filters.schoolId);
+      const response = await fetch(`${API_URL}/api/dev/data/students?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json();
+      if (!response.ok || payload?.success === false) return;
+      const map = {};
+      (payload?.data || []).forEach((s) => {
+        const email = String(s.email || "").toLowerCase();
+        if (email) map[email] = s.name || s.fullName || `${s.firstName || ""} ${s.lastName || ""}`.trim();
+      });
+      setStudentNames(map);
+    } catch (err) {
+      console.warn("loadStudentNames failed", err?.message || err);
+    }
+  }, [filters.schoolId, token]);
+
   useEffect(() => {
     searchRef.current = filters.search;
   }, [filters.search]);
@@ -112,12 +135,13 @@ export default function DevUsersPage() {
     const load = async () => {
       try {
         await loadMeta();
+        await loadStudentNames();
       } catch (err) {
         setError(err?.message || "Failed to load schools");
       }
     };
     load();
-  }, [loadMeta]);
+  }, [loadMeta, loadStudentNames]);
 
   useEffect(() => {
     const load = async () => {
@@ -399,11 +423,26 @@ export default function DevUsersPage() {
               <tr><td className="px-4 py-8 text-center text-slate-400" colSpan={6}>No users found</td></tr>
             ) : (
               pagedRows.map((user) => {
+                const displayName =
+                  [
+                    studentNames[String(user.email || "").toLowerCase()],
+                    user.name,
+                    user.fullName,
+                    user.displayName,
+                    `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+                    user.studentName,
+                    user.student?.name,
+                    user.profile?.name,
+                    user.profile?.fullName,
+                    user.meta?.name,
+                    user.meta?.fullName,
+                    user.email ? user.email.split("@")[0] : "",
+                  ].find((v) => v && String(v).trim()) || "-";
                 const isDisabled = Boolean(user.isDeleted);
                 const rowBusy = actionBusyId === String(user._id) || (deleteState.busy && deleteState.user?._id === user._id);
                 return (
                   <tr key={user._id} className="border-t border-white/10">
-                    <td className="px-4 py-3">{user.name || "-"}</td>
+                    <td className="px-4 py-3">{displayName}</td>
                     <td className="px-4 py-3">{user.email || "-"}</td>
                     <td className="px-4 py-3">{user.role || "-"}</td>
                     <td className="px-4 py-3">{schoolNameMap.get(String(user.schoolId || "")) || user.schoolId || "-"}</td>
@@ -427,13 +466,28 @@ export default function DevUsersPage() {
       </div>
       <div className="space-y-3 md:hidden">
         {pagedRows.map((user) => {
+          const displayName =
+            [
+              studentNames[String(user.email || "").toLowerCase()],
+              user.name,
+              user.fullName,
+              user.displayName,
+              `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+              user.studentName,
+              user.student?.name,
+              user.profile?.name,
+              user.profile?.fullName,
+              user.meta?.name,
+              user.meta?.fullName,
+              user.email ? user.email.split("@")[0] : "",
+            ].find((v) => v && String(v).trim()) || "-";
           const isDisabled = Boolean(user.isDeleted);
           const rowBusy = actionBusyId === String(user._id) || (deleteState.busy && deleteState.user?._id === user._id);
           return (
             <article key={user._id} className="rounded-xl border border-white/10 bg-slate-950/45 p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-semibold text-white">{user.name || "-"}</p>
+                  <p className="font-semibold text-white">{displayName}</p>
                   <p className="text-xs text-slate-400">{user.email || "-"}</p>
                 </div>
                 <DevStatusBadge status={isDisabled ? "disabled" : "active"} />

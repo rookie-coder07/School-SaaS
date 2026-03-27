@@ -1,8 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import { GraduationCap, Shield, Users } from "lucide-react";
+import { useLanguage } from "../context/LanguageContext";
 
 export default function Home() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white">
@@ -14,7 +16,7 @@ export default function Home() {
             EduNest
           </h1>
           <p className="mt-2 text-center text-sm text-slate-300">
-            The complete digital platform for modern schools
+            {t("landing.tagline")}
           </p>
 
           <div className="mt-8 space-y-4">
@@ -23,26 +25,26 @@ export default function Home() {
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-green-500 py-4 font-semibold text-white transition-all duration-200 hover:scale-105 hover:shadow-lg"
             >
               <GraduationCap className="h-5 w-5" />
-              Student Portal
+              {t("landing.studentButton")}
             </button>
             <button
               onClick={() => navigate("/teacher/login")}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-400 to-indigo-500 py-4 font-semibold text-white transition-all duration-200 hover:scale-105 hover:shadow-lg"
             >
               <Users className="h-5 w-5" />
-              Teacher Portal
+              {t("landing.teacherButton")}
             </button>
             <button
               onClick={() => navigate("/admin/login")}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-400 to-amber-500 py-4 font-semibold text-white transition-all duration-200 hover:scale-105 hover:shadow-lg"
             >
               <Shield className="h-5 w-5" />
-              Admin Console
+              {t("landing.adminButton")}
             </button>
           </div>
 
           <div className="mt-6 text-center text-xs text-slate-300/80">
-            &copy; 2026 EduNest &mdash; School Management Suite
+            &copy; 2026 EduNest &mdash; {t("landing.footer")}
           </div>
         </div>
       </main>

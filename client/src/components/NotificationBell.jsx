@@ -20,16 +20,24 @@ export default function NotificationBell({ onClick, unreadCount = 0, isOpen = fa
   return (
     <button
       onClick={onClick}
-      className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-slate-200 transition-all ${
+      title={displayCount > 0 ? `${displayCount} unread notifications` : "Notifications"}
+      aria-label={displayCount > 0 ? `Notifications: ${displayCount} unread` : "Notifications"}
+      aria-pressed={isOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.(e);
+        }
+      }}
+      className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-slate-200 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
         isOpen
           ? "bg-white/20 text-white ring-1 ring-white/20"
           : displayCount > 0
           ? "hover:bg-white/15 hover:text-white"
           : "text-slate-300 hover:bg-white/10 hover:text-white"
       }`}
-      title={displayCount > 0 ? `${displayCount} unread notifications` : "Notifications"}
-      aria-label={displayCount > 0 ? `Notifications: ${displayCount} unread` : "Notifications"}
-      aria-pressed={isOpen}
     >
       {/* Bell Icon */}
       <svg

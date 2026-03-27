@@ -245,6 +245,12 @@ export default function AdminDashboard() {
   const [migratingStudents, setMigratingStudents] = useState(false);
   
   const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
+  const [adminProfileDraft, setAdminProfileDraft] = useState(() => ({
+    name: admin?.name || localStorage.getItem("adminName") || "",
+    email: admin?.email || localStorage.getItem("adminEmail") || "",
+    phone: admin?.phone || admin?.mobile || localStorage.getItem("adminPhone") || "",
+    schoolName: localStorage.getItem("adminSchoolName") || admin?.schoolName || "",
+  }));
   const adminEmployeeId = admin?.employeeId || admin?.employeeID || admin?.employeeCode || "Not set";
   const adminJoinDate = admin?.joinDate || admin?.joiningDate || admin?.createdAt || "";
   const adminAddress = admin?.address || admin?.officeAddress || admin?.location || "Not set";
@@ -2302,23 +2308,28 @@ export default function AdminDashboard() {
                   showTitle={false}
                 />
                 <div className="saas-card p-6 space-y-4">
-                  <div className="flex justify-between gap-4">
-                    <span className="text-slate-600 font-medium">Name</span>
-                    <span className="text-slate-900 font-bold text-right">{admin?.name || "Not set"}</span>
-                  </div>
-                  <div className="flex justify-between gap-4 border-t border-slate-200 pt-3">
-                    <span className="text-slate-600 font-medium">Email</span>
-                    <span className="text-slate-900 font-bold text-right">{admin?.email || "Not set"}</span>
-                  </div>
-                  <div className="flex justify-between gap-4 border-t border-slate-200 pt-3">
-                    <span className="text-slate-600 font-medium">Phone</span>
-                    <span className="text-slate-900 font-bold text-right">{admin?.phone || admin?.mobile || "Not set"}</span>
-                  </div>
-                  <div className="flex justify-between gap-4 border-t border-slate-200 pt-3">
-                    <span className="text-slate-600 font-medium">School</span>
-                    <span className="text-slate-900 font-bold text-right">{schoolName || admin?.schoolName || "Not set"}</span>
-                  </div>
+                  {[
+                    { label: "Name", value: admin?.name || localStorage.getItem("adminName") },
+                    { label: "Email", value: admin?.email || localStorage.getItem("adminEmail") },
+                    { label: "Phone", value: admin?.phone || admin?.mobile || localStorage.getItem("adminPhone") },
+                    { label: "School", value: schoolName || admin?.schoolName || localStorage.getItem("adminSchoolName") },
+                  ].map((field, idx) => (
+                    <div
+                      key={field.label}
+                      className={`flex justify-between gap-4 ${idx === 0 ? "" : "border-t border-[var(--border-color)] pt-3"}`}
+                    >
+                      <span className="text-[var(--text-secondary)] font-medium">{field.label}</span>
+                      {field.value ? (
+                        <span className="text-[var(--text-primary)] font-semibold text-right">{field.value}</span>
+                      ) : (
+                        <span className="text-xs font-semibold text-amber-100 bg-amber-500/20 border border-amber-400/30 px-2 py-1 rounded-full">
+                          Add in settings
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
+
               </PageContainer>
             )}
 

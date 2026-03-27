@@ -1662,6 +1662,17 @@ async function ensureTenantValidators() {
 }
 
 const WEB_AUTHN_RP_NAME = "EduNest";
+const normalizeRpId = (value = "") => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    return url.hostname;
+  } catch {
+    return raw.replace(/^https?:\/\//i, "").split(":")[0];
+  }
+};
+
 const getEnvByMode = ({ devKey, prodKey, baseKey }) => {
   const isProduction = process.env.NODE_ENV === "production";
   const baseValue = String(process.env[baseKey] || "").trim();
@@ -1669,19 +1680,33 @@ const getEnvByMode = ({ devKey, prodKey, baseKey }) => {
   const prodValue = String(process.env[prodKey] || "").trim();
   return isProduction ? (prodValue || baseValue) : (devValue || baseValue);
 };
-const getWebAuthnRPID = () => getEnvByMode({ devKey: "RP_ID_DEV", prodKey: "RP_ID_PROD", baseKey: "RP_ID" });
+const getWebAuthnRPID = () => normalizeRpId(getEnvByMode({ devKey: "RP_ID_DEV", prodKey: "RP_ID_PROD", baseKey: "RP_ID" }) || "localhost");
 const getWebAuthnOrigin = () => {
   const raw = getEnvByMode({
     devKey: "WEBAUTHN_ORIGIN_DEV",
     prodKey: "WEBAUTHN_ORIGIN_PROD",
     baseKey: "WEBAUTHN_ORIGIN",
-  });
+  }) || process.env.FRONTEND_URL;
+
   if (!raw) return [];
-  return raw.split(",").map((item) => item.trim()).filter(Boolean);
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 };
 const resolveWebAuthnOrigins = (req) => {
-  const origins = getWebAuthnOrigin();
-  if (Array.isArray(origins) && origins.length) return origins;
+  const isProduction = String(process.env.NODE_ENV || "").toLowerCase() === "production";
+  const envOrigins = getWebAuthnOrigin();
+  if (Array.isArray(envOrigins) && envOrigins.length) {
+    const sanitized = envOrigins.map((o) => o.trim()).filter(Boolean);
+    if (isProduction) {
+      const invalid = sanitized.filter((o) => o.startsWith("http://") && !o.includes("localhost"));
+      if (invalid.length) {
+        throw new Error(`WebAuthn origin must use HTTPS in production. Invalid: ${invalid.join(", ")}`);
+      }
+    }
+    return sanitized;
+  }
 
   const headerOrigin = req.get?.("origin");
   if (headerOrigin) return [headerOrigin];
@@ -1705,7 +1730,7 @@ const getRequestRpID = (req) => {
   // This allows credentials to work across multiple deployment domains (Render + Vercel)
   
   if (process.env.NODE_ENV === "production") {
-    const rpID = process.env.RP_ID_PROD || process.env.RP_ID;
+    const rpID = normalizeRpId(process.env.RP_ID_PROD || process.env.RP_ID);
     if (rpID) {
       console.log(`[WebAuthn] Using canonical prod RP_ID: ${rpID}`);
       return rpID;
@@ -1713,7 +1738,7 @@ const getRequestRpID = (req) => {
   }
   
   // In development
-  const devRpID = process.env.RP_ID_DEV;
+  const devRpID = normalizeRpId(process.env.RP_ID_DEV);
   if (devRpID) {
     console.log(`[WebAuthn] Using dev RP_ID: ${devRpID}`);
     return devRpID;
@@ -1721,7 +1746,7 @@ const getRequestRpID = (req) => {
   
   // Fallback
   console.warn(`[WebAuthn] No RP_ID configured, using fallback`);
-  return process.env.RP_ID;
+  return normalizeRpId(process.env.RP_ID || "localhost");
 };
 
   async function startServer() {
@@ -2774,14 +2799,15 @@ app.post("/api/auth/webauthn/register/options", authLoginRateLimit, async (req, 
 
     const rpName = getWebAuthnRPName();
     const rpEnvValue = process.env.RP_ID || process.env.RP_ID_PROD || process.env.RP_ID_DEV;
-    const rpID =
+    const rpID = normalizeRpId(
       process.env.NODE_ENV === "production"
         ? process.env.RP_ID || process.env.RP_ID_PROD || req.hostname
-        : process.env.RP_ID_DEV || process.env.RP_ID || req.hostname;
+        : process.env.RP_ID_DEV || process.env.RP_ID || req.hostname
+    );
     const origins = resolveWebAuthnOrigins(req);
 
     console.log("RP_ID:", rpID);
-    console.log("ORIGIN:", origins);
+    console.log("Origin:", origins);
     console.log("User:", { id: user?._id?.toString?.(), email: user?.email, role });
 
     if (!rpID || !origins.length) {
@@ -2790,7 +2816,11 @@ app.post("/api/auth/webauthn/register/options", authLoginRateLimit, async (req, 
         hostname: req.hostname,
         origins,
       });
-      return res.status(500).json({ error: "Failed to generate WebAuthn registration options", details: "Missing RP_ID or ORIGIN" });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate WebAuthn registration options",
+        details: "Missing RP_ID or ORIGIN",
+      });
     }
 
     const options = await generateRegistrationOptions({
@@ -2820,8 +2850,7 @@ app.post("/api/auth/webauthn/register/options", authLoginRateLimit, async (req, 
     });
     return res.status(500).json({
       success: false,
-      message: "Failed to start fingerprint setup",
-      error: err?.message || "Unknown error",
+      message: err?.message || "Failed to start fingerprint setup",
     });
   }
 });
@@ -2849,10 +2878,11 @@ app.post("/api/auth/webauthn/register/verify", authLoginRateLimit, async (req, r
     const expectedChallenge = consumeWebAuthnChallenge(`register:${role}:${user._id.toString()}`, "register");
     if (!expectedChallenge) return res.status(400).json({ error: "Registration challenge expired. Retry fingerprint setup." });
 
-    const rpID =
+    const rpID = normalizeRpId(
       process.env.NODE_ENV === "production"
         ? process.env.RP_ID || process.env.RP_ID_PROD || req.hostname
-        : process.env.RP_ID_DEV || process.env.RP_ID || req.hostname;
+        : process.env.RP_ID_DEV || process.env.RP_ID || req.hostname
+    );
     const expectedOrigins = resolveWebAuthnOrigins(req);
 
     if (!expectedOrigins.length) {
@@ -2927,7 +2957,7 @@ app.post("/api/auth/webauthn/register/verify", authLoginRateLimit, async (req, r
     return res.json({ success: true, message: "Fingerprint registered successfully" });
   } catch (err) {
     console.error("WEBAUTHN REGISTER VERIFY ERROR:", err);
-    return res.status(500).json({ error: "Failed to verify fingerprint registration" });
+    return res.status(500).json({ success: false, message: err?.message || "Failed to verify fingerprint registration" });
   }
 });
 
@@ -2967,10 +2997,11 @@ app.post("/api/auth/webauthn/login/options", authLoginRateLimit, async (req, res
       });
     }
 
-    const rpID =
+    const rpID = normalizeRpId(
       process.env.NODE_ENV === "production"
         ? process.env.RP_ID || process.env.RP_ID_PROD || req.hostname
-        : process.env.RP_ID_DEV || process.env.RP_ID || getRequestRpID(req) || req.hostname;
+        : process.env.RP_ID_DEV || process.env.RP_ID || getRequestRpID(req) || req.hostname
+    );
     if (!rpID) {
       console.error("[WebAuthn] Missing RP_ID for login/options", {
         hostname: req.hostname,
@@ -2980,10 +3011,10 @@ app.post("/api/auth/webauthn/login/options", authLoginRateLimit, async (req, res
           RP_ID_DEV: process.env.RP_ID_DEV,
         },
       });
-      return res.status(500).json({ error: "Server WebAuthn configuration missing RP_ID" });
+      return res.status(500).json({ success: false, message: "Server WebAuthn configuration missing RP_ID" });
     }
 
-    console.log(`[WebAuthn Login] User: ${email}, RP_ID: ${rpID}, RequestHost: ${req.hostname}, Credential exists: ${Boolean(user.webauthnCredentialID)}`);
+    console.log(`[WebAuthn Login] User: ${email}, RP_ID: ${rpID}, Origin(s): ${resolveWebAuthnOrigins(req).join(", ")}, RequestHost: ${req.hostname}, Credential exists: ${Boolean(user.webauthnCredentialID)}`);
 
     const safeAllowCredentials = [];
     for (const cred of creds) {
@@ -3020,14 +3051,14 @@ app.post("/api/auth/webauthn/login/options", authLoginRateLimit, async (req, res
         rpID,
         credsCount: safeAllowCredentials.length,
       });
-      return res.status(500).json({ error: "Failed to generate fingerprint login options" });
+      return res.status(500).json({ success: false, message: "Failed to generate fingerprint login options" });
     }
 
     setWebAuthnChallenge(`login:${resolvedRole}:${user._id.toString()}`, options.challenge, "login");
     return res.json(options);
   } catch (err) {
     console.error("WEBAUTHN LOGIN OPTIONS ERROR:", err);
-    return res.status(500).json({ error: "Failed to generate fingerprint login options" });
+    return res.status(500).json({ success: false, message: err?.message || "Failed to generate fingerprint login options" });
   }
 });
 
@@ -3073,12 +3104,13 @@ app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res)
       return res.status(400).json({ error: "Login challenge expired. Retry fingerprint login." });
     }
 
-    const rpID =
+    const rpID = normalizeRpId(
       process.env.RP_ID ||
-      process.env.RP_ID_PROD ||
-      process.env.RP_ID_DEV ||
-      getRequestRpID(req) ||
-      req.hostname;
+        process.env.RP_ID_PROD ||
+        process.env.RP_ID_DEV ||
+        getRequestRpID(req) ||
+        req.hostname
+    );
     const origins = resolveWebAuthnOrigins(req);
 
     if (!origins.length) {
@@ -3112,11 +3144,11 @@ app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res)
         origins,
         expectedChallenge,
       });
-      return res.status(400).json({ error: "Invalid fingerprint login data. Please try again." });
+      return res.status(400).json({ success: false, message: "Invalid fingerprint login data. Please try again." });
     }
 
     if (!verification.verified) {
-      return res.status(401).json({ error: "Fingerprint verification failed" });
+      return res.status(401).json({ success: false, message: "Fingerprint verification failed" });
     }
 
     const newCounter = Number(verification.authenticationInfo?.newCounter || matchedCredential.counter || 0);
@@ -3142,7 +3174,7 @@ app.post("/api/auth/webauthn/login/verify", authLoginRateLimit, async (req, res)
     return res.json({ ...payload.body, loginMethod: "fingerprint" });
   } catch (err) {
     console.error("WEBAUTHN LOGIN VERIFY ERROR:", err);
-    return res.status(500).json({ error: "Failed to verify fingerprint login" });
+    return res.status(500).json({ success: false, message: err?.message || "Failed to verify fingerprint login" });
   }
 });
 

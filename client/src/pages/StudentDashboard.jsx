@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import NotificationBell from "../components/NotificationBell";
 import { useToast } from "../components/ToastProvider";
-import PageContainer from "../components/ui/PageContainer";
+import PageContainer from "../components/common/PageContainer";
 import PageIntro from "../components/ui/PageIntro";
 import ListItemCard from "../components/ui/ListItemCard";
 import { ListSkeleton, StatCardSkeleton } from "../components/ui/Skeleton";
@@ -585,7 +585,7 @@ export default function StudentDashboard() {
               setActiveTab("dashboard");
               navigate("/student/dashboard");
             }}
-            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition"
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline transition"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to Dashboard
@@ -603,9 +603,9 @@ export default function StudentDashboard() {
 
   return (
     <div
-      className={`student-portal-shell flex min-h-screen ${
+      className={`student-portal-shell flex min-h-screen bg-[var(--bg-main)] text-[var(--text-primary)] ${
         activeTab === "timetable" ? "overflow-x-hidden" : "overflow-x-hidden"
-      } flex-col lg:flex-row bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 font-sans`}
+      } flex-col lg:flex-row font-sans`}
     >
       {/* ===== OVERLAY (Mobile) ===== */}
       {sidebarOpen && (
@@ -618,13 +618,13 @@ export default function StudentDashboard() {
 
       {/* ===== SIDEBAR ===== */}
       <div
-        className={`fixed inset-y-0 left-0 h-screen overflow-y-auto bg-slate-900/60 text-slate-200 p-4 flex flex-col z-30 transition-[width,transform] duration-200 backdrop-blur-xl ${
+        className={`fixed inset-y-0 left-0 h-screen overflow-y-auto bg-[#0b1320] text-[var(--text-primary)] p-4 flex flex-col z-30 transition-[width,transform] duration-200 ${
           sidebarCollapsed ? "w-20" : "w-72"
         } ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} lg:relative lg:inset-y-auto lg:shrink-0`}
       >
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white font-black">
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-[var(--text-primary)] font-black">
               S
             </div>
             <div className={`${sidebarCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"} transition-all`}>
@@ -635,9 +635,9 @@ export default function StudentDashboard() {
           <button
             type="button"
             onClick={() => setSidebarCollapsed((prev) => !prev)}
-            className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-slate-200 hover:bg-white/20 transition"
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
+              className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-primary)]"
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
             {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
         </div>
@@ -658,14 +658,14 @@ export default function StudentDashboard() {
               title={item.label}
               className={`group w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-3 ${
                 activeTab === item.id
-                  ? "bg-blue-500/20 text-white"
-                  : "text-slate-300 hover:bg-white/5"
+                  ? "bg-[var(--bg-card)] text-[var(--text-primary)]"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-card)]"
               }`}
             >
               {item.icon ? (
                 <item.icon
                   className={`h-4 w-4 transition-transform duration-200 group-hover:scale-105 ${
-                    activeTab === item.id ? "text-white" : "text-slate-300"
+                    activeTab === item.id ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"
                   }`}
                 />
               ) : null}
@@ -679,7 +679,7 @@ export default function StudentDashboard() {
         <div className="space-y-2">
           <button
             onClick={() => setShowChangePasswordModal(true)}
-            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-white/10 text-slate-200 hover:bg-white/20 transition"
+            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-[var(--bg-card)] text-[var(--text-secondary)] hover:bg-[var(--bg-card)] transition"
             title="Change Password"
           >
             <span className="flex items-center gap-3">
@@ -694,7 +694,7 @@ export default function StudentDashboard() {
               localStorage.removeItem("studentToken");
               navigate("/student/login");
             }}
-            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition"
+            className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-rose-600 text-rose-200 hover:bg-rose-700 transition"
             title="Logout"
           >
             <span className="flex items-center gap-3">
@@ -708,17 +708,17 @@ export default function StudentDashboard() {
       </div>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className={`flex-1 w-full lg:w-auto min-w-0 flex flex-col bg-slate-900/60 backdrop-blur-xl ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-y-auto overflow-x-hidden"}`}>
+      <div className={`flex-1 w-full lg:w-auto min-w-0 flex flex-col bg-[var(--bg-main)] ${activeTab === "timetable" ? "overflow-x-hidden" : "overflow-y-auto overflow-x-hidden"}`}>
         {/* Header */}
-        <div className="bg-slate-950/90 border-b border-white/10 backdrop-blur-xl shadow-[0_12px_32px_rgba(2,6,23,0.45)] px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3 text-slate-100">
+        <div className="bg-[var(--bg-card)] border-b border-[var(--border-color)] px-3 md:px-6 py-3 md:py-5 sticky top-0 z-20 flex items-center justify-between gap-3 text-[var(--text-primary)]">
           <div className="flex items-center min-w-0">
             {activeTab !== "analytics" && (
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden mr-3 p-2 hover:bg-white/10 rounded-lg transition"
+                className="lg:hidden mr-3 p-2 hover:bg-[var(--bg-card)] rounded-lg transition"
                 title="Toggle sidebar"
               >
-                <svg className="w-6 h-6 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[var(--text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
@@ -730,25 +730,25 @@ export default function StudentDashboard() {
                     setActiveTab("dashboard");
                     navigate("/student/dashboard");
                   }}
-                  className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white hover:underline transition"
+                  className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:underline transition"
                 >
                   <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                   Back to Dashboard
                 </button>
               )}
-              <h1 className="text-xl md:text-3xl font-black text-white break-words">
+              <h1 className="text-xl md:text-3xl font-black text-[var(--text-primary)] break-words">
                 {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
               </h1>
-              <p className="text-xs md:text-sm text-slate-300 mt-1 break-words">{student?.name ?? "Student"}</p>
+              <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-1 break-words">{student?.name ?? "Student"}</p>
             </div>
           </div>
           
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 rounded-xl px-3 py-2 border border-white/10 bg-white/10">
-              <Search className="h-4 w-4 text-slate-200" />
+            <div className="hidden md:flex items-center gap-2 rounded-xl px-3 py-2 border border-[var(--border-color)] bg-[var(--bg-card)]">
+              <Search className="h-4 w-4 text-[var(--text-secondary)]" />
               <input
                 placeholder="Search homework, exams, announcements..."
-                className="bg-transparent text-sm outline-none w-56 text-slate-100 placeholder:text-slate-400"
+                className="bg-transparent text-sm outline-none w-56 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]"
               />
             </div>
             <NotificationBell
@@ -756,9 +756,9 @@ export default function StudentDashboard() {
               unreadCount={unreadCount}
               isOpen={showNotifications}
             />
-            <div className="flex items-center gap-2 rounded-full px-2 py-1.5 border border-white/10 bg-white/10">
-              <UserCircle2 className="text-slate-200 h-5 w-5" />
-              <span className="hidden md:inline text-xs font-semibold text-slate-100">
+            <div className="flex items-center gap-2 rounded-full px-2 py-1.5 border border-[var(--border-color)] bg-[var(--bg-card)]">
+              <UserCircle2 className="text-[var(--text-primary)] h-5 w-5" />
+              <span className="hidden md:inline text-xs font-semibold text-[var(--text-primary)]">
                 {student?.name || "Student"}
               </span>
             </div>
@@ -800,31 +800,31 @@ export default function StudentDashboard() {
 
               {/* ===== DASHBOARD ===== */}
               {activeTab === "dashboard" && (
-                <PageContainer className="relative space-y-6 text-white bg-transparent border-0 shadow-none p-0">
+                <PageContainer className="relative space-y-6 text-[var(--text-primary)] bg-transparent border-0 shadow-none p-0">
                   <div className="pointer-events-none absolute -top-10 -left-10 h-48 w-48 rounded-full bg-fuchsia-500/20 blur-3xl" />
                   <div className="pointer-events-none absolute top-10 -right-10 h-48 w-48 rounded-full bg-cyan-500/20 blur-3xl" />
                   <div className="pointer-events-none absolute bottom-0 left-1/3 h-48 w-48 rounded-full bg-indigo-500/20 blur-3xl" />
 
-                  <div className="relative flex flex-col gap-4 rounded-2xl border border-white/15 bg-slate-900/45 p-6 shadow-[0_14px_34px_rgba(2,6,23,0.38)] backdrop-blur-xl md:flex-row md:items-center md:justify-between">
+                  <div className="relative flex flex-col gap-4 bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border-color)] shadow-[0_2px_10px_rgba(0,0,0,0.05)] md:flex-row md:items-center md:justify-between">
                     <div>
-                      <h1 className="text-2xl font-semibold text-white">
+                      <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
                         Welcome back, {student?.name || "Student"}
                       </h1>
-                      <p className="mt-1 text-sm text-slate-300">
+                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
                         Review your attendance, homework, and announcements in one place.
                       </p>
                     </div>
-                    <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-slate-100">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-primary)]">
                       <LayoutDashboard className="h-7 w-7" aria-hidden="true" />
                     </div>
                   </div>
 
                   <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-2xl border border-emerald-300/20 bg-gradient-to-br from-emerald-500/25 via-teal-500/20 to-slate-900/60 p-6 text-white shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                    <div className="bg-gradient-to-br from-emerald-500/15 via-emerald-500/10 to-emerald-900/30 p-4 rounded-xl border border-emerald-400/30 text-[var(--text-primary)] shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
                       <div className="flex items-start justify-between">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-wider text-emerald-100">Attendance Percentage</p>
-                          <p className="mt-2 text-3xl font-black text-white">{attendancePercent}%</p>
+                          <p className="mt-2 text-3xl font-black text-[var(--text-primary)]">{attendancePercent}%</p>
                           <p className="mt-2 text-xs text-emerald-100/80">Based on recorded days</p>
                         </div>
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/20 text-emerald-100">
@@ -833,37 +833,37 @@ export default function StudentDashboard() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-500/25 via-sky-500/20 to-slate-900/60 p-6 text-white shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                    <div className="bg-gradient-to-br from-cyan-500/15 via-cyan-500/10 to-slate-900/40 p-4 rounded-xl border border-cyan-400/30 text-[var(--text-primary)] shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-100">Homework Pending</p>
-                          <p className="mt-2 text-3xl font-black text-white">{homework.length || 0}</p>
-                          <p className="mt-2 text-xs text-cyan-100/80">Assignments awaiting</p>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-100">Upcoming Events</p>
+                          <p className="mt-2 text-3xl font-black text-[var(--text-primary)]">{events.length || 0}</p>
+                          <p className="mt-2 text-xs text-cyan-100/80">Scheduled on your calendar</p>
                         </div>
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400/20 text-cyan-100">
-                          <BookOpenCheck className="h-5 w-5" />
+                          <CalendarDays className="h-5 w-5" />
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-violet-300/20 bg-gradient-to-br from-violet-500/25 via-purple-500/20 to-slate-900/60 p-6 text-white shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                    <div className="bg-gradient-to-br from-violet-500/15 via-violet-500/10 to-slate-900/40 p-4 rounded-xl border border-violet-400/30 text-[var(--text-primary)] shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-wider text-violet-100">Announcements</p>
-                          <p className="mt-2 text-3xl font-black text-white">{unreadCount || 0}</p>
-                          <p className="mt-2 text-xs text-violet-100/80">Unread notices</p>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-violet-100">Voice Messages</p>
+                          <p className="mt-2 text-3xl font-black text-[var(--text-primary)]">{voiceMessages.length || 0}</p>
+                          <p className="mt-2 text-xs text-violet-100/80">New audio & text updates</p>
                         </div>
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-400/20 text-violet-100">
-                          <Megaphone className="h-5 w-5" />
+                          <Mic2 className="h-5 w-5" />
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-500/25 via-orange-500/20 to-slate-900/60 p-6 text-white shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                    <div className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-500/25 via-orange-500/20 to-slate-900/60 p-6 text-[var(--text-primary)] shadow-[0_14px_34px_rgba(2,6,23,0.38)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
                       <div className="flex items-start justify-between">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-wider text-amber-100">Exam Performance</p>
-                          <p className="mt-2 text-3xl font-black text-white">
+                          <p className="mt-2 text-3xl font-black text-[var(--text-primary)]">
                             {marksPayload.exams.length || marks.length ? "Tracked" : "Pending"}
                           </p>
                           <p className="mt-2 text-xs text-amber-100/80">Exam results</p>
@@ -876,9 +876,9 @@ export default function StudentDashboard() {
                   </div>
 
                   <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-white/15 bg-slate-900/45 p-6 shadow-[0_14px_34px_rgba(2,6,23,0.38)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                    <div className="bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border-color)] shadow-[0_2px_10px_rgba(0,0,0,0.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_10px_24px_rgba(0,0,0,0.12)]">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-slate-100">Homework Preview</h3>
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Homework Preview</h3>
                         <button
                           type="button"
                           onClick={() => setActiveTab("homework")}
@@ -889,17 +889,17 @@ export default function StudentDashboard() {
                       </div>
                       <div className="mt-4 space-y-3">
                         {homework.length === 0 ? (
-                          <p className="text-sm text-slate-300">No homework loaded yet.</p>
+                          <p className="text-sm text-[var(--text-secondary)]">No homework loaded yet.</p>
                         ) : (
-                          <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                            <div className="text-sm font-semibold text-white">
+                          <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-3">
+                            <div className="text-sm font-semibold text-[var(--text-primary)]">
                               {homework[0]?.title || homework[0]?.subject || "Homework"}
                             </div>
-                            <div className="mt-1 text-xs text-slate-300 line-clamp-2">
+                            <div className="mt-1 text-xs text-[var(--text-secondary)] line-clamp-2">
                               {homework[0]?.description || "No description"}
                             </div>
-                            <div className="mt-2 text-xs text-slate-300">
-                              Total pending: <span className="font-semibold text-white">{homework.length}</span>
+                            <div className="mt-2 text-xs text-[var(--text-secondary)]">
+                              Total pending: <span className="font-semibold text-[var(--text-primary)]">{homework.length}</span>
                             </div>
                           </div>
                         )}
@@ -907,14 +907,14 @@ export default function StudentDashboard() {
                     </div>
 
                     <div className="space-y-6">
-                      <div className="rounded-2xl border border-white/15 bg-slate-900/45 p-6 shadow-[0_14px_34px_rgba(2,6,23,0.38)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
-                        <h3 className="text-sm font-semibold text-slate-100">Class Teacher</h3>
-                        <div className="mt-4 space-y-2 text-sm text-slate-200">
+                      <div className="bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border-color)] shadow-[0_2px_10px_rgba(0,0,0,0.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_10px_24px_rgba(0,0,0,0.12)]">
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Class Teacher</h3>
+                        <div className="mt-4 space-y-2 text-sm text-[var(--text-secondary)]">
                           <div className="break-words">
-                            <span className="font-semibold text-white">Class Teacher:</span> {classTeacherName}
+                            <span className="font-semibold text-[var(--text-primary)]">Class Teacher:</span> {classTeacherName}
                           </div>
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-semibold text-white">Contact:</span>
+                            <span className="font-semibold text-[var(--text-primary)]">Contact:</span>
                             {classTeacherName === "Not Assigned" ? (
                               <span className="text-slate-400">Not Available</span>
                             ) : classTeacherPhone ? (
@@ -926,21 +926,21 @@ export default function StudentDashboard() {
                                   {classTeacherPhone}
                                 </a>
                               ) : (
-                                <span className="font-semibold text-white break-words">{classTeacherPhone}</span>
+                                <span className="font-semibold text-[var(--text-primary)] break-words">{classTeacherPhone}</span>
                               )
                             ) : (
                               <span className="text-slate-400">Not Available</span>
                             )}
                           </div>
                           <div className="break-words">
-                            <span className="font-semibold text-white">Class:</span> {classSectionText}
+                            <span className="font-semibold text-[var(--text-primary)]">Class:</span> {classSectionText}
                           </div>
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border border-white/15 bg-slate-900/45 p-6 shadow-[0_14px_34px_rgba(2,6,23,0.38)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_44px_rgba(8,47,73,0.5)]">
+                      <div className="bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border-color)] shadow-[0_2px_10px_rgba(0,0,0,0.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_10px_24px_rgba(0,0,0,0.12)]">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold text-slate-100">Upcoming Events</h3>
+                          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Upcoming Events</h3>
                           <button
                             type="button"
                             onClick={() => setActiveTab("events")}
@@ -951,15 +951,15 @@ export default function StudentDashboard() {
                         </div>
                         <div className="mt-4 space-y-3">
                           {events.length === 0 ? (
-                            <p className="text-sm text-slate-300">No upcoming events loaded yet.</p>
+                            <p className="text-sm text-[var(--text-secondary)]">No upcoming events loaded yet.</p>
                           ) : (
                             events.slice(0, 3).map((evt) => (
-                              <div key={evt._id} className="rounded-lg border border-white/10 bg-white/5 p-3">
-                                <div className="text-sm font-semibold text-white">
+                              <div key={evt._id} className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-3">
+                                <div className="text-sm font-semibold text-[var(--text-primary)]">
                                   {evt.eventName || evt.title || "Event"}
                                 </div>
                                 {evt.eventDate ? (
-                                  <div className="mt-1 text-xs text-slate-300">
+                                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
                                     {new Date(evt.eventDate).toLocaleDateString()}
                                   </div>
                                 ) : null}
@@ -1190,7 +1190,7 @@ export default function StudentDashboard() {
                 <button
                   type="button"
                   onClick={() => navigate("/student/timetable/full")}
-                  className="inline-flex items-center gap-3 px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold hover:from-blue-700 hover:to-cyan-700 transition shadow-lg hover:shadow-xl"
+                  className="inline-flex items-center gap-3 px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-[var(--text-primary)] font-semibold hover:from-blue-700 hover:to-cyan-700 transition shadow-lg hover:shadow-xl"
                 >
                   <CalendarClock size={24} />
                   View Your Timetable
@@ -1234,7 +1234,7 @@ export default function StudentDashboard() {
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
                     voiceMessageTab === "voice"
                       ? "bg-blue-500/20 text-blue-100 border border-blue-400/30"
-                      : "bg-white/10 text-slate-300 border border-white/10 hover:bg-white/20"
+                      : "bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-color)] hover:bg-[var(--bg-card)]"
                   }`}
                 >
                   Voice
@@ -1245,7 +1245,7 @@ export default function StudentDashboard() {
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
                     voiceMessageTab === "text"
                       ? "bg-blue-500/20 text-blue-100 border border-blue-400/30"
-                      : "bg-white/10 text-slate-300 border border-white/10 hover:bg-white/20"
+                      : "bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-color)] hover:bg-[var(--bg-card)]"
                   }`}
                 >
                   Text
@@ -1270,7 +1270,7 @@ export default function StudentDashboard() {
                     return (
                     <ListItemCard
                       key={msg._id}
-                      className="border border-white/10 bg-slate-900/60 text-slate-100 shadow-[0_14px_34px_rgba(2,6,23,0.38)] p-5"
+                      className="border border-[var(--border-color)] bg-slate-900/60 text-[var(--text-primary)] shadow-[0_14px_34px_rgba(2,6,23,0.38)] p-5"
                     >
                       <div className="mb-2">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${typeMeta.className}`}>
@@ -1279,7 +1279,7 @@ export default function StudentDashboard() {
                       </div>
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          <div className="font-semibold text-slate-100 text-sm">
+                          <div className="font-semibold text-[var(--text-primary)] text-sm">
                             From: {msg.senderName || "Teacher"}
                           </div>
                           <div className="text-xs text-slate-400">Teacher</div>
@@ -1294,10 +1294,10 @@ export default function StudentDashboard() {
                         </div>
                       ) : null}
                       {(msg.audioMissing || (msg.audioUrl && failedVoiceAudioIds.has(String(msg._id)))) && !msg.textMessage ? (
-                        <div className="text-sm text-slate-300 break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">Audio file is not available for this message.</div>
+                        <div className="text-sm text-[var(--text-secondary)] break-words whitespace-normal overflow-hidden [overflow-wrap:anywhere] max-w-full">Audio file is not available for this message.</div>
                       ) : null}
                       {msg.textMessage ? (
-                        <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 whitespace-pre-wrap break-words overflow-hidden [overflow-wrap:anywhere] max-w-full">
+                        <div className="mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-secondary)] whitespace-pre-wrap break-words overflow-hidden [overflow-wrap:anywhere] max-w-full">
                           {msg.textMessage}
                         </div>
                       ) : null}
@@ -1323,7 +1323,7 @@ export default function StudentDashboard() {
                             key={pageNum}
                             onClick={() => setVoicePage(pageNum)}
                             className={`px-3 py-1 rounded-md text-sm ${
-                              pageNum === voicePage ? "bg-blue-500 text-white" : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                              pageNum === voicePage ? "bg-blue-500 text-[var(--text-primary)]" : "bg-slate-800 hover:bg-slate-700 text-[var(--text-secondary)]"
                             }`}
                           >
                             {pageNum}
@@ -1383,7 +1383,7 @@ export default function StudentDashboard() {
             <button
               onClick={handleChangePassword}
               disabled={passwordUpdating}
-              className="w-full py-2 rounded-lg bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition disabled:opacity-50"
+              className="w-full py-2 rounded-lg bg-blue-600 text-[var(--text-primary)] font-bold text-sm hover:bg-blue-700 transition disabled:opacity-50"
             >
               {passwordUpdating ? "Updating..." : "Update Password"}
             </button>
@@ -1401,5 +1401,12 @@ export default function StudentDashboard() {
     </div>
   );
 }
+
+
+
+
+
+
+
 
 

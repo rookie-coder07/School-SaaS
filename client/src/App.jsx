@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from "react";
+import React, { Suspense, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
@@ -77,17 +77,19 @@ const shouldSkipPreload = () => {
 
 export default function App() {
   const location = useLocation();
+  
   const hideNavbar =
     location.pathname === "/" ||
     location.pathname.startsWith("/student/login") ||
+    location.pathname.startsWith("/student/dashboard") ||
+    location.pathname.startsWith("/student/timetable") ||
+    location.pathname.startsWith("/student/timetable/full") ||
     location.pathname.startsWith("/teacher/login") ||
     location.pathname.startsWith("/admin/login") ||
     location.pathname.startsWith("/settings") ||
     location.pathname.startsWith("/admin/dashboard") ||
     (location.pathname.startsWith("/teacher/") && location.pathname !== "/teacher/login") ||
-    location.pathname.startsWith("/student/dashboard") ||
-    location.pathname.startsWith("/student/timetable") ||
-    location.pathname.startsWith("/student/timetable/full") ||
+    location.pathname.startsWith("/dev-login") ||
     location.pathname.startsWith("/dev-console") ||
     location.pathname.startsWith(DEV_PORTAL_BASE);
 
@@ -306,3 +308,6 @@ function DevConsoleRedirect() {
   const destination = `${DEV_PORTAL_BASE}${normalizedSuffix}${location.search}${location.hash}`;
   return <Navigate to={destination} replace />;
 }
+
+
+

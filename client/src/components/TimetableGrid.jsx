@@ -34,6 +34,7 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
   const [loading, setLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [selectedCell, setSelectedCell] = useState(null);
+  const [activeDay, setActiveDay] = useState("");
   const [formData, setFormData] = useState({ day: "", subject: "" });
   const [showForm, setShowForm] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
@@ -67,6 +68,7 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
       setConfig(normalizedCfg);
       setConfigDraft(normalizedCfg);
       setTimetable(Array.isArray(tableData) ? tableData : []);
+      setActiveDay((normalizedCfg.days || [])[0] || "");
     } catch (err) {
       console.error(err);
       toast.error("Failed to load timetable");
@@ -366,6 +368,93 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
     );
   }
 
+  const daysList = config.days || [];
+
+  const renderPeriodCard = (row, day) => {
+    const cellData = getCellData(row, day);
+    const filled = Boolean(cellData);
+    return (
+      <button
+        type="button"
+        onClick={() => handleCellClick(row, day)}
+        className={`w-full text-left rounded-xl p-4 mb-3 transition border ${filled ? "bg-white shadow-sm border-blue-100" : "bg-slate-50 border-dashed border-slate-200"} hover:-translate-y-0.5 hover:shadow ${isDark ? "bg-white/5 border-white/10 text-slate-100" : ""}`}
+      >
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <div className="text-sm font-semibold text-slate-700">{row.label}</div>
+          <span className="text-xs font-medium text-slate-500">{row.startTime} - {row.endTime}</span>
+        </div>
+        {filled ? (
+          <div className="mt-1">
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+              {cellData.subject}
+            </span>
+          </div>
+        ) : (
+          <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-blue-600">
+            <span className="text-lg">＋</span>
+            <span>Add Subject</span>
+          </div>
+        )}
+      </button>
+    );
+  };
+
+  const renderBreakCard = (row) => (
+    <div
+      key={row.rowKey}
+      className={`w-full rounded-xl p-4 mb-3 border text-left ${isDark ? "bg-slate-800/60 border-slate-700 text-slate-200" : "bg-slate-100 border-slate-200 text-slate-600"}`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-semibold">{row.label || "Break"}</div>
+        <span className="text-xs font-medium">{row.startTime} - {row.endTime}</span>
+      </div>
+      <div className="text-xs mt-1 opacity-70">No editing for breaks</div>
+    </div>
+  );
+
+  const DayTabs = ({ days, active }) => (
+    <div className="flex gap-2 overflow-x-auto pb-3">
+      {days.map((day) => (
+        <button
+          key={day}
+          type="button"
+          onClick={() => setActiveDay(day)}
+          className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap border transition ${active === day ? "bg-blue-600 text-white border-blue-600 shadow" : isDark ? "bg-white/5 border-white/10 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-600"}`}
+        >
+          {day.slice(0, 3)}
+        </button>
+      ))}
+    </div>
+  );
+
+  const teacherMobileView = (
+    <div className="space-y-4">
+      <DayTabs days={daysList} active={activeDay || daysList[0]} />
+      <div className="space-y-2">
+        {(config.rows || []).map((row) => {
+          if (row.type === "break") return renderBreakCard(row);
+          const key = `${row.rowKey}-${activeDay}`;
+          return <div key={key}>{renderPeriodCard(row, activeDay || daysList[0])}</div>;
+        })}
+      </div>
+    </div>
+  );
+
+  const teacherDesktopGrid = (
+    <div className="hidden lg:grid grid-cols-6 gap-3">
+      {(config.rows || []).map((row) => {
+        const isBreak = row.type === "break";
+        return (
+          <div key={row.rowKey} className="col-span-3 xl:col-span-2">
+            {isBreak
+              ? renderBreakCard(row)
+              : renderPeriodCard(row, activeDay || daysList[0])}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   const tableBorder = isDark ? "border-white/10" : "border-slate-200";
   const headerCell = `${tableBorder} ${isDark ? "bg-white/5 text-slate-200" : "bg-slate-100 text-slate-700"}`;
   const rowHeader = `${tableBorder} ${isDark ? "bg-white/5 text-slate-200" : "bg-slate-50 text-slate-700"}`;
@@ -479,6 +568,12 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
         </div>
       )}
 
+      {isTeacher ? (
+        <div className="space-y-4">
+          {teacherMobileView}
+          {teacherDesktopGrid}
+        </div>
+      ) : (
       <div className="w-full overflow-x-auto">
         <div className="min-w-[1100px]">
           <table className={`border-collapse w-full text-sm ${isDark ? "text-slate-200" : "text-slate-700"}`}>
@@ -552,8 +647,8 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
                             </div>
                           </div>
                         ) : (
-                          <span className={`text-xs ${canEdit ? (isDark ? "text-slate-300 bg-white/10" : "text-slate-500 bg-slate-100") : cellEmpty} px-2 py-1 rounded-md inline-block`}>
-                            {canEdit ? "Click to add" : ""}
+                          <span className={`text-xs ${canEdit ? (isDark ? "text-slate-300 bg-white/10" : "text-slate-500 bg-slate-100") : cellEmpty} px-2 py-1 rounded-md inline-flex items-center gap-1`}>
+                            {canEdit ? "+ Add Subject" : ""}
                           </span>
                         )}
                       </td>
@@ -566,6 +661,7 @@ export default function TimetableGrid({ token, isTeacher = false, readOnly = fal
           </table>
         </div>
       </div>
+      )}
 
       {showForm && selectedCell && canEdit && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-40 p-4">

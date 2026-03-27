@@ -33,7 +33,9 @@ export default function FingerprintAuthActions({
    */
   const validateWebAuthnPrerequisites = () => {
     if (!isWebAuthnSupported()) {
-      setError("Fingerprint login is not supported on this device/browser");
+      const msg = "WebAuthn / fingerprint is not supported on this device or browser.";
+      setError(msg);
+      alert(msg);
       return false;
     }
 
