@@ -4,7 +4,7 @@
 
 body {
   margin: 0;
-  background: #050b1e;
+  background: var(--page-gradient);
   font-family: "Segoe UI", sans-serif;
 }
 
@@ -12,7 +12,7 @@ body {
 .home-container {
   min-height: 100vh;
   padding: 20px;
-  color: white;
+  color: var(--text-primary);
 }
 
 /* Header */
@@ -27,16 +27,17 @@ body {
 }
 
 .home-header p {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
 /* Hero Card */
 .hero-card {
-  background: linear-gradient(180deg, #0b1b38, #071326);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card-strong) 92%, white 8%), var(--bg-card));
   border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
 }
 
 /* Image */
@@ -58,7 +59,7 @@ body {
 
 .hero-content p {
   font-size: 14px;
-  color: #cbd5f5;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
@@ -80,30 +81,32 @@ body {
 }
 
 .btn.student {
-  background: #2563eb;
-  color: white;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: var(--accent-contrast);
 }
 
 .btn.student:hover {
-  background: #1d4ed8;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
 }
 
 .btn.admin {
-  background: #0f172a;
-  color: white;
-  border: 1px solid #334155;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
 }
 
 .btn.admin:hover {
-  background: #020617;
+  background: var(--accent-soft);
 }
 
 /* About Section */
 .about-section {
   margin-top: 30px;
-  background: rgba(255,255,255,0.05);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   padding: 20px;
   border-radius: 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .about-section h3 {
@@ -112,5 +115,5 @@ body {
 
 .about-section p {
   font-size: 14px;
-  color: #cbd5f5;
+  color: var(--text-secondary);
 }

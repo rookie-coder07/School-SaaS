@@ -9,10 +9,10 @@ export function Card({ children, className = "", hover = false, padded = true })
 }
 
 const statThemes = {
-  blue: "border-sky-200/70 bg-sky-50 text-slate-900",
-  green: "border-emerald-200/70 bg-emerald-50 text-slate-900",
-  purple: "border-violet-200/70 bg-violet-50 text-slate-900",
-  orange: "border-amber-200/70 bg-amber-50 text-slate-900",
+  blue: "border-[var(--border-color)] bg-[var(--accent-soft)] text-[var(--text-primary)]",
+  green: "border-emerald-200/70 bg-emerald-50 text-[var(--text-primary)]",
+  purple: "border-[var(--border-color)] bg-[var(--accent-soft)] text-[var(--text-primary)]",
+  orange: "border-amber-200/70 bg-amber-50 text-[var(--text-primary)]",
 };
 
 export function StatCard({ label, value, icon = null, tone = "blue", className = "" }) {
@@ -20,8 +20,8 @@ export function StatCard({ label, value, icon = null, tone = "blue", className =
   return (
     <div className={`rounded-2xl border shadow-sm transition hover:-translate-y-0.5 hover:shadow-md p-3 md:p-5 min-w-0 ${toneClass} ${className}`}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">{label}</p>
-        {icon ? <span className="text-lg leading-none text-slate-700">{icon}</span> : null}
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">{label}</p>
+        {icon ? <span className="text-lg leading-none text-[var(--accent)]">{icon}</span> : null}
       </div>
       <p className="mt-2 text-2xl md:text-3xl font-black leading-tight">{value}</p>
     </div>
