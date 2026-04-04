@@ -6,77 +6,19 @@
 
 @layer base {
   :root {
-    --saas-bg: 247 239 230;
-    --saas-surface: 255 250 244;
-    --saas-ink: 47 33 24;
-    --saas-muted: 122 101 86;
-    --saas-border: 229 213 199;
-    --saas-accent: 201 106 43;
+    --saas-bg: 248 250 252;
+    --saas-surface: 255 255 255;
+    --saas-ink: 15 23 42;
+    --saas-muted: 100 116 139;
+    --saas-border: 226 232 240;
+    --saas-accent: 56 189 248;
 
-    --bg-main: #f6efe6;
-    --bg-card: rgba(255, 250, 244, 0.84);
-    --bg-card-strong: #fffaf4;
-    --bg-muted: #efe4d7;
-    --bg-inset: #f3e8dc;
-    --bg-main-rgb: 246 239 230;
-    --bg-card-rgb: 255 250 244;
-    --text-primary: #2f2118;
-    --text-secondary: #7a6556;
-    --text-tertiary: #a48973;
-    --border-color: rgba(117, 84, 56, 0.16);
-    --border-strong: rgba(117, 84, 56, 0.24);
-    --accent: #c96a2b;
-    --accent-strong: #a95422;
-    --accent-soft: rgba(201, 106, 43, 0.14);
-    --accent-contrast: #fff7f1;
-    --focus-ring: rgba(201, 106, 43, 0.28);
-    --shadow-sm: 0 12px 32px rgba(110, 76, 48, 0.08);
-    --shadow-lg: 0 24px 60px rgba(110, 76, 48, 0.14);
-    --page-gradient:
-      radial-gradient(circle at top left, rgba(224, 152, 93, 0.18), transparent 30%),
-      radial-gradient(circle at top right, rgba(120, 73, 40, 0.12), transparent 28%),
-      linear-gradient(180deg, #fffaf4 0%, #f6efe6 48%, #efe1d2 100%);
-    --portal-panel-bg: rgba(255, 250, 244, 0.74);
-    --portal-input-bg: rgba(255, 252, 249, 0.9);
-    --portal-subtle-bg: rgba(255, 246, 237, 0.9);
-    color-scheme: light;
-  }
-
-  html[data-theme="dark"] {
-    --saas-bg: 20 15 11;
-    --saas-surface: 34 25 18;
-    --saas-ink: 246 234 221;
-    --saas-muted: 200 173 149;
-    --saas-border: 92 68 49;
-    --saas-accent: 240 154 83;
-
-    --bg-main: #140f0b;
-    --bg-card: rgba(41, 29, 21, 0.86);
-    --bg-card-strong: rgba(50, 36, 26, 0.92);
-    --bg-muted: #241a14;
-    --bg-inset: #1b140f;
-    --bg-main-rgb: 20 15 11;
-    --bg-card-rgb: 41 29 21;
-    --text-primary: #f6eadc;
-    --text-secondary: #d0b59b;
-    --text-tertiary: #a98a72;
-    --border-color: rgba(233, 205, 177, 0.14);
-    --border-strong: rgba(233, 205, 177, 0.26);
-    --accent: #f09a53;
-    --accent-strong: #ffbc7b;
-    --accent-soft: rgba(240, 154, 83, 0.16);
-    --accent-contrast: #20140d;
-    --focus-ring: rgba(240, 154, 83, 0.34);
-    --shadow-sm: 0 16px 34px rgba(0, 0, 0, 0.28);
-    --shadow-lg: 0 28px 64px rgba(0, 0, 0, 0.42);
-    --page-gradient:
-      radial-gradient(circle at top left, rgba(240, 154, 83, 0.12), transparent 28%),
-      radial-gradient(circle at top right, rgba(122, 72, 34, 0.18), transparent 32%),
-      linear-gradient(180deg, #1d1510 0%, #140f0b 46%, #0d0907 100%);
-    --portal-panel-bg: rgba(43, 30, 22, 0.82);
-    --portal-input-bg: rgba(32, 23, 17, 0.88);
-    --portal-subtle-bg: rgba(56, 39, 28, 0.65);
-    color-scheme: dark;
+    /* Theme tokens */
+    --bg-main: #0b1320;
+    --bg-card: rgba(255, 255, 255, 0.05);
+    --text-primary: #ffffff;
+    --text-secondary: #9ca3af;
+    --border-color: rgba(255, 255, 255, 0.1);
   }
 
   html,
@@ -87,7 +29,7 @@
   body {
     margin: 0;
     font-family: "Plus Jakarta Sans", "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: var(--page-gradient);
+    background: var(--bg-main);
     color: var(--text-primary);
     @apply antialiased;
     -webkit-font-smoothing: antialiased;
@@ -105,7 +47,7 @@
 
   #root {
     min-height: 100vh;
-    background: transparent;
+    background: var(--bg-main);
     color: var(--text-primary);
   }
 
@@ -121,41 +63,25 @@
 }
 
 /* Global dark-theme enforcement for legacy light classes */
-html[data-theme] [class*="bg-white"] {
+:root [class*="bg-white"] {
   background-color: var(--bg-card) !important;
 }
-html[data-theme] [class*="text-black"],
-html[data-theme] [class*="text-slate-900"],
-html[data-theme] [class*="text-slate-800"] {
+:root [class*="text-black"],
+:root [class*="text-slate-700"],
+:root [class*="text-slate-800"] {
   color: var(--text-primary) !important;
 }
-html[data-theme] [class*="text-slate-700"],
-html[data-theme] [class*="text-slate-600"],
-html[data-theme] [class*="text-slate-500"] {
-  color: var(--text-secondary) !important;
-}
-html[data-theme] [class*="text-slate-400"],
-html[data-theme] [class*="text-slate-300"] {
-  color: var(--text-tertiary) !important;
-}
-html[data-theme] [class*="border-slate-200"],
-html[data-theme] [class*="border-slate-100"],
-html[data-theme] [class*="border-white"] {
+:root [class*="border-slate-200"],
+:root [class*="border-white"] {
   border-color: var(--border-color) !important;
 }
-html[data-theme] [class*="bg-slate-50"],
-html[data-theme] [class*="bg-slate-100"],
-html[data-theme] [class*="bg-gray-100"],
-html[data-theme] [class*="bg-gray-200"] {
-  background-color: var(--bg-inset) !important;
-}
-html[data-theme] [class*="bg-slate-900"],
-html[data-theme] [class*="bg-slate-950"],
-html[data-theme] [class*="bg-gray-900"] {
+:root [class*="bg-slate-50"],
+:root [class*="bg-gray-100"],
+:root [class*="bg-gray-200"] {
   background-color: var(--bg-main) !important;
 }
-html[data-theme] *:focus-visible {
-  outline: 2px solid var(--focus-ring);
+:root *:focus-visible {
+  outline: 2px solid var(--border-color);
   outline-offset: 2px;
 }
 @layer components {
@@ -163,34 +89,34 @@ html[data-theme] *:focus-visible {
     @apply rounded-xl p-4 md:p-7;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .saas-card {
     @apply rounded-xl transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .glass-panel {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .saas-card-muted {
     @apply rounded-2xl;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .saas-list-card {
     @apply rounded-xl transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   }
 
   .saas-section-title {
@@ -200,65 +126,41 @@ html[data-theme] *:focus-visible {
 
   .saas-input {
     @apply w-full rounded-xl px-3 py-2 text-sm shadow-sm transition focus:outline-none;
-    background: var(--portal-input-bg);
+    background: var(--bg-card);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
   }
 
   .saas-input-dark {
-    @apply w-full rounded-xl px-3 py-2 text-sm shadow-sm transition focus:outline-none;
-    background: var(--portal-input-bg);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
+    @apply w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400 shadow-sm transition focus:border-cyan-300/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/30;
   }
 
   .saas-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide shadow-sm transition hover:opacity-95;
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-    color: var(--accent-contrast);
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:opacity-90;
   }
 
   .saas-button-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide shadow-sm transition hover:-translate-y-0.5;
-    border: 1px solid var(--border-color);
-    background: var(--bg-card);
-    color: var(--text-primary);
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50;
   }
 
   .saas-button-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-wide transition;
-    color: var(--text-secondary);
-  }
-
-  .saas-button-ghost:hover {
-    background: var(--accent-soft);
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100;
   }
 
   .saas-button-dark {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide shadow-sm transition hover:-translate-y-0.5;
-    border: 1px solid var(--border-color);
-    background: var(--portal-subtle-bg);
-    color: var(--text-primary);
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-white/20;
   }
 
   .saas-table {
-    @apply w-full text-left text-sm;
-    color: var(--text-secondary);
+    @apply w-full text-left text-sm text-slate-700;
   }
 
   .saas-table thead th {
-    @apply sticky top-0 z-10 px-4 py-3 text-xs font-semibold uppercase tracking-wider;
-    background: color-mix(in srgb, var(--bg-card) 88%, transparent);
-    color: var(--text-tertiary);
+    @apply sticky top-0 z-10 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500;
   }
 
   .saas-table tbody tr {
-    @apply border-b transition;
-    border-color: var(--border-color);
-  }
-
-  .saas-table tbody tr:hover {
-    background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+    @apply border-b border-slate-100 transition hover:bg-slate-50/60;
   }
 
   .saas-table tbody td {
@@ -266,23 +168,15 @@ html[data-theme] *:focus-visible {
   }
 
   .saas-table-dark {
-    @apply w-full text-left text-sm;
-    color: var(--text-secondary);
+    @apply w-full text-left text-sm text-slate-200;
   }
 
   .saas-table-dark thead th {
-    @apply sticky top-0 z-10 px-4 py-3 text-xs font-semibold uppercase tracking-wider;
-    background: color-mix(in srgb, var(--bg-card-strong) 92%, transparent);
-    color: var(--text-tertiary);
+    @apply sticky top-0 z-10 bg-slate-900/95 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400;
   }
 
   .saas-table-dark tbody tr {
-    @apply border-b transition;
-    border-color: var(--border-color);
-  }
-
-  .saas-table-dark tbody tr:hover {
-    background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+    @apply border-b border-white/10 transition hover:bg-white/5;
   }
 
   .saas-table-dark tbody td {
@@ -292,14 +186,14 @@ html[data-theme] *:focus-visible {
   .skeleton {
     position: relative;
     overflow: hidden;
-    background: color-mix(in srgb, var(--bg-muted) 82%, white 18%);
+    background: rgba(226, 232, 240, 0.7);
   }
 
   .skeleton::after {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
     transform: translateX(-100%);
     animation: shimmer 1.6s infinite;
   }
@@ -308,116 +202,406 @@ html[data-theme] *:focus-visible {
     animation: pageFade 0.35s ease-out;
   }
 
-  .student-portal-shell,
-  .teacher-portal-shell,
-  .admin-portal-shell,
-  .dev-console-shell {
-    color: var(--text-primary);
+  .student-portal-shell {
+    color: #e2e8f0;
   }
 
   .student-portal-shell .saas-page,
   .student-portal-shell .saas-card,
   .student-portal-shell .saas-list-card,
   .student-portal-shell .saas-card-muted,
-  .student-portal-shell .glass-panel,
+  .student-portal-shell .glass-panel {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(15, 23, 42, 0.6) !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(12px);
+  }
+
+  .student-portal-shell .page-intro {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(15, 23, 42, 0.6) !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(12px);
+  }
+
+  .student-portal-shell .saas-input {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .student-portal-shell .saas-input::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  .student-portal-shell .date-filter-bar {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(15, 23, 42, 0.6) !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(12px);
+  }
+
+  .student-portal-shell .date-filter-bar label {
+    color: #e2e8f0 !important;
+  }
+
+  .student-portal-shell .date-filter-bar input {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .student-portal-shell .date-filter-bar button {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .student-portal-shell .date-filter-bar button:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .student-portal-shell .text-slate-900,
+  .student-portal-shell .text-slate-800 {
+    color: #f8fafc !important;
+  }
+
+  .student-portal-shell .text-slate-700,
+  .student-portal-shell .text-slate-600 {
+    color: #e2e8f0 !important;
+  }
+
+  .student-portal-shell .text-slate-500 {
+    color: #94a3b8 !important;
+  }
+
+  .student-portal-shell .border-slate-200 {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .student-portal-shell .bg-white,
+  .student-portal-shell .bg-white\/90,
+  .student-portal-shell .bg-white\/95 {
+    background-color: rgba(15, 23, 42, 0.6) !important;
+  }
+
+  .student-portal-shell .bg-slate-50,
+  .student-portal-shell .bg-slate-100 {
+    background-color: rgba(15, 23, 42, 0.6) !important;
+  }
+
+  .student-portal-shell .from-slate-50,
+  .student-portal-shell .via-slate-50,
+  .student-portal-shell .to-slate-50,
+  .student-portal-shell .from-white,
+  .student-portal-shell .via-white,
+  .student-portal-shell .to-white,
+  .student-portal-shell .to-slate-100 {
+    --tw-gradient-from: rgba(15, 23, 42, 0.6) !important;
+    --tw-gradient-to: rgba(15, 23, 42, 0.6) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+
+  .student-portal-shell .text-slate-700 {
+    color: #e2e8f0 !important;
+  }
+
+  .student-portal-shell .text-slate-400 {
+    color: #94a3b8 !important;
+  }
+
+  .teacher-portal-shell {
+    color: #e2e8f0;
+  }
+
   .teacher-portal-shell .saas-page,
   .teacher-portal-shell .saas-card,
   .teacher-portal-shell .saas-list-card,
   .teacher-portal-shell .saas-card-muted,
-  .teacher-portal-shell .glass-panel,
+  .teacher-portal-shell .glass-panel {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(10, 22, 18, 0.62) !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(12px);
+  }
+
+  .teacher-portal-shell .page-intro {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(10, 22, 18, 0.62) !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(12px);
+  }
+
+  .teacher-portal-shell .saas-input {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .teacher-portal-shell .saas-input::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  .teacher-portal-shell .date-filter-bar {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(10, 22, 18, 0.62) !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(12px);
+  }
+
+  .teacher-portal-shell .date-filter-bar label {
+    color: #e2e8f0 !important;
+  }
+
+  .teacher-portal-shell .date-filter-bar input {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .teacher-portal-shell .date-filter-bar button {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .teacher-portal-shell .date-filter-bar button:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .teacher-portal-shell .text-slate-900,
+  .teacher-portal-shell .text-slate-800,
+  .teacher-portal-shell .text-slate-700,
+  .teacher-portal-shell .text-slate-600 {
+    color: #e2e8f0 !important;
+  }
+
+  .teacher-portal-shell .text-slate-500,
+  .teacher-portal-shell .text-slate-400 {
+    color: #94a3b8 !important;
+  }
+
+  .teacher-portal-shell .text-slate-300 {
+    color: #c7f9e4 !important;
+  }
+
+  .teacher-portal-shell .page-intro svg,
+  .teacher-portal-shell .page-intro svg * {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+  }
+
+  .teacher-portal-shell .border-slate-200 {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .teacher-portal-shell .bg-white,
+  .teacher-portal-shell .bg-white\/90,
+  .teacher-portal-shell .bg-white\/95 {
+    background-color: rgba(10, 22, 18, 0.62) !important;
+  }
+
+  .teacher-portal-shell .bg-slate-50,
+  .teacher-portal-shell .bg-slate-100 {
+    background-color: rgba(10, 22, 18, 0.62) !important;
+  }
+
+  .teacher-portal-shell .from-slate-50,
+  .teacher-portal-shell .via-slate-50,
+  .teacher-portal-shell .to-slate-50,
+  .teacher-portal-shell .from-white,
+  .teacher-portal-shell .via-white,
+  .teacher-portal-shell .to-white,
+  .teacher-portal-shell .to-slate-100 {
+    --tw-gradient-from: rgba(10, 22, 18, 0.62) !important;
+    --tw-gradient-to: rgba(10, 22, 18, 0.62) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+
+  .teacher-portal-shell input,
+  .teacher-portal-shell textarea,
+  .teacher-portal-shell select {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .teacher-portal-shell input::placeholder,
+  .teacher-portal-shell textarea::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  .teacher-portal-shell input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(2);
+    opacity: 1;
+  }
+
+  .admin-portal-shell {
+    color: #e2e8f0;
+  }
+
   .admin-portal-shell .saas-page,
   .admin-portal-shell .saas-card,
   .admin-portal-shell .saas-list-card,
   .admin-portal-shell .saas-card-muted,
-  .admin-portal-shell .glass-panel,
-  .dev-console-shell .saas-page,
-  .dev-console-shell .saas-card,
-  .dev-console-shell .saas-list-card,
-  .dev-console-shell .saas-card-muted,
-  .dev-console-shell .glass-panel,
-  .student-portal-shell .page-intro,
-  .teacher-portal-shell .page-intro,
-  .admin-portal-shell .page-intro,
-  .dev-console-shell .page-intro,
-  .student-portal-shell .date-filter-bar,
-  .teacher-portal-shell .date-filter-bar,
-  .admin-portal-shell .date-filter-bar,
-  .dev-console-shell .date-filter-bar {
-    border-color: var(--border-color) !important;
-    background-color: var(--portal-panel-bg) !important;
-    box-shadow: var(--shadow-lg);
-    backdrop-filter: blur(14px);
+  .admin-portal-shell .glass-panel {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(12, 18, 38, 0.62) !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(12px);
   }
 
-  .student-portal-shell .saas-input,
-  .teacher-portal-shell .saas-input,
-  .admin-portal-shell .saas-input,
-  .dev-console-shell .saas-input,
-  .student-portal-shell input,
-  .student-portal-shell textarea,
-  .student-portal-shell select,
-  .teacher-portal-shell input,
-  .teacher-portal-shell textarea,
-  .teacher-portal-shell select,
+  .admin-portal-shell .page-intro {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(12, 18, 38, 0.62) !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(12px);
+  }
+
+  .admin-portal-shell .page-intro svg,
+  .admin-portal-shell .page-intro svg * {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+  }
+
+  .admin-portal-shell .saas-input {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .admin-portal-shell .saas-input::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  .admin-portal-shell .date-filter-bar {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(12, 18, 38, 0.62) !important;
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(12px);
+  }
+
+  .admin-portal-shell .date-filter-bar label {
+    color: #e2e8f0 !important;
+  }
+
+  .admin-portal-shell .date-filter-bar input {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .admin-portal-shell .date-filter-bar button {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #e2e8f0 !important;
+  }
+
+  .admin-portal-shell .date-filter-bar button:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .admin-portal-shell .text-slate-900,
+  .admin-portal-shell .text-slate-800,
+  .admin-portal-shell .text-slate-700,
+  .admin-portal-shell .text-slate-600 {
+    color: #e2e8f0 !important;
+  }
+
+  .admin-portal-shell .text-slate-500,
+  .admin-portal-shell .text-slate-400 {
+    color: #94a3b8 !important;
+  }
+
+  .admin-portal-shell .text-slate-300 {
+    color: #e0e7ff !important;
+  }
+
+  .admin-portal-shell .border-slate-200 {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .admin-portal-shell .bg-white,
+  .admin-portal-shell .bg-white\/90,
+  .admin-portal-shell .bg-white\/95 {
+    background-color: rgba(12, 18, 38, 0.62) !important;
+  }
+
+  .admin-portal-shell .bg-slate-50,
+  .admin-portal-shell .bg-slate-100 {
+    background-color: rgba(12, 18, 38, 0.62) !important;
+  }
+
+  .admin-portal-shell .from-slate-50,
+  .admin-portal-shell .via-slate-50,
+  .admin-portal-shell .to-slate-50,
+  .admin-portal-shell .from-white,
+  .admin-portal-shell .via-white,
+  .admin-portal-shell .to-white,
+  .admin-portal-shell .to-slate-100 {
+    --tw-gradient-from: rgba(12, 18, 38, 0.62) !important;
+    --tw-gradient-to: rgba(12, 18, 38, 0.62) !important;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+  }
+
   .admin-portal-shell input,
   .admin-portal-shell textarea,
-  .admin-portal-shell select,
-  .dev-console-shell input,
-  .dev-console-shell textarea,
-  .dev-console-shell select {
-    border-color: var(--border-color) !important;
-    background-color: var(--portal-input-bg) !important;
-    color: var(--text-primary) !important;
+  .admin-portal-shell select {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background-color: rgba(15, 23, 42, 0.7) !important;
+    color: #e2e8f0 !important;
   }
 
-  .student-portal-shell .saas-input::placeholder,
-  .teacher-portal-shell .saas-input::placeholder,
-  .admin-portal-shell .saas-input::placeholder,
-  .dev-console-shell .saas-input::placeholder,
-  .student-portal-shell input::placeholder,
-  .student-portal-shell textarea::placeholder,
-  .teacher-portal-shell input::placeholder,
-  .teacher-portal-shell textarea::placeholder,
   .admin-portal-shell input::placeholder,
-  .admin-portal-shell textarea::placeholder,
-  .dev-console-shell input::placeholder,
-  .dev-console-shell textarea::placeholder {
-    color: var(--text-tertiary) !important;
+  .admin-portal-shell textarea::placeholder {
+    color: #94a3b8 !important;
   }
 
-  .student-portal-shell .date-filter-bar button,
-  .teacher-portal-shell .date-filter-bar button,
-  .admin-portal-shell .date-filter-bar button,
-  .dev-console-shell .date-filter-bar button {
-    background-color: var(--accent-soft) !important;
-    color: var(--text-primary) !important;
-  }
-
-  .student-portal-shell .date-filter-bar button:hover,
-  .teacher-portal-shell .date-filter-bar button:hover,
-  .admin-portal-shell .date-filter-bar button:hover,
-  .dev-console-shell .date-filter-bar button:hover {
-    background-color: color-mix(in srgb, var(--accent-soft) 85%, var(--bg-card)) !important;
-  }
-
-  .student-portal-shell .page-intro svg,
-  .student-portal-shell .page-intro svg *,
-  .teacher-portal-shell .page-intro svg,
-  .teacher-portal-shell .page-intro svg *,
-  .admin-portal-shell .page-intro svg,
-  .admin-portal-shell .page-intro svg *,
-  .dev-console-shell .page-intro svg,
-  .dev-console-shell .page-intro svg * {
-    color: var(--accent) !important;
-    stroke: currentColor !important;
-  }
-
-  html[data-theme="dark"] .student-portal-shell input[type="date"]::-webkit-calendar-picker-indicator,
-  html[data-theme="dark"] .teacher-portal-shell input[type="date"]::-webkit-calendar-picker-indicator,
-  html[data-theme="dark"] .admin-portal-shell input[type="date"]::-webkit-calendar-picker-indicator,
-  html[data-theme="dark"] .dev-console-shell input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(1) brightness(1.4);
+  .admin-portal-shell input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(2);
     opacity: 1;
+  }
+
+  .admin-portal-shell .bg-blue-600 {
+    background-color: #7c3aed !important;
+  }
+
+  .admin-portal-shell .hover\:bg-blue-700:hover {
+    background-color: #6d28d9 !important;
+  }
+
+  .admin-portal-shell .bg-blue-100 {
+    background-color: rgba(139, 92, 246, 0.2) !important;
+  }
+
+  .admin-portal-shell .hover\:bg-blue-200:hover {
+    background-color: rgba(139, 92, 246, 0.3) !important;
+  }
+
+  .admin-portal-shell .bg-blue-50 {
+    background-color: rgba(139, 92, 246, 0.12) !important;
+  }
+
+  .admin-portal-shell .text-blue-700 {
+    color: #ddd6fe !important;
+  }
+
+  .admin-portal-shell .hover\:text-blue-600:hover {
+    color: #e9d5ff !important;
+  }
+
+  .admin-portal-shell .border-blue-200 {
+    border-color: rgba(167, 139, 250, 0.4) !important;
+  }
+
+  .admin-portal-shell .border-blue-400 {
+    border-color: rgba(167, 139, 250, 0.7) !important;
+  }
+
+  .admin-portal-shell .focus\:ring-blue-500:focus {
+    --tw-ring-color: rgba(139, 92, 246, 0.55) !important;
+  }
+
+  .student-portal-shell table thead,
+  .student-portal-shell table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.04) !important;
   }
 
   @keyframes shimmer {
@@ -439,100 +623,42 @@ html[data-theme] *:focus-visible {
 
   /* Developer Console: global dropdown readability fix */
   .dev-console-shell select {
-    background-color: var(--portal-input-bg) !important;
-    color: var(--text-primary) !important;
-    border-color: var(--border-strong) !important;
+    background-color: #1f2937 !important;
+    color: #e5e7eb !important;
+    border-color: rgb(71 85 105 / 0.9) !important;
     position: relative;
     z-index: 30;
   }
 
   .dev-console-shell select:focus {
     outline: none;
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 1px var(--focus-ring);
+    border-color: #22d3ee !important;
+    box-shadow: 0 0 0 1px rgb(34 211 238 / 0.45);
   }
 
   .dev-console-shell select option,
   .dev-console-shell select optgroup {
-    background-color: var(--bg-card-strong);
-    color: var(--text-primary);
+    background-color: #1f2937;
+    color: #e5e7eb;
   }
 
   .dev-console-shell select option:hover,
   .dev-console-shell select option:focus,
   .dev-console-shell select option:checked {
-    background-color: var(--accent-soft);
-    color: var(--text-primary);
+    background-color: #374151;
+    color: #e5e7eb;
   }
 }
 
 /* Global theme enforcement for legacy utility classes */
-html[data-theme] .bg-white {
+:root .bg-white {
   background-color: var(--bg-card) !important;
 }
-html[data-theme] .text-white {
+:root .text-white {
   color: var(--text-primary) !important;
 }
-html[data-theme] .bg-gray-900 {
+:root .bg-gray-900 {
   background-color: var(--bg-main) !important;
-}
-
-html[data-theme] .bg-blue-50,
-html[data-theme] .bg-blue-100,
-html[data-theme] .bg-cyan-50,
-html[data-theme] .bg-cyan-100,
-html[data-theme] .bg-indigo-50,
-html[data-theme] .bg-violet-50,
-html[data-theme] .bg-purple-50 {
-  background-color: var(--accent-soft) !important;
-}
-
-html[data-theme] .bg-blue-500,
-html[data-theme] .bg-blue-600,
-html[data-theme] .bg-cyan-500,
-html[data-theme] .bg-cyan-600,
-html[data-theme] .bg-indigo-500,
-html[data-theme] .bg-indigo-600,
-html[data-theme] .bg-violet-500,
-html[data-theme] .bg-purple-600 {
-  background-color: var(--accent) !important;
-}
-
-html[data-theme] .hover\:bg-blue-700:hover,
-html[data-theme] .hover\:bg-blue-600:hover,
-html[data-theme] .hover\:bg-cyan-600:hover,
-html[data-theme] .hover\:bg-cyan-700:hover,
-html[data-theme] .hover\:bg-indigo-600:hover,
-html[data-theme] .hover\:bg-violet-600:hover,
-html[data-theme] .hover\:bg-purple-700:hover {
-  background-color: var(--accent-strong) !important;
-}
-
-html[data-theme] .text-blue-700,
-html[data-theme] .text-blue-600,
-html[data-theme] .text-cyan-200,
-html[data-theme] .text-cyan-300,
-html[data-theme] .text-cyan-600,
-html[data-theme] .text-indigo-600,
-html[data-theme] .text-violet-600,
-html[data-theme] .text-purple-600 {
-  color: var(--accent) !important;
-}
-
-html[data-theme] .border-blue-200,
-html[data-theme] .border-blue-300,
-html[data-theme] .border-cyan-200,
-html[data-theme] .border-cyan-300,
-html[data-theme] .border-indigo-200,
-html[data-theme] .border-violet-200,
-html[data-theme] .border-purple-200 {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-color)) !important;
-}
-
-html[data-theme] .focus\:ring-blue-500:focus,
-html[data-theme] .focus\:ring-cyan-400:focus,
-html[data-theme] .focus\:ring-cyan-500:focus {
-  --tw-ring-color: var(--focus-ring) !important;
 }
 
 

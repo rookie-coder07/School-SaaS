@@ -8,28 +8,25 @@ import {
   KeyRound,
   LogOut,
   MessageCircle,
-  Moon,
   ShieldCheck,
   Sparkles,
   Star,
-  Sun,
 } from "lucide-react";
 import { useToast } from "../components/ToastProvider";
 import PageIntro from "../components/ui/PageIntro";
 import { sessionTracker } from "../utils/sessionTracker";
 import clientPackage from "../../package.json";
 import { useLanguage } from "../context/LanguageContext";
-import { useTheme } from "../context/ThemeContext";
 
 
 const API_URL = import.meta.env.VITE_API_URL;
 const SETTINGS_FONT = { fontFamily: "'Manrope', 'Segoe UI', system-ui, sans-serif" };
 
-const SettingRow = ({ label, description, actionLabel, onClick, icon, iconTone = "bg-[var(--accent-soft)] text-[var(--accent)]" }) => (
+const SettingRow = ({ label, description, actionLabel, onClick, icon, iconTone = "bg-white/10 text-slate-200" }) => (
   <button
     type="button"
     onClick={onClick}
-    className="flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-3 text-left text-sm font-medium transition hover:bg-[var(--accent-soft)] focus:outline-none"
+    className="flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-3 text-left text-sm font-medium transition hover:bg-white/5 focus:outline-none"
   >
     <div className="flex w-full items-center gap-3">
       {icon && (
@@ -38,13 +35,13 @@ const SettingRow = ({ label, description, actionLabel, onClick, icon, iconTone =
         </span>
       )}
       <div className="flex-1">
-        <p className="text-base text-[var(--text-primary)]">{label}</p>
-        {description && <p className="text-xs font-normal text-[var(--text-secondary)]">{description}</p>}
+        <p className="text-base text-slate-100">{label}</p>
+        {description && <p className="text-xs font-normal text-slate-400">{description}</p>}
       </div>
     </div>
     <div className="flex items-center gap-2">
-      {actionLabel && <span className="text-xs font-semibold text-[var(--accent)]">{actionLabel}</span>}
-      <span className="text-[var(--text-tertiary)] text-xl leading-none">{">"}</span>
+      {actionLabel && <span className="text-xs font-semibold text-cyan-200">{actionLabel}</span>}
+      <span className="text-slate-400 text-xl leading-none">{">"}</span>
     </div>
   </button>
 );
@@ -53,12 +50,12 @@ const ToggleRow = ({ label, description, enabled, onToggle }) => (
   <div className="flex items-center justify-between gap-3 rounded-2xl px-0 py-3 text-left text-sm font-medium">
     <div>
       <p className="text-base text-slate-100">{label}</p>
-      {description && <p className="text-xs font-normal text-[var(--text-secondary)]">{description}</p>}
+      {description && <p className="text-xs font-normal text-slate-400">{description}</p>}
     </div>
     <button
       type="button"
       onClick={onToggle}
-      className={`flex h-8 w-16 items-center rounded-full px-0.5 transition ${enabled ? "bg-[var(--accent)]" : "bg-[var(--bg-muted)]"}`}
+      className={`flex h-8 w-16 items-center rounded-full px-0.5 transition ${enabled ? "bg-emerald-500" : "bg-slate-600"}`}
       aria-pressed={enabled}
     >
       <span
@@ -69,32 +66,26 @@ const ToggleRow = ({ label, description, enabled, onToggle }) => (
 );
 
 const SectionCard = ({ title, description, children }) => (
-  <section
-    className="space-y-3 rounded-3xl border p-5 backdrop-blur-xl"
-    style={{ borderColor: "var(--border-color)", background: "var(--portal-panel-bg)", boxShadow: "var(--shadow-lg)" }}
-  >
+  <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-lg shadow-slate-950/40 backdrop-blur-xl">
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.4em] text-[var(--text-tertiary)]">{title}</p>
-      {description && <p className="mt-1 text-sm text-[var(--text-secondary)]">{description}</p>}
+      <p className="text-xs font-semibold uppercase tracking-[0.4em] text-slate-400">{title}</p>
+      {description && <p className="mt-1 text-sm text-slate-400">{description}</p>}
     </div>
-    <div className="space-y-2 border-t pt-4" style={{ borderColor: "var(--border-color)" }}>{children}</div>
+    <div className="space-y-2 border-t border-white/10 pt-4">{children}</div>
   </section>
 );
 
 const ChangePasswordModal = ({ show, form, setForm, onSubmit, onClose, loading }) => {
   if (!show) return null;
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 px-4">
-      <div
-        className="w-full max-w-md rounded-3xl border p-5 shadow-2xl"
-        style={{ background: "var(--bg-card-strong)", borderColor: "var(--border-color)", color: "var(--text-primary)" }}
-      >
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
+      <div className="w-full max-w-md rounded-3xl bg-slate-900/90 p-5 shadow-2xl border border-white/10 text-slate-100">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-[var(--text-tertiary)]">Security</p>
-            <h2 className="text-xl font-bold text-[var(--text-primary)]">Change Password</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-slate-400">Security</p>
+            <h2 className="text-xl font-bold text-white">Change Password</h2>
           </div>
-          <button type="button" onClick={onClose} className="text-sm font-semibold text-[var(--text-secondary)]">
+          <button type="button" onClick={onClose} className="text-sm font-semibold text-slate-300">
             Cancel
           </button>
         </div>
@@ -104,30 +95,26 @@ const ChangePasswordModal = ({ show, form, setForm, onSubmit, onClose, loading }
             onChange={(e) => setForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
             placeholder="Current password"
             type="password"
-            className="w-full rounded-2xl border px-4 py-3 text-sm focus:outline-none focus:ring-2"
-            style={{ borderColor: "var(--border-color)", background: "var(--portal-input-bg)", color: "var(--text-primary)" }}
+            className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400"
           />
           <input
             value={form.newPassword}
             onChange={(e) => setForm((prev) => ({ ...prev, newPassword: e.target.value }))}
             placeholder="New password"
             type="password"
-            className="w-full rounded-2xl border px-4 py-3 text-sm focus:outline-none focus:ring-2"
-            style={{ borderColor: "var(--border-color)", background: "var(--portal-input-bg)", color: "var(--text-primary)" }}
+            className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400"
           />
           <input
             value={form.confirmPassword}
             onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
             placeholder="Confirm new password"
             type="password"
-            className="w-full rounded-2xl border px-4 py-3 text-sm focus:outline-none focus:ring-2"
-            style={{ borderColor: "var(--border-color)", background: "var(--portal-input-bg)", color: "var(--text-primary)" }}
+            className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400"
           />
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl py-3 text-sm font-bold transition disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-strong))", color: "var(--accent-contrast)" }}
+            className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 py-3 text-sm font-bold text-white transition disabled:opacity-50"
           >
             {loading ? "Updating..." : "Update password"}
           </button>
@@ -149,7 +136,6 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { language, setLanguage, t } = useLanguage();
-  const { theme, toggleTheme } = useTheme();
   const [fingerprintEnabled, setFingerprintEnabled] = useState(() => {
     const storedValue = localStorage.getItem("fingerprintEnabled");
     return storedValue === null ? true : storedValue === "true";
@@ -277,12 +263,12 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="student-portal-shell min-h-screen px-4 py-8 text-[var(--text-primary)]" style={{ ...SETTINGS_FONT, background: "var(--page-gradient)" }}>
+    <div className="student-portal-shell min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 px-4 py-8 text-slate-100" style={SETTINGS_FONT}>
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="self-start text-sm font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+          className="text-sm font-semibold text-slate-400 hover:text-white transition self-start"
         >
           ← {t("common.back", "Go Back")}
         </button>
@@ -303,12 +289,6 @@ export default function SettingsPage() {
               setFingerprintEnabled(next);
               localStorage.setItem("fingerprintEnabled", next.toString());
             }}
-          />
-          <ToggleRow
-            label="Dark Mode"
-            description={`Switch between restaurant-style ${theme === "dark" ? "dark" : "light"} themes`}
-            enabled={theme === "dark"}
-            onToggle={toggleTheme}
           />
         </SectionCard>
 
@@ -401,15 +381,6 @@ export default function SettingsPage() {
         </SectionCard>
 
         <SectionCard title="Footer">
-          <div className="flex items-center justify-between rounded-2xl border border-[var(--border-color)] bg-[var(--accent-soft)]/30 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Theme preview</p>
-              <p className="text-xs text-[var(--text-secondary)]">Restaurant SaaS palette is active across the app</p>
-            </div>
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--bg-card)] text-[var(--accent)] shadow-sm">
-              {theme === "dark" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-            </span>
-          </div>
           <SettingRow
             label="Logout"
             description="Sign out from this device"
