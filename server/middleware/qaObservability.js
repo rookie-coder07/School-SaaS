@@ -3,6 +3,7 @@ import crypto from "crypto";
 const DUPLICATE_WINDOW_MS = 5000;
 const MAX_BODY_PREVIEW = 160;
 const CLEANUP_INTERVAL_MS = 30000;
+const SENSITIVE_KEY_PATTERN = /password|token|secret|authorization|access.?code|api.?key|otp/i;
 
 const safeStringify = (value) => {
   try {
@@ -12,6 +13,17 @@ const safeStringify = (value) => {
   }
 };
 
+const redactSensitiveValues = (value) => {
+  if (Array.isArray(value)) return value.map(redactSensitiveValues);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      SENSITIVE_KEY_PATTERN.test(key) ? "[REDACTED]" : redactSensitiveValues(entry),
+    ])
+  );
+};
+
 const summarizeBody = (body) => {
   if (!body || typeof body !== "object") {
     return body || null;
@@ -19,7 +31,7 @@ const summarizeBody = (body) => {
   const keys = Object.keys(body);
   return {
     keys: keys.slice(0, 15),
-    preview: safeStringify(body).slice(0, MAX_BODY_PREVIEW),
+    preview: safeStringify(redactSensitiveValues(body)).slice(0, MAX_BODY_PREVIEW),
   };
 };
 

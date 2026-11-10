@@ -100,6 +100,10 @@ const allowedOrigins = [
   "https://school-saa-s.vercel.app",
 ];
 
+// Render provides the exact public URL for this backend service.
+const renderExternalUrl = process.env.RENDER_EXTERNAL_URL?.replace(/\/$/, "");
+if (renderExternalUrl) allowedOrigins.push(renderExternalUrl);
+
 // Production Netlify Domain Support
 // Add explicit Netlify domain if set in env
 if (process.env.NETLIFY_DOMAIN) {
