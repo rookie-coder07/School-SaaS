@@ -19,8 +19,10 @@ import {
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
 import crypto from "crypto";
+import { setServers as setDnsServers } from "node:dns";
 import cluster from "cluster";
 import os from "os";
+import v8 from "node:v8";
 import MockDatabase from "./mockDb.js";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -430,6 +432,17 @@ const __dirname = path.dirname(__filename);
 // Load environment variables from .env file in server directory
 const envPath = path.join(__dirname, ".env");
 dotenv.config({ path: envPath });
+
+// Allow a local resolver override when the system DNS proxy cannot answer
+// MongoDB Atlas SRV queries (for example, when Node is pointed at 127.0.0.1).
+const mongoDnsServers = String(process.env.MONGO_DNS_SERVERS || "")
+  .split(",")
+  .map((server) => server.trim())
+  .filter(Boolean);
+if (mongoDnsServers.length > 0) {
+  setDnsServers(mongoDnsServers);
+  console.log(`MongoDB DNS servers configured: ${mongoDnsServers.join(", ")}`);
+}
 
 // Log environment loading
 console.log(`Loading .env from: ${envPath}`);
@@ -11410,14 +11423,14 @@ app.get("/api/dev/dashboard", async (req, res) => {
 
 app.get("/api/dev/system-health", async (req, res) => {
   try {
-    const osModule = await import("os");
-    const os = osModule.default;
-
-    // Get memory usage
+    // Show V8 heap use against its configured limit. heapTotal is only the
+    // heap currently committed by V8, so heapUsed / heapTotal can look high
+    // even when the process has plenty of room to grow.
     const memUsage = process.memoryUsage();
-    const totalMemMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+    const heapLimitMB = Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024);
     const usedMemMB = Math.round(memUsage.heapUsed / 1024 / 1024);
-    const memPercent = Math.round((usedMemMB / totalMemMB) * 100);
+    const processRssMB = Math.round(memUsage.rss / 1024 / 1024);
+    const memPercent = Math.round((memUsage.heapUsed / v8.getHeapStatistics().heap_size_limit) * 100);
 
     // Get CPU load
     const cpuLoads = os.loadavg();
@@ -11440,8 +11453,9 @@ app.get("/api/dev/system-health", async (req, res) => {
       success: true,
       data: {
         uptime: uptimeString,
-        memoryUsage: `${usedMemMB} MB / ${totalMemMB} MB`,
+        memoryUsage: `${usedMemMB} MB / ${heapLimitMB} MB`,
         memoryPercent: memPercent,
+        processMemoryUsage: `${processRssMB} MB RSS`,
         cpuUsage: `${cpuPercent}%`,
         cpuPercent: cpuPercent,
         mongoStatus: mongoStatus,

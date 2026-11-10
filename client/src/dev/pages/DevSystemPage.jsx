@@ -81,17 +81,22 @@ export default function DevSystemPage() {
 
           <section className="rounded-2xl border border-slate-700 bg-slate-800 p-5">
             <h3 className="text-lg font-black text-white mb-4">System Information</h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
               <div className="rounded-xl bg-slate-700/50 p-4 border border-slate-600">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Memory Usage</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">V8 Heap Usage</p>
                 <p className="mt-2 text-lg font-bold text-white">{health?.memoryUsage || "N/A"}</p>
-                <p className="mt-1 text-xs text-slate-400">Percentage: {health?.memoryPercent || 0}%</p>
+                <p className="mt-1 text-xs text-slate-400">Of the V8 heap limit: {health?.memoryPercent || 0}%</p>
                 <div className="mt-2">
                   <DevStatusBadge
                     status={(Number(health?.memoryPercent || 0) || 0) > 85 ? "warning" : "active"}
                     text={(Number(health?.memoryPercent || 0) || 0) > 85 ? "High" : "Normal"}
                   />
                 </div>
+              </div>
+              <div className="rounded-xl bg-slate-700/50 p-4 border border-slate-600">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Process Memory</p>
+                <p className="mt-2 text-lg font-bold text-white">{health?.processMemoryUsage || "N/A"}</p>
+                <p className="mt-1 text-xs text-slate-400">Resident memory used by this Node process</p>
               </div>
               <div className="rounded-xl bg-slate-700/50 p-4 border border-slate-600">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">CPU Usage</p>

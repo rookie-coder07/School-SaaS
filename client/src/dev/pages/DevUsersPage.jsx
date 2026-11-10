@@ -35,22 +35,36 @@ export default function DevUsersPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [actionBusyId, setActionBusyId] = useState("");
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState(null);
+  const [newUser, setNewUser] = useState({
+    schoolId: String(searchParams.get("schoolId") || ""),
+    name: "",
+    email: "",
+    role: "ADMIN",
+    password: "",
+    className: "",
+    section: "",
+    subject: "",
+    phone: "",
+    rollNo: "",
+  });
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [studentNames, setStudentNames] = useState({});
   const [filters, setFilters] = useState(() => {
     try {
       const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
-      if (!raw) return { search: "", role: "", status: "", schoolId: "" };
+      if (!raw) return { search: "", role: "", status: "", schoolId: String(searchParams.get("schoolId") || "") };
       const parsed = JSON.parse(raw);
       return {
         search: String(parsed?.search || ""),
         role: String(parsed?.role || ""),
         status: String(parsed?.status || ""),
-        schoolId: String(parsed?.schoolId || ""),
+        schoolId: String(searchParams.get("schoolId") || parsed?.schoolId || ""),
       };
     } catch {
-      return { search: "", role: "", status: "", schoolId: "" };
+      return { search: "", role: "", status: "", schoolId: String(searchParams.get("schoolId") || "") };
     }
   });
   const [presets, setPresets] = useState(() => {
@@ -167,6 +181,71 @@ export default function DevUsersPage() {
       setError(err?.message || "Failed to search users");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const createUser = async (event) => {
+    event.preventDefault();
+    setCreatedCredentials(null);
+    setError("");
+    const user = {
+      ...newUser,
+      name: newUser.name.trim(),
+      email: newUser.email.trim().toLowerCase(),
+      password: newUser.password,
+      className: newUser.className.trim(),
+      section: newUser.section.trim(),
+      subject: newUser.subject.trim(),
+      phone: newUser.phone.trim(),
+      rollNo: newUser.rollNo.trim(),
+    };
+    if (!user.schoolId || !user.name || !user.email || !user.password) {
+      setError("School, name, email and password are required.");
+      return;
+    }
+    if (user.password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (user.role === "STUDENT" && (!user.className || !user.section || !user.rollNo)) {
+      setError("Students need a class, section and roll number.");
+      return;
+    }
+    if (user.role === "TEACHER" && user.phone) {
+      const digits = user.phone.replace(/\D/g, "");
+      if (digits.length < 7 || digits.length > 15) {
+        setError("Teacher phone must contain 7 to 15 digits.");
+        return;
+      }
+    }
+    try {
+      setCreatingUser(true);
+      const response = await fetch(`${API_URL}/api/dev/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(user),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload?.success === false) {
+        throw new Error(payload?.message || payload?.error || "Failed to create user");
+      }
+      setCreatedCredentials({
+        name: user.name,
+        email: payload?.user?.email || user.email,
+        password: payload?.user?.password || user.password,
+        role: user.role,
+        school: schools.find((school) => String(school._id) === user.schoolId)?.name || "Selected school",
+      });
+      setNewUser((current) => ({ ...current, name: "", email: "", password: "", className: "", section: "", subject: "", phone: "", rollNo: "" }));
+      await loadUsers();
+      showToast(`${user.role} account created`);
+    } catch (err) {
+      setError(err?.message || "Failed to create user");
+    } finally {
+      setCreatingUser(false);
     }
   };
 
@@ -359,6 +438,49 @@ export default function DevUsersPage() {
 
       {toast ? <div className="rounded-xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">{toast}</div> : null}
       {error ? <div className="rounded-xl border border-rose-300/25 bg-rose-500/10 px-4 py-2 text-sm text-rose-100">{error}</div> : null}
+
+      {createdCredentials ? (
+        <section className="rounded-2xl border border-emerald-300/30 bg-emerald-500/10 p-4 text-emerald-50">
+          <h2 className="font-bold">Account created for {createdCredentials.school}</h2>
+          <p className="mt-1 text-sm">{createdCredentials.name} · {createdCredentials.role}</p>
+          <p className="mt-2 text-sm">Login email: <span className="font-semibold">{createdCredentials.email}</span></p>
+          <p className="text-sm">Temporary password: <span className="font-semibold">{createdCredentials.password}</span></p>
+          <p className="mt-2 text-xs text-emerald-100/80">Save these credentials and share them securely with the user.</p>
+        </section>
+      ) : null}
+
+      <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 backdrop-blur-xl">
+        <h2 className="text-lg font-bold text-white">Create user for a school</h2>
+        <p className="mt-1 text-sm text-slate-300">Create an admin, teacher or student and assign the account to its school.</p>
+        <form onSubmit={createUser} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <select aria-label="School" value={newUser.schoolId} onChange={(e) => setNewUser((prev) => ({ ...prev, schoolId: e.target.value }))} className="saas-input-dark" required>
+            <option value="">Select school</option>
+            {schools.map((school) => <option key={school._id} value={school._id}>{school.name}</option>)}
+          </select>
+          <select aria-label="Role" value={newUser.role} onChange={(e) => setNewUser((prev) => ({ ...prev, role: e.target.value }))} className="saas-input-dark">
+            <option value="ADMIN">Admin</option>
+            <option value="TEACHER">Teacher</option>
+            <option value="STUDENT">Student</option>
+          </select>
+          <input value={newUser.name} onChange={(e) => setNewUser((prev) => ({ ...prev, name: e.target.value }))} placeholder="Full name" className="saas-input-dark" required />
+          <input type="email" value={newUser.email} onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))} placeholder="Login email" className="saas-input-dark" required />
+          <input type="password" value={newUser.password} onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))} placeholder="Temporary password (6+ characters)" className="saas-input-dark" minLength={6} required />
+          {newUser.role === "TEACHER" ? <>
+            <input value={newUser.className} onChange={(e) => setNewUser((prev) => ({ ...prev, className: e.target.value }))} placeholder="Class (optional)" className="saas-input-dark" />
+            <input value={newUser.section} onChange={(e) => setNewUser((prev) => ({ ...prev, section: e.target.value }))} placeholder="Section (optional)" className="saas-input-dark" />
+            <input value={newUser.subject} onChange={(e) => setNewUser((prev) => ({ ...prev, subject: e.target.value }))} placeholder="Subject (optional)" className="saas-input-dark" />
+            <input type="tel" value={newUser.phone} onChange={(e) => setNewUser((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone (optional)" className="saas-input-dark" />
+          </> : null}
+          {newUser.role === "STUDENT" ? <>
+            <input value={newUser.className} onChange={(e) => setNewUser((prev) => ({ ...prev, className: e.target.value }))} placeholder="Class" className="saas-input-dark" required />
+            <input value={newUser.section} onChange={(e) => setNewUser((prev) => ({ ...prev, section: e.target.value }))} placeholder="Section" className="saas-input-dark" required />
+            <input value={newUser.rollNo} onChange={(e) => setNewUser((prev) => ({ ...prev, rollNo: e.target.value }))} placeholder="Roll number" className="saas-input-dark" required />
+          </> : null}
+          <button type="submit" disabled={creatingUser || schools.length === 0} className="saas-button-dark disabled:cursor-not-allowed disabled:opacity-60">
+            {creatingUser ? "Creating account..." : `Create ${newUser.role.toLowerCase()}`}
+          </button>
+        </form>
+      </section>
 
       <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 backdrop-blur-xl">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-5">

@@ -22,6 +22,8 @@ export default function DevSchoolsPage() {
   const [copiedSchoolId, setCopiedSchoolId] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const [newSchool, setNewSchool] = useState({ name: "", address: "" });
+  const [createSchoolBusy, setCreateSchoolBusy] = useState(false);
   const [deleteState, setDeleteState] = useState({ open: false, school: null, busy: false });
 
   const showToast = (message) => {
@@ -52,6 +54,39 @@ export default function DevSchoolsPage() {
   useEffect(() => {
     loadSchools();
   }, [token]);
+
+  const createSchool = async (event) => {
+    event.preventDefault();
+    const name = newSchool.name.trim();
+    const address = newSchool.address.trim();
+    if (!name) {
+      showToast("School name is required");
+      return;
+    }
+
+    try {
+      setCreateSchoolBusy(true);
+      const response = await fetch(`${API_URL}/api/dev/schools`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name, address }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload?.success === false) {
+        throw new Error(payload?.message || payload?.error || "Failed to add school");
+      }
+      setNewSchool({ name: "", address: "" });
+      showToast(payload?.existing ? "School already exists" : "School added successfully");
+      await loadSchools();
+    } catch (err) {
+      showToast(err?.message || "Failed to add school");
+    } finally {
+      setCreateSchoolBusy(false);
+    }
+  };
 
   useEffect(() => {
     const schoolIdFromQuery = String(searchParams.get("schoolId") || "");
@@ -158,6 +193,31 @@ export default function DevSchoolsPage() {
         <h1 className="text-3xl font-black tracking-tight text-white">Schools Management</h1>
         <p className="mt-1 text-sm text-slate-300">Control schools, visibility and administrative ownership.</p>
       </div>
+
+      <form onSubmit={createSchool} className="grid grid-cols-1 gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 backdrop-blur-xl md:grid-cols-[1fr_1fr_auto]">
+        <input
+          value={newSchool.name}
+          onChange={(event) => setNewSchool((current) => ({ ...current, name: event.target.value }))}
+          placeholder="School name"
+          aria-label="School name"
+          required
+          className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+        />
+        <input
+          value={newSchool.address}
+          onChange={(event) => setNewSchool((current) => ({ ...current, address: event.target.value }))}
+          placeholder="Address (optional)"
+          aria-label="School address"
+          className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+        />
+        <button
+          type="submit"
+          disabled={createSchoolBusy}
+          className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {createSchoolBusy ? "Adding..." : "Add School"}
+        </button>
+      </form>
 
       {toast ? <div className="rounded-xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">{toast}</div> : null}
       {error ? <div className="rounded-xl border border-rose-300/25 bg-rose-500/10 px-4 py-2 text-sm text-rose-100">{error}</div> : null}
